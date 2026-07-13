@@ -6,10 +6,10 @@ class HeroCardStack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 280,
+      height: 252,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final cardWidth = constraints.maxWidth * 0.78;
+          final cardWidth = constraints.maxWidth.clamp(280.0, 420.0) * 0.78;
           final cardHeight = constraints.maxHeight * 0.84;
 
           return Stack(
@@ -63,9 +63,9 @@ class _FrontCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(28),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x12000000),
-              blurRadius: 18,
-              offset: Offset(0, 10),
+              color: Color(0x16000000),
+              blurRadius: 24,
+              offset: Offset(0, 12),
             ),
           ],
         ),
@@ -76,10 +76,19 @@ class _FrontCard extends StatelessWidget {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6D7CB),
+                  color: const Color(0xFFFFF2EC),
                   borderRadius: BorderRadius.circular(22),
                 ),
-                child: const Center(child: _FoodPlaceholder()),
+                child: const Stack(
+                  children: [
+                    Positioned(
+                      top: 14,
+                      right: 14,
+                      child: _CardChip(label: '人気候補'),
+                    ),
+                    Center(child: _DishArtwork()),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -158,7 +167,7 @@ class _BackCard extends StatelessWidget {
                       color: const Color(0xFFFFF3EE),
                       borderRadius: BorderRadius.circular(22),
                     ),
-                    child: const Center(child: _FoodPlaceholder(compact: true)),
+                    child: const Center(child: _DishArtwork(compact: true)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -192,24 +201,99 @@ class _BackCard extends StatelessWidget {
   }
 }
 
-class _FoodPlaceholder extends StatelessWidget {
-  const _FoodPlaceholder({this.compact = false});
+class _DishArtwork extends StatelessWidget {
+  const _DishArtwork({this.compact = false});
 
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final plateSize = compact ? 86.0 : 118.0;
+    final bowlSize = compact ? 48.0 : 64.0;
+
+    return SizedBox(
+      width: plateSize,
+      height: plateSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: plateSize,
+            height: plateSize,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFF5C7B5)),
+            ),
+          ),
+          Container(
+            width: plateSize * 0.68,
+            height: plateSize * 0.68,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFE2D5),
+              shape: BoxShape.circle,
+            ),
+          ),
+          Positioned(
+            top: compact ? 20 : 28,
+            child: Container(
+              width: bowlSize,
+              height: bowlSize,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF07D57),
+                borderRadius: BorderRadius.circular(compact ? 16 : 20),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: compact ? 20 : 24,
+            left: compact ? 22 : 28,
+            child: Container(
+              width: compact ? 22 : 28,
+              height: compact ? 22 : 28,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFB88E),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: compact ? 18 : 26,
+            right: compact ? 20 : 28,
+            child: Container(
+              width: compact ? 28 : 36,
+              height: compact ? 10 : 12,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3C865),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardChip extends StatelessWidget {
+  const _CardChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: compact ? 48 : 72,
-      height: compact ? 48 : 72,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFFF07D57),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(999),
       ),
-      child: Icon(
-        Icons.restaurant_rounded,
-        size: compact ? 22 : 30,
-        color: Colors.white,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
