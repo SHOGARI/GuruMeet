@@ -1,13 +1,9 @@
 from fastapi import FastAPI
 
+from app.api.routes import health, meetings, users
+
 app = FastAPI(title="MoguMeet Backend")
 
-
-@app.get("/")
-def read_root() -> dict[str, str]:
-    return {"status": "ok", "service": "mogumeet-backend"}
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "healthy"}
+app.include_router(health.router)
+app.include_router(users.router, prefix="/users")
+app.include_router(meetings.router, prefix="/meetings")
