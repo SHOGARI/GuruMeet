@@ -4,16 +4,16 @@
 
 ## 起動
 
-repository root から:
+`backend` フォルダ内で実行:
 
 ```sh
-docker compose -f backend/docker/compose.yaml up --build
+make dev
 ```
 
-`backend` フォルダ内から:
+ログを見る:
 
 ```sh
-docker compose -f docker/compose.yaml up --build
+make logs
 ```
 
 API:
@@ -25,5 +25,5 @@ API:
 停止:
 
 ```sh
-docker compose -f backend/docker/compose.yaml down
+make down
 ```
