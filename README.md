@@ -1,3 +1,3 @@
-# MoguMeet
+# Gurumeet
 
 製作中

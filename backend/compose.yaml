@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: mogumeet-backend-api
+    container_name: gurumeet-backend-api
     ports:
       - "${API_PORT}:8000"
     volumes:
