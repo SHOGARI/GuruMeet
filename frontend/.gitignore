@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local frontend environment settings
+.env
+.env.*
+!.env.example
