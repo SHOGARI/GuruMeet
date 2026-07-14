@@ -18,7 +18,8 @@ class WaitingRoomPage extends StatefulWidget {
 }
 
 class _WaitingRoomPageState extends State<WaitingRoomPage> {
-  bool _isNavigating = false;
+  bool _isNavigating = f
+  alse;
   int _joinedCount = 1;
 
   bool get _isGroupReady => _joinedCount == widget.draft.peopleCount;
@@ -106,6 +107,11 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.regular),
+                  _StartHint(
+                    joinedCount: _joinedCount,
+                    peopleCount: widget.draft.peopleCount,
+                  ),
+                  const SizedBox(height: AppSpacing.regular),
                   PrimaryActionButton(
                     label: _isGroupReady ? 'お店選びを始める' : '全員がそろうと開始できます',
                     onPressed: _isNavigating || !_isGroupReady
@@ -162,6 +168,8 @@ class _WaitingHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.xLarge),
+          _PeoplePulseRow(joinedCount: joinedCount, peopleCount: peopleCount),
+          const SizedBox(height: AppSpacing.xLarge),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -196,14 +204,82 @@ class _WaitingHero extends StatelessWidget {
           const SizedBox(height: AppSpacing.medium),
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.control),
-            child: LinearProgressIndicator(
-              value: _progress,
-              minHeight: AppSizes.progressIndicatorHeight,
-              backgroundColor: colors.onPrimary.withValues(alpha: 0.2),
-              valueColor: AlwaysStoppedAnimation<Color>(colors.onPrimary),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: _progress),
+              duration: AppMotion.medium,
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return LinearProgressIndicator(
+                  value: value,
+                  minHeight: AppSizes.progressIndicatorHeight,
+                  backgroundColor: colors.onPrimary.withValues(alpha: 0.2),
+                  valueColor: AlwaysStoppedAnimation<Color>(colors.onPrimary),
+                );
+              },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PeoplePulseRow extends StatelessWidget {
+  const _PeoplePulseRow({required this.joinedCount, required this.peopleCount});
+
+  final int joinedCount;
+  final int peopleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.small,
+      runSpacing: AppSpacing.small,
+      children: List.generate(peopleCount, (index) {
+        final isJoined = index < joinedCount;
+        return AnimatedScale(
+          key: ValueKey('person-$index-$isJoined'),
+          scale: isJoined ? 1 : 0.92,
+          duration: AppMotion.medium,
+          curve: Curves.easeOutCubic,
+          child: AnimatedOpacity(
+            opacity: isJoined ? 1 : 0.42,
+            duration: AppMotion.medium,
+            curve: Curves.easeOutCubic,
+            child: _PersonDot(isJoined: isJoined),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _PersonDot extends StatelessWidget {
+  const _PersonDot({required this.isJoined});
+
+  final bool isJoined;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      width: AppSizes.touchTarget,
+      height: AppSizes.touchTarget,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isJoined
+            ? colors.onPrimary
+            : colors.onPrimary.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: colors.onPrimary.withValues(alpha: isJoined ? 0 : 0.38),
+        ),
+      ),
+      child: Icon(
+        Icons.person_rounded,
+        size: AppSizes.iconMedium,
+        color: isJoined ? colors.primary : colors.onPrimary,
       ),
     );
   }
@@ -325,61 +401,155 @@ class _MemberSlot extends StatelessWidget {
     final colors = theme.colorScheme;
     final isHost = index == 0;
 
-    return AnimatedContainer(
+    return AnimatedSwitcher(
       duration: AppMotion.medium,
-      curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.all(AppSpacing.medium),
-      decoration: BoxDecoration(
-        color: isJoined
-            ? colors.surfaceContainerLowest
-            : colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.98, end: 1).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: AnimatedContainer(
+        key: ValueKey('member-$index-$isJoined'),
+        duration: AppMotion.medium,
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        decoration: BoxDecoration(
           color: isJoined
-              ? colors.primary.withValues(alpha: 0.32)
-              : colors.outlineVariant.withValues(alpha: 0.56),
+              ? colors.surfaceContainerLowest
+              : colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          border: Border.all(
+            color: isJoined
+                ? colors.primary.withValues(alpha: 0.32)
+                : colors.outlineVariant.withValues(alpha: 0.56),
+          ),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: AppSizes.touchTarget / 2,
+              backgroundColor: isJoined
+                  ? colors.primaryContainer
+                  : colors.surfaceContainerHighest,
+              foregroundColor: isJoined
+                  ? colors.primary
+                  : colors.onSurfaceVariant,
+              child: Icon(
+                isHost
+                    ? Icons.star_rounded
+                    : (isJoined
+                          ? Icons.person_rounded
+                          : Icons.schedule_rounded),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.regular),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          isJoined
+                              ? (isHost ? 'あなた' : '参加者 ${index + 1}')
+                              : '招待待ち',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      if (isHost) ...[
+                        const SizedBox(width: AppSpacing.small),
+                        const _MemberLabel(label: 'ホスト'),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.micro),
+                  Text(
+                    isJoined ? '参加済み' : 'リンクから参加するとここに表示されます',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small),
+            _MemberLabel(label: isJoined ? '参加済み' : '待機中'),
+          ],
         ),
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: AppSizes.touchTarget / 2,
-            backgroundColor: isJoined
-                ? colors.primaryContainer
-                : colors.surfaceContainerHighest,
-            foregroundColor: isJoined
-                ? colors.primary
-                : colors.onSurfaceVariant,
-            child: isJoined
-                ? Text(isHost ? '自' : '${index + 1}')
-                : const Icon(Icons.more_horiz_rounded),
-          ),
-          const SizedBox(width: AppSpacing.regular),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isJoined
-                      ? (isHost ? 'あなた（ホスト）' : '参加者 ${index + 1}')
-                      : '招待待ち',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.micro),
-                Text(
-                  isJoined ? '参加済み' : 'リンクから参加するとここに表示されます',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isJoined)
-            Icon(Icons.check_circle_rounded, color: colors.primary)
-          else
-            Icon(Icons.schedule_rounded, color: colors.onSurfaceVariant),
-        ],
+    );
+  }
+}
+
+class _MemberLabel extends StatelessWidget {
+  const _MemberLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isWaiting = label == '待機中';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.small,
+        vertical: AppSpacing.micro,
+      ),
+      decoration: BoxDecoration(
+        color: isWaiting
+            ? colors.surfaceContainerHighest
+            : colors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: isWaiting
+              ? colors.onSurfaceVariant
+              : colors.onPrimaryContainer,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _StartHint extends StatelessWidget {
+  const _StartHint({required this.joinedCount, required this.peopleCount});
+
+  final int joinedCount;
+  final int peopleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final remainingCount = peopleCount - joinedCount;
+
+    return AnimatedSwitcher(
+      duration: AppMotion.medium,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: Text(
+        remainingCount == 0
+            ? '全員そろいました。店選びを始めましょう。'
+            : 'あと$remainingCount人参加すると開始できます',
+        key: ValueKey(remainingCount),
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: remainingCount == 0 ? colors.primary : colors.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
