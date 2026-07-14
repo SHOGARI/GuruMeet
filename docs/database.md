@@ -7,7 +7,7 @@
 | column | type | null | description |
 | --- | --- | --- | --- |
 | `id` | `UUID` | no | URL共有用の推測困難な識別子。アプリ側で `uuid4` を生成する。 |
-| `code` | `CHAR(4)` | no | 手入力参加用の4桁英数字コード。unique制約あり。 |
+| `code` | `CHAR(5)` | no | 手入力参加用の5桁英数字コード。unique制約あり。 |
 | `creator_id` | `VARCHAR(128)` | yes | 作成者識別子。認証連携前の任意フィールド。 |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | no | DB側の `now()` で作成日時を保存する。 |
 | `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から24時間後。 |
@@ -53,4 +53,3 @@ backend/alembic/versions/202607150001_create_temporary_groups.py
 ```
 
 既存DB構成は `feature/setup-db-etc` の方針に合わせ、`POSTGRES_*` 環境変数からDB URLを組み立てる。
-

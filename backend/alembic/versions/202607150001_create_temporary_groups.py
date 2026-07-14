@@ -21,7 +21,7 @@ def upgrade() -> None:
     op.create_table(
         "temporary_groups",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("code", sa.CHAR(length=4), nullable=False),
+        sa.Column("code", sa.CHAR(length=5), nullable=False),
         sa.Column("creator_id", sa.String(length=128), nullable=True),
         sa.Column(
             "created_at",

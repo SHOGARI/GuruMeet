@@ -15,16 +15,16 @@ class TemporaryGroupCreate(BaseModel):
 
 class TemporaryGroupJoinRequest(BaseModel):
     code: str = Field(
-        min_length=4,
-        max_length=4,
-        description="Four-character join code generated from ABCDEFGHJKLMNPQRSTUVWXYZ23456789.",
-        examples=["A7K2"],
+        min_length=5,
+        max_length=5,
+        description="Five-character join code generated from ABCDEFGHJKLMNPQRSTUVWXYZ23456789.",
+        examples=["A7K2F"],
     )
 
 
 class TemporaryGroupResponse(BaseModel):
     id: UUID = Field(description="Temporary group UUID used by the frontend route.")
-    code: str = Field(description="Four-character code for manual join.", examples=["A7K2"])
+    code: str = Field(description="Five-character code for manual join.", examples=["A7K2F"])
     expires_at: datetime = Field(description="Timestamp after which this group cannot be fetched or joined.")
 
 

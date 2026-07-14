@@ -29,7 +29,7 @@ bodyなしでも作成可能。
 ### Processing
 
 1. `id` にUUID v4を発行する。
-2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から4文字の `code` を生成する。
+2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から5文字の `code` を生成する。
 3. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
 4. `code` のunique制約に衝突した場合はrollbackして再生成する。
 
@@ -40,7 +40,7 @@ bodyなしでも作成可能。
 ```json
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "code": "A7K2",
+  "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z"
 }
 ```
@@ -68,7 +68,7 @@ UUIDから一時グループを取得する。
 ```json
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "code": "A7K2",
+  "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "created_at": "2026-07-15T12:00:00Z",
   "creator_id": "user_123"
@@ -87,13 +87,13 @@ UUIDから一時グループを取得する。
 
 ## POST /temporary-groups/join
 
-4桁コードから一時グループを取得する。
+5桁コードから一時グループを取得する。
 
 ### Request
 
 ```json
 {
-  "code": "A7K2"
+  "code": "A7K2F"
 }
 ```
 
@@ -111,7 +111,7 @@ UUIDから一時グループを取得する。
 ```json
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "code": "A7K2",
+  "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "created_at": "2026-07-15T12:00:00Z",
   "creator_id": "user_123"
@@ -157,4 +157,3 @@ TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
 ```
-

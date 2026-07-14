@@ -17,7 +17,7 @@ class TemporaryGroup(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    code: Mapped[str] = mapped_column(CHAR(4), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(CHAR(5), unique=True, index=True, nullable=False)
     creator_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

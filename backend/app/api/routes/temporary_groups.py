@@ -33,7 +33,7 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
     summary="Create a temporary group",
     description=(
-        "Creates a temporary group, issues a UUID and a four-character manual join code, "
+        "Creates a temporary group, issues a UUID and a five-character manual join code, "
         "and stores an expiration timestamp. The frontend builds share URLs from the returned UUID."
     ),
     responses={
@@ -43,7 +43,7 @@ router = APIRouter(
                 "application/json": {
                     "example": {
                         "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-                        "code": "A7K2",
+                        "code": "A7K2F",
                         "expires_at": "2026-07-16T12:00:00Z",
                     }
                 }
@@ -85,7 +85,7 @@ def create_temporary_group(
                 "application/json": {
                     "example": {
                         "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-                        "code": "A7K2",
+                        "code": "A7K2F",
                         "expires_at": "2026-07-16T12:00:00Z",
                         "created_at": "2026-07-15T12:00:00Z",
                         "creator_id": "user_123",
@@ -113,7 +113,7 @@ def get_temporary_group(
     dependencies=[Depends(limit_join_by_ip)],
     summary="Join a temporary group by code",
     description=(
-        "Looks up an active temporary group by a four-character manual join code. "
+        "Looks up an active temporary group by a five-character manual join code. "
         "Missing and expired codes intentionally return the same 404 response. "
         "This endpoint is rate-limited by client IP."
     ),
@@ -124,7 +124,7 @@ def get_temporary_group(
                 "application/json": {
                     "example": {
                         "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-                        "code": "A7K2",
+                        "code": "A7K2F",
                         "expires_at": "2026-07-16T12:00:00Z",
                         "created_at": "2026-07-15T12:00:00Z",
                         "creator_id": "user_123",
