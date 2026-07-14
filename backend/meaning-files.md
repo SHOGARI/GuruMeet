@@ -28,9 +28,12 @@ PostgreSQL
 ## 主なファイルと役割
 
 - `app/db/database.py`
-  - `.env`の`DATABASE_URL`を読み込みます。
+  - `.env`やComposeから渡されるPostgreSQL接続情報を使います。
   - `engine`でPostgreSQLへの接続を管理します。
   - `SessionLocal`でDB操作用のセッションを作成します。
+
+- `app/db/database_url.py`
+  - `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_HOST`、`POSTGRES_PORT`、`POSTGRES_DB`から接続URLを組み立てます。
 
 - `app/db/base.py`
   - ORMモデルが共通で継承する`Base`を定義します。

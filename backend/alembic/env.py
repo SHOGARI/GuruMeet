@@ -1,19 +1,14 @@
-import os
-
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.db.base import Base
+from app.db.database_url import build_database_url
 from app.models import User  # noqa: F401
 
 
 config = context.config
 
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    raise RuntimeError(
-        "DATABASE_URL is not set. Configure it before running Alembic."
-    )
+database_url = build_database_url()
 
 config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
