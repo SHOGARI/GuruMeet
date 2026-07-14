@@ -1,4 +1,4 @@
-COMPOSE = docker compose -f docker/compose.yaml
+COMPOSE = docker compose --env-file .env -f compose.yaml
 
 .PHONY: dev logs down
 
