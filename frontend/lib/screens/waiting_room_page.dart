@@ -18,8 +18,7 @@ class WaitingRoomPage extends StatefulWidget {
 }
 
 class _WaitingRoomPageState extends State<WaitingRoomPage> {
-  bool _isNavigating = f
-  alse;
+  bool _isNavigating = false;
   int _joinedCount = 1;
 
   bool get _isGroupReady => _joinedCount == widget.draft.peopleCount;
