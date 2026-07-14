@@ -237,6 +237,82 @@ Workers Containers を使う場合は、backend runtime が Cloudflare 側にあ
 | 初期 async | まだ不要 | Queues, Workflows, Cron |
 | 初期 observability | Cloudflare dashboard / Logs later | Logpush 等の高度運用 |
 
+## 無料枠・課金の目安
+
+2026-07-14 時点で公式 docs を確認した目安。Cloudflare の pricing / limits は変わる可能性があるため、実際に採用する直前に公式 pricing を再確認する。
+
+| サービス | 無料枠の目安 | 有料化・注意点 | GuruMeet での見方 |
+| --- | --- | --- | --- |
+| Pages | Free plan で 500 builds/month、20,000 files/site、custom domains 100/project | build timeout や file 数の上限がある | Flutter Web の初期配信は無料で始めやすい |
+| Workers | Free で 100,000 requests/day、CPU 10ms/invocation | Paid は最低 $5/month。Standard では 10 million requests/month included | 軽い routing / API gateway は無料で試せる |
+| Workers Containers | Free ではなく Workers Paid 前提 | Workers Paid の最低 $5/month が必要。container 使用量は別途課金対象 | FastAPI + Docker を Cloudflare に載せるならここが最低課金ライン |
+| R2 | 10 GB-month、Class A 1 million/month、Class B 10 million/month、egress free | storage / operations が増えると従量課金 | 画像・添付ファイルは小規模なら無料枠で始めやすい |
+| D1 | 5 million rows read/day、100,000 rows written/day、5 GB total | Free で daily limit を超えると query が失敗する | Workers-native な小規模 DB なら無料で試せる。FastAPI 主 DB には今は使わない |
+| KV | Free で read 100,000/day、write 1,000/day、delete 1,000/day、list 1,000/day、1 GB storage | 書き込みが多い用途には向かない | feature flag / 軽い cache なら無料枠で十分 |
+| Hyperdrive | Free で 100,000 queries/day | PostgreSQL 接続の補助。Workers pricing 側で扱う | 外部 PostgreSQL 接続が課題になったら検討 |
+| Queues | Free で 10,000 operations/day | Paid は included 分を超えると operations 課金 | 通知・メールなどの小さい非同期処理は無料で試せる |
+| Durable Objects | Free で 100,000 requests/day、13,000 GB-s/day | active duration / storage に注意 | realtime state や room state が必要になったら検討 |
+| Workflows | Free で 100,000 requests/day、3,000 steps/day、1 GB storage | steps / storage / CPU が増えると課金 | 複数 step の非同期処理が必要になったら検討 |
+| Vectorize | Free 枠あり。ただし用途は AI/vector search | Workers Paid 専用機能や included 枠の条件に注意 | 初期 GuruMeet では不要 |
+
+### 今回の最小コスト感
+
+Cloudflare を使い倒しつつ、FastAPI + Docker を維持するなら、Workers Containers のために Cloudflare 側で最低 $5/month を見込む。
+
+```text
+frontend:
+  Pages Free で開始可能
+
+backend:
+  Workers Containers を使うなら Workers Paid $5/month から
+
+file storage:
+  R2 は小規模なら無料枠で開始可能
+
+cache / queue:
+  KV / Queues は小規模なら無料枠で開始可能
+
+main DB:
+  PostgreSQL は Cloudflare 外の managed DB 料金を見る
+```
+
+完全無料に寄せる場合は、FastAPI + Docker ではなく Workers-native な構成に変える必要がある。
+
+```text
+frontend:
+  Pages
+
+backend:
+  Workers
+
+database:
+  D1
+
+file storage:
+  R2
+```
+
+ただし、この構成は FastAPI + PostgreSQL + Docker の設計とは別物になる。
+
+### 課金面の判断
+
+GuruMeet の現方針では、Cloudflare 無料枠だけで全部を完結させるより、次の前提で考える。
+
+```text
+Cloudflare:
+  Workers Paid $5/month を許容する
+
+PostgreSQL:
+  Neon / Supabase / Railway などの無料枠または低額 plan を比較する
+```
+
+初期段階で避けるべきこと:
+
+- Workers Containers を使うのに「完全無料」を前提にする
+- R2 / KV / D1 を main DB の代替として雑に使う
+- pricing を確認せずに R2 へ大きいファイルを大量保存する
+- D1 Free の daily read/write limit を本番 traffic 前提で見落とす
+
 ## 混同しやすいもの
 
 ### D1 と R2
@@ -278,6 +354,10 @@ app 認証 = GuruMeet の user login/session/JWT
 ## 公式リンク
 
 - Directory: https://developers.cloudflare.com/directory/
+- Workers pricing: https://developers.cloudflare.com/workers/platform/pricing/
+- Pages limits: https://developers.cloudflare.com/pages/platform/limits/
+- R2 pricing: https://developers.cloudflare.com/r2/pricing/
+- D1 pricing: https://developers.cloudflare.com/d1/platform/pricing/
 - Pages: https://developers.cloudflare.com/pages/
 - Workers: https://developers.cloudflare.com/workers/
 - Containers: https://developers.cloudflare.com/containers/
