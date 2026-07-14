@@ -8,4 +8,29 @@ services:
       - "8000:8000"
     volumes:
       - ..:/app
+    environment:
+      DATABASE_URL: postgresql://gurumeet:gurumeet_dev_password@db:5432/gurumeet
+    depends_on:
+      db:
+        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gurumeet
+      POSTGRES_USER: gurumeet
+      POSTGRES_PASSWORD: gurumeet_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gurumeet -d gurumeet"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
