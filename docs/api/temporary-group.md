@@ -1,14 +1,49 @@
-# API
-
-## Temporary Groups
+# Temporary Group API
 
 一時グループ作成、UUID取得、コード参加のAPI。
 
 backendは共有URLを作らない。frontendが返却された `id` を使って `/groups/{id}` のようなURLを組み立てる。
 
+## 設計理由
+
+一時グループには `id` と `code` の2つの識別子を持たせる。
+
+| field | 用途 | 理由 |
+| --- | --- | --- |
+| `id` | URL共有用 | UUID v4で推測困難。SNS共有やブラウザ遷移など、クリック参加の主導線に使う。 |
+| `code` | 手入力参加用 | 5桁で入力しやすい。URLを開けない場面や口頭共有の補助導線に使う。 |
+
+5桁コードだけに寄せない理由は、手入力用コードは短く、総当たりされる前提で扱う必要があるため。
+
+`ABCDEFGHJKLMNPQRSTUVWXYZ23456789` は32文字なので、5桁コードの総数は以下。
+
+```text
+32^5 = 33,554,432
+```
+
+4桁よりは安全だが、URL共有用の識別子としてはUUIDほど強くない。  
+そのため、URL共有はUUID、手入力は5桁コードに分ける。
+
+```text
+URL共有:
+/groups/{id}
+
+手入力参加:
+A7K2F
+```
+
+レート制限は `POST /temporary-groups/join` にだけ適用する。UUID URLは推測困難な主導線として扱い、5桁コードは総当たり対策つきの補助導線として扱う。
+
 ## POST /temporary-groups
 
 一時グループを作成する。
+
+### Why
+
+グループ作成時点でUUIDと5桁コードを同時に発行する。  
+同じ一時グループに2つの参加導線を紐づけるため、frontend側で別々の発行APIを呼ばせない。
+
+backendは共有URLを返さない。共有URLはfrontendのroute設計に依存するため、backendは `id` と `code` の発行に責務を絞る。
 
 ### Request
 
@@ -55,6 +90,13 @@ bodyなしでも作成可能。
 
 UUIDから一時グループを取得する。
 
+### Why
+
+UUID URLから参加する主導線。  
+UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使う。
+
+存在しないUUIDと期限切れUUIDは同じ404にする。存在確認のための情報を余計に返さないため。
+
 ### Processing
 
 1. `group_id` で `temporary_groups.id` を検索する。
@@ -81,13 +123,20 @@ UUIDから一時グループを取得する。
 
 ```json
 {
-  "detail": "Temporary group not found or expired."
+  "detail": "一時グループが存在しない、または期限切れです。"
 }
 ```
 
 ## POST /temporary-groups/join
 
 5桁コードから一時グループを取得する。
+
+### Why
+
+手入力参加の補助導線。  
+5桁コードは入力しやすい一方でUUIDより短く、総当たりの対象になる。そのため、このAPIだけclient IPごとのレート制限をかける。
+
+存在しないコードと期限切れコードは同じ404にする。コードの有効性を推測しやすいレスポンスにしないため。
 
 ### Request
 
@@ -124,7 +173,7 @@ UUIDから一時グループを取得する。
 
 ```json
 {
-  "detail": "Temporary group not found or expired."
+  "detail": "一時グループが存在しない、または期限切れです。"
 }
 ```
 
@@ -132,7 +181,7 @@ UUIDから一時グループを取得する。
 
 ```json
 {
-  "detail": "Too many join attempts. Please try again later."
+  "detail": "参加試行が多すぎます。時間をおいて再試行してください。"
 }
 ```
 
@@ -157,3 +206,4 @@ TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
 ```
+

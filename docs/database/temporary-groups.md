@@ -1,6 +1,4 @@
-# Database
-
-## temporary_groups
+# temporary_groups
 
 一時グループのUUID、手入力用コード、有効期限を保存するテーブル。
 
@@ -53,3 +51,4 @@ backend/alembic/versions/202607150001_create_temporary_groups.py
 ```
 
 既存DB構成は `feature/setup-db-etc` の方針に合わせ、`POSTGRES_*` 環境変数からDB URLを組み立てる。
+
