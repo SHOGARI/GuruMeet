@@ -3,13 +3,38 @@ class GroupCreationDraft {
     required this.peopleCount,
     required this.area,
     required this.budget,
+    required this.groupId,
   });
+
+  factory GroupCreationDraft.createMock({
+    required int peopleCount,
+    required String area,
+    required BudgetOption budget,
+  }) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    var value = DateTime.now().microsecondsSinceEpoch;
+    final characters = <String>[];
+
+    for (var index = 0; index < 4; index++) {
+      characters.add(alphabet[value % alphabet.length]);
+      value ~/= alphabet.length;
+    }
+    final groupCode = characters.reversed.join();
+
+    return GroupCreationDraft(
+      peopleCount: peopleCount,
+      area: area,
+      budget: budget,
+      groupId: groupCode,
+    );
+  }
 
   final int peopleCount;
   final String area;
   final BudgetOption budget;
+  final String groupId;
 
-  String get inviteUrl => 'https://gurumeet.app/join/demo-group';
+  String get inviteUrl => 'https://gurumeet.app/join/$groupId';
 }
 
 enum BudgetOption {

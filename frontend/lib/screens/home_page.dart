@@ -1,136 +1,115 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/hero_card_stack.dart';
+import '../widgets/primary_action_button.dart';
 import 'create_group_page.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   static const routeName = '/';
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  bool _isNavigating = false;
+
+  Future<void> _openCreateGroup() async {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(context).pushNamed(CreateGroupPage.routeName);
+    if (mounted) {
+      setState(() => _isNavigating = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final headlineStyle = screenWidth < AppBreakpoints.compact
+        ? theme.textTheme.headlineLarge
+        : theme.textTheme.displaySmall;
 
     return AppShell(
-      child: Stack(
-        children: [
-          const Positioned(
-            top: 24,
-            right: -60,
-            child: _AmbientGlow(size: 180, opacity: 0.16),
-          ),
-          const Positioned(
-            left: -40,
-            bottom: 120,
-            child: _AmbientGlow(size: 140, opacity: 0.1),
-          ),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
+      maxContentWidth: AppSizes.homeMaxWidth,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: AppMotion.pageEntrance,
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, AppSpacing.regular * (1 - value)),
+              child: child,
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.regular,
+                vertical: AppSpacing.small,
+              ),
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Text(
+                'GuruMeet',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colors.onPrimaryContainer,
+                  letterSpacing: AppSizes.codeLabelLetterSpacing,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.hero),
+            Text('今日、どこ食べに行く？', style: headlineStyle),
+            const SizedBox(height: AppSpacing.regular),
+            Text(
+              'みんなでスワイプして、行きたい店を決めよう。',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.hero),
+            const HeroCardStack(),
+            const SizedBox(height: AppSpacing.hero),
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.actionMaxWidth,
+              ),
               child: Column(
                 children: [
-                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: PrimaryActionButton(
+                      label: 'グループを作る',
+                      onPressed: _isNavigating ? null : _openCreateGroup,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.medium),
                   Text(
-                    'GuruMeet',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colors.primary,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        const TextSpan(text: '今日、どこ\n'),
-                        TextSpan(
-                          text: '食べに行く？',
-                          style: TextStyle(color: colors.primary),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      fontSize: 42,
-                      height: 1.08,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Text(
-                      'みんなでスワイプして、行きたい店を決めよう。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 17,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-                  const HeroCardStack(),
-                  const SizedBox(height: 28),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: () {
-                              Navigator.of(
-                                context,
-                              ).pushNamed(CreateGroupPage.routeName);
-                            },
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                            ),
-                            child: const Text('グループを作る'),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          '招待された方は共有されたURLから参加できます',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    '招待された方は共有されたURLから参加できます',
+                    textAlign: TextAlign.left,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AmbientGlow extends StatelessWidget {
-  const _AmbientGlow({required this.size, required this.opacity});
-
-  final double size;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: const Color(0xFFF07D57).withValues(alpha: opacity),
+          ],
         ),
       ),
     );

@@ -1,30 +1,48 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
+
 class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.child, this.appBar, this.bottomBar});
+  const AppShell({
+    super.key,
+    required this.child,
+    this.appBar,
+    this.bottomBar,
+    this.maxContentWidth = AppSizes.contentMaxWidth,
+  });
 
   final Widget child;
   final PreferredSizeWidget? appBar;
   final Widget? bottomBar;
+  final double maxContentWidth;
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = screenWidth < AppBreakpoints.compact
+        ? AppSpacing.large
+        : AppSpacing.xLarge;
+
     return Scaffold(
       appBar: appBar,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 44,
-                ),
-                child: child,
-              ),
-            );
-          },
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            AppSpacing.large,
+            horizontalPadding,
+            bottomBar == null
+                ? AppSpacing.section
+                : AppSizes.bottomBarClearance,
+          ),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: child,
+            ),
+          ),
         ),
       ),
       bottomNavigationBar: bottomBar == null
@@ -32,8 +50,20 @@ class AppShell extends StatelessWidget {
           : SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: bottomBar,
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  AppSpacing.regular,
+                  horizontalPadding,
+                  AppSpacing.large,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: AppSizes.actionMaxWidth,
+                    ),
+                    child: SizedBox(width: double.infinity, child: bottomBar),
+                  ),
+                ),
               ),
             ),
     );
