@@ -21,7 +21,7 @@ router = APIRouter(
     tags=["temporary-groups"],
     responses={
         status.HTTP_404_NOT_FOUND: {
-            "description": "Temporary group does not exist or has expired."
+            "description": "一時グループが存在しない、または期限切れです。"
         }
     },
 )
@@ -31,14 +31,14 @@ router = APIRouter(
     "",
     response_model=TemporaryGroupResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a temporary group",
+    summary="一時グループを作成する",
     description=(
-        "Creates a temporary group, issues a UUID and a five-character manual join code, "
-        "and stores an expiration timestamp. The frontend builds share URLs from the returned UUID."
+        "一時グループを作成し、UUIDと手入力参加用の5桁コードを発行します。"
+        "共有URLはbackendでは作らず、返却されたUUIDを使ってfrontend側で組み立てます。"
     ),
     responses={
         status.HTTP_201_CREATED: {
-            "description": "Temporary group was created.",
+            "description": "一時グループを作成しました。",
             "content": {
                 "application/json": {
                     "example": {
@@ -50,7 +50,7 @@ router = APIRouter(
             },
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Join code generation exceeded the retry limit."
+            "description": "参加コード生成がリトライ上限を超えました。"
         },
     },
 )
@@ -64,7 +64,7 @@ def create_temporary_group(
     except TemporaryGroupCodeCollisionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Temporary group code generation failed. Please retry.",
+            detail="一時グループのコード生成に失敗しました。再試行してください。",
         ) from exc
 
     return _to_response(group)
@@ -73,14 +73,14 @@ def create_temporary_group(
 @router.get(
     "/{group_id}",
     response_model=TemporaryGroupDetail,
-    summary="Get a temporary group by UUID",
+    summary="UUIDから一時グループを取得する",
     description=(
-        "Fetches a temporary group by UUID only when it is still active. "
-        "Expired groups return the same 404 response as missing groups."
+        "UUIDで一時グループを取得します。取得できるのは有効期限内のグループだけです。"
+        "存在しないグループと期限切れグループは同じ404を返します。"
     ),
     responses={
         status.HTTP_200_OK: {
-            "description": "Active temporary group was found.",
+            "description": "有効な一時グループを取得しました。",
             "content": {
                 "application/json": {
                     "example": {
@@ -111,15 +111,15 @@ def get_temporary_group(
     "/join",
     response_model=TemporaryGroupDetail,
     dependencies=[Depends(limit_join_by_ip)],
-    summary="Join a temporary group by code",
+    summary="コードから一時グループに参加する",
     description=(
-        "Looks up an active temporary group by a five-character manual join code. "
-        "Missing and expired codes intentionally return the same 404 response. "
-        "This endpoint is rate-limited by client IP."
+        "手入力参加用の5桁コードで有効な一時グループを検索します。"
+        "存在しないコードと期限切れコードは同じ404を返します。"
+        "総当たり対策として、client IPごとにレート制限します。"
     ),
     responses={
         status.HTTP_200_OK: {
-            "description": "Active temporary group was found by code.",
+            "description": "コードに対応する有効な一時グループを取得しました。",
             "content": {
                 "application/json": {
                     "example": {
@@ -133,7 +133,7 @@ def get_temporary_group(
             },
         },
         status.HTTP_429_TOO_MANY_REQUESTS: {
-            "description": "Too many join attempts from the same client IP."
+            "description": "同じclient IPからの参加試行が多すぎます。"
         },
     },
 )
@@ -170,5 +170,5 @@ def _to_detail(group: TemporaryGroup) -> TemporaryGroupDetail:
 def _not_found() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="Temporary group not found or expired.",
+        detail="一時グループが存在しない、または期限切れです。",
     )

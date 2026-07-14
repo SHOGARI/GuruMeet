@@ -21,7 +21,7 @@ class InMemoryRateLimiter:
         if len(requests) >= self.max_requests:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many join attempts. Please try again later.",
+                detail="参加試行が多すぎます。時間をおいて再試行してください。",
             )
 
         requests.append(now)
