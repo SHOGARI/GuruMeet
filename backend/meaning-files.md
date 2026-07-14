@@ -2,6 +2,29 @@
 
 FastAPIからPostgreSQLを利用するために、SQLAlchemyとAlembicを使ったデータベース基盤を作成しました。
 
+## データベースへ接続する流れ
+
+```
+FastAPI
+    │
+    ▼
+database.py（DB接続）
+    │
+    ▼
+Base（ORMの土台）
+    │
+    ▼
+Userモデル（テーブル定義）
+    │
+    ▼
+Alembic（マイグレーション）
+    │
+    ▼
+PostgreSQL
+```
+
+---
+
 ## 主なファイルと役割
 
 - `app/db/database.py`
@@ -22,12 +45,45 @@ FastAPIからPostgreSQLを利用するために、SQLAlchemyとAlembicを使っ�
 
 - `alembic/versions/6724ca471deb_create_users_table.py`
   - `users`テーブルを作成するマイグレーションファイルです。
-  - `upgrade()`で作成し、`downgrade()`で削除できます。
+  - `upgrade()`でテーブルを作成します。
+  - `downgrade()`でテーブルを削除します。
+
+---
+
+## 各ファイルの役割
+
+### engine
+
+データベースへ接続するための窓口です。
+FastAPIからPostgreSQLへ接続するときに利用されます。
+
+### SessionLocal
+
+データベース操作を行うためのSessionを作成します。
+
+今後は次のように利用します。
+
+```python
+db = SessionLocal()
+```
+
+### Base
+
+ORMモデルが共通で継承するクラスです。
+
+Alembicは`Base.metadata`を参照して、
+テーブルの追加・変更・削除を検出します。
+
+---
 
 ## Alembicを使う理由
 
 ORMモデルを書いただけでは、PostgreSQLに実際のテーブルは作成されません。
-AlembicはモデルとDBの差分からマイグレーションファイルを作り、その内容をDBへ適用します。
+
+AlembicはORMモデルとDBの差分からマイグレーションファイルを作成し、
+その内容をPostgreSQLへ適用します。
+
+---
 
 ## 実行した主なコマンド
 
@@ -38,11 +94,27 @@ docker-compose --env-file .env -f compose.yaml exec api alembic upgrade head
 docker-compose --env-file .env -f compose.yaml exec db psql -U gurumeet -d gurumeet -c "\dt"
 ```
 
+---
+
 ## 実行結果
 
 PostgreSQLに次のテーブルが作成されました。
 
-- `users`: ユーザーデータを保存するテーブル
-- `alembic_version`: 適用済みマイグレーションをAlembicが管理するテーブル
+- `users`
+  - ユーザーデータを保存するテーブルです。
 
-今回の作業では、CRUD処理やAPIエンドポイントは追加していません。
+- `alembic_version`
+  - Alembicが適用済みのマイグレーションを管理するためのテーブルです。
+
+---
+
+## 今後実装する内容
+
+今回はデータベース基盤の構築までを行いました。
+
+今後は以下の機能を追加していきます。
+
+- CRUD処理（追加・取得・更新・削除）
+- APIエンドポイント
+- Pydantic Schema
+- サービス層の実装
