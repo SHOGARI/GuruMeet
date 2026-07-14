@@ -15,6 +15,7 @@ abstract final class AppSpacing {
   static const double xxLarge = 32;
   static const double section = 40;
   static const double hero = 52;
+  static const double display = 64;
 }
 
 abstract final class AppRadius {
@@ -40,21 +41,33 @@ abstract final class AppSizes {
   static const double codeLabelLetterSpacing = 1.6;
   static const double groupCodeLetterSpacing = 2.4;
   static const double progressIndicatorHeight = 6;
+  static const double qrCodeSize = 132;
 }
 
 abstract final class AppMotion {
-  static const Duration quick = Duration(milliseconds: 110);
+  static const Duration quick = Duration(milliseconds: 150);
+  static const Duration medium = Duration(milliseconds: 220);
   static const Duration pageEntrance = Duration(milliseconds: 420);
-  static const double pressedScale = 0.985;
+  static const double pressedScale = 0.97;
 }
 
 abstract final class AppShadows {
   static List<BoxShadow> restaurantCard(Color color, {required bool muted}) {
     return [
       BoxShadow(
-        color: color.withValues(alpha: muted ? 0.025 : 0.055),
-        blurRadius: muted ? 16 : 32,
-        offset: const Offset(0, 16),
+        color: color.withValues(alpha: muted ? 0.035 : 0.075),
+        blurRadius: muted ? 24 : 42,
+        offset: const Offset(0, 20),
+      ),
+    ];
+  }
+
+  static List<BoxShadow> elevatedAction(Color color) {
+    return [
+      BoxShadow(
+        color: color.withValues(alpha: 0.2),
+        blurRadius: 24,
+        offset: const Offset(0, 12),
       ),
     ];
   }

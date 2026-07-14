@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../models/group_creation_draft.dart';
 import '../theme/app_tokens.dart';
-import '../widgets/app_shell.dart';
 import '../widgets/primary_action_button.dart';
 import 'swipe_page.dart';
 
@@ -56,115 +55,152 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = screenWidth < AppBreakpoints.compact
+        ? AppSpacing.large
+        : AppSpacing.xLarge;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('メンバー待機')),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            AppSpacing.large,
+            horizontalPadding,
+            AppSpacing.large,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.contentMaxWidth,
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _WaitingHero(
+                            joinedCount: _joinedCount,
+                            peopleCount: widget.draft.peopleCount,
+                          ),
+                          const SizedBox(height: AppSpacing.section),
+                          _InviteCard(draft: widget.draft, onCopyUrl: _copyUrl),
+                          const SizedBox(height: AppSpacing.section),
+                          _MemberSlots(
+                            joinedCount: _joinedCount,
+                            peopleCount: widget.draft.peopleCount,
+                          ),
+                          const SizedBox(height: AppSpacing.large),
+                          _DemoJoinPanel(
+                            isGroupReady: _isGroupReady,
+                            onAddParticipant: _addParticipant,
+                          ),
+                          const SizedBox(height: AppSpacing.section),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.regular),
+                  PrimaryActionButton(
+                    label: _isGroupReady ? 'お店選びを始める' : '全員がそろうと開始できます',
+                    onPressed: _isNavigating || !_isGroupReady
+                        ? null
+                        : _startSwipe,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WaitingHero extends StatelessWidget {
+  const _WaitingHero({required this.joinedCount, required this.peopleCount});
+
+  final int joinedCount;
+  final int peopleCount;
+
+  double get _progress => joinedCount / peopleCount;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final remainingCount = peopleCount - joinedCount;
 
-    return AppShell(
-      appBar: AppBar(title: const Text('メンバー待機')),
-      bottomBar: PrimaryActionButton(
-        label: _isGroupReady ? 'お店選びを始める' : '全員がそろうと開始できます',
-        onPressed: _isNavigating || !_isGroupReady ? null : _startSwipe,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.xLarge),
+      decoration: BoxDecoration(
+        color: colors.primary,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.elevatedAction(colors.primary),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  'みんながそろうまで\nあと少し。',
-                  style: theme.textTheme.headlineLarge,
-                ),
-              ),
-              _JoinedCount(
-                joinedCount: _joinedCount,
-                peopleCount: widget.draft.peopleCount,
-              ),
-            ],
+          Text(
+            remainingCount == 0 ? 'READY' : 'WAITING',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colors.onPrimary.withValues(alpha: 0.72),
+              letterSpacing: AppSizes.codeLabelLetterSpacing,
+            ),
           ),
           const SizedBox(height: AppSpacing.regular),
           Text(
-            'URLを送ったら、あとは集まるのを待つだけ。',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colors.onSurfaceVariant,
+            remainingCount == 0 ? '全員そろいました。' : 'あと$remainingCount人で\n始められます。',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: colors.onPrimary,
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
-          Text('招待リンク', style: theme.textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.small),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              border: Border.all(color: colors.outlineVariant),
-            ),
-            child: SelectableText(
-              widget.draft.inviteUrl,
-              style: theme.textTheme.titleSmall,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.small),
-          TextButton.icon(
-            onPressed: _copyUrl,
-            icon: const Icon(Icons.copy_rounded, size: AppSizes.iconMedium),
-            label: const Text('リンクをコピー'),
-          ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                child: Text('参加メンバー', style: theme.textTheme.titleLarge),
-              ),
               Text(
-                '${widget.draft.area}  ·  ${widget.draft.budget.label}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
+                '$joinedCount',
+                style: theme.textTheme.displaySmall?.copyWith(
+                  color: colors.onPrimary,
+                  height: 0.95,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.small,
+                  bottom: AppSpacing.small,
+                ),
+                child: Text(
+                  '/ $peopleCount 人',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onPrimary.withValues(alpha: 0.82),
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.small),
+          Text(
+            '$joinedCount / $peopleCount人',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: colors.onPrimary.withValues(alpha: 0.86),
+            ),
           ),
           const SizedBox(height: AppSpacing.medium),
-          ...List.generate(_joinedCount, (index) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: index == _joinedCount - 1 ? 0 : AppSpacing.regular,
-              ),
-              child: _MemberRow(index: index),
-            );
-          }),
-          const SizedBox(height: AppSpacing.large),
-          if (!_isGroupReady)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                onPressed: _addParticipant,
-                icon: const Icon(Icons.person_add_alt_1_rounded),
-                label: const Text('招待URLから参加（デモ）'),
-              ),
-            )
-          else
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.medium),
-              decoration: BoxDecoration(
-                color: colors.primaryContainer,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-              child: Text(
-                '全員そろいました。ホストがお店選びを開始できます。',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colors.onPrimaryContainer,
-                ),
-              ),
-            ),
-          const SizedBox(height: AppSpacing.regular),
-          Text(
-            'バックエンド未接続のため、URLからの参加はこのボタンで再現しています。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            child: LinearProgressIndicator(
+              value: _progress,
+              minHeight: AppSizes.progressIndicatorHeight,
+              backgroundColor: colors.onPrimary.withValues(alpha: 0.2),
+              valueColor: AlwaysStoppedAnimation<Color>(colors.onPrimary),
             ),
           ),
         ],
@@ -173,8 +209,83 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   }
 }
 
-class _JoinedCount extends StatelessWidget {
-  const _JoinedCount({required this.joinedCount, required this.peopleCount});
+class _InviteCard extends StatelessWidget {
+  const _InviteCard({required this.draft, required this.onCopyUrl});
+
+  final GroupCreationDraft draft;
+  final VoidCallback onCopyUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.large),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.64),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('招待コード', style: theme.textTheme.titleLarge)),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.regular,
+                  vertical: AppSpacing.small,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                child: SelectableText(
+                  draft.groupId,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.onPrimaryContainer,
+                    letterSpacing: AppSizes.groupCodeLetterSpacing,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.large),
+          Text(
+            '招待URL',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.small),
+          SelectableText(
+            draft.inviteUrl,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.medium),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              onPressed: onCopyUrl,
+              icon: const Icon(Icons.copy_rounded, size: AppSizes.iconMedium),
+              label: const Text('招待リンクをコピー'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberSlots extends StatelessWidget {
+  const _MemberSlots({required this.joinedCount, required this.peopleCount});
 
   final int joinedCount;
   final int peopleCount;
@@ -182,31 +293,31 @@ class _JoinedCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.regular,
-        vertical: AppSpacing.small,
-      ),
-      decoration: BoxDecoration(
-        color: colors.primaryContainer,
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      child: Text(
-        '$joinedCount / $peopleCount人',
-        style: theme.textTheme.titleSmall?.copyWith(
-          color: colors.onPrimaryContainer,
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('参加メンバー', style: theme.textTheme.titleLarge),
+        const SizedBox(height: AppSpacing.medium),
+        ...List.generate(peopleCount, (index) {
+          final isJoined = index < joinedCount;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: index == peopleCount - 1 ? 0 : AppSpacing.regular,
+            ),
+            child: _MemberSlot(index: index, isJoined: isJoined),
+          );
+        }),
+      ],
     );
   }
 }
 
-class _MemberRow extends StatelessWidget {
-  const _MemberRow({required this.index});
+class _MemberSlot extends StatelessWidget {
+  const _MemberSlot({required this.index, required this.isJoined});
 
   final int index;
+  final bool isJoined;
 
   @override
   Widget build(BuildContext context) {
@@ -214,26 +325,123 @@ class _MemberRow extends StatelessWidget {
     final colors = theme.colorScheme;
     final isHost = index == 0;
 
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: AppSizes.touchTarget / 2,
-          backgroundColor: isHost
-              ? colors.primaryContainer
-              : colors.surfaceContainerHigh,
-          foregroundColor: isHost ? colors.primary : colors.onSurfaceVariant,
-          child: Text(isHost ? '自' : '${index + 1}'),
+    return AnimatedContainer(
+      duration: AppMotion.medium,
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(AppSpacing.medium),
+      decoration: BoxDecoration(
+        color: isJoined
+            ? colors.surfaceContainerLowest
+            : colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: isJoined
+              ? colors.primary.withValues(alpha: 0.32)
+              : colors.outlineVariant.withValues(alpha: 0.56),
         ),
-        const SizedBox(width: AppSpacing.regular),
-        Expanded(
-          child: Text(
-            isHost ? 'あなた（ホスト）' : '参加者 ${index + 1}',
-            style: theme.textTheme.titleMedium,
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: AppSizes.touchTarget / 2,
+            backgroundColor: isJoined
+                ? colors.primaryContainer
+                : colors.surfaceContainerHighest,
+            foregroundColor: isJoined
+                ? colors.primary
+                : colors.onSurfaceVariant,
+            child: isJoined
+                ? Text(isHost ? '自' : '${index + 1}')
+                : const Icon(Icons.more_horiz_rounded),
+          ),
+          const SizedBox(width: AppSpacing.regular),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isJoined
+                      ? (isHost ? 'あなた（ホスト）' : '参加者 ${index + 1}')
+                      : '招待待ち',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.micro),
+                Text(
+                  isJoined ? '参加済み' : 'リンクから参加するとここに表示されます',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isJoined)
+            Icon(Icons.check_circle_rounded, color: colors.primary)
+          else
+            Icon(Icons.schedule_rounded, color: colors.onSurfaceVariant),
+        ],
+      ),
+    );
+  }
+}
+
+class _DemoJoinPanel extends StatelessWidget {
+  const _DemoJoinPanel({
+    required this.isGroupReady,
+    required this.onAddParticipant,
+  });
+
+  final bool isGroupReady;
+  final VoidCallback onAddParticipant;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (isGroupReady) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        decoration: BoxDecoration(
+          color: colors.primaryContainer,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: colors.primary),
+            const SizedBox(width: AppSpacing.small),
+            Expanded(
+              child: Text(
+                '全員そろいました。ホストがお店選びを開始できます。',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onPrimaryContainer,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonalIcon(
+            onPressed: onAddParticipant,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const Text('招待URLから参加（デモ）'),
           ),
         ),
+        const SizedBox(height: AppSpacing.regular),
         Text(
-          '参加済み',
-          style: theme.textTheme.bodySmall?.copyWith(color: colors.primary),
+          'バックエンド未接続のため、URLからの参加はこのボタンで再現しています。',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
         ),
       ],
     );

@@ -29,6 +29,15 @@ class GroupCreationDraft {
     );
   }
 
+  factory GroupCreationDraft.joinMock({required String groupId}) {
+    return GroupCreationDraft(
+      peopleCount: 4,
+      area: '新宿',
+      budget: BudgetOption.from2000To3000,
+      groupId: groupId.toUpperCase(),
+    );
+  }
+
   final int peopleCount;
   final String area;
   final BudgetOption budget;

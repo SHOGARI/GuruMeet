@@ -47,11 +47,17 @@ void main() {
     expect(find.text('行きたいエリアを入力してください'), findsOneWidget);
     expect(find.text('エリアを入力するとグループを作成できます'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('人数を増やす'));
+    tester
+        .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.add_rounded))
+        .onPressed!();
     await tester.pump();
     expect(find.text('5人'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('人数を減らす'));
+    tester
+        .widget<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.remove_rounded),
+        )
+        .onPressed!();
     await tester.pump();
     expect(find.text('4人'), findsOneWidget);
 
@@ -60,7 +66,9 @@ void main() {
 
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '3,000〜5,000円'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, '3,000〜5,000円'));
+    tester
+        .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '3,000〜5,000円'))
+        .onSelected!(true);
     await tester.pump();
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'グループを作成'));
@@ -79,10 +87,13 @@ void main() {
       greaterThan(0),
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'メンバーを待つ'));
+    await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
     await tester.pumpAndSettle();
 
     expect(find.text('メンバー待機'), findsOneWidget);
+    expect(find.text('WAITING'), findsOneWidget);
+    expect(find.text('参加メンバー'), findsOneWidget);
+    expect(find.text('招待コード'), findsOneWidget);
     expect(find.text('1 / 4人'), findsOneWidget);
     expect(
       tester
@@ -138,6 +149,85 @@ void main() {
     expect(find.text('GuruMeet'), findsOneWidget);
   });
 
+  testWidgets('create group always shows condition inputs', (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 568);
+
+    await tester.pumpWidget(const GuruMeetApp());
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'グループを作る'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'グループを作る'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('何人で行く？'), findsOneWidget);
+    expect(find.text('どのあたり？'), findsOneWidget);
+    expect(find.text('予算はどれくらい？'), findsOneWidget);
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.text('4人'), findsOneWidget);
+
+    for (final budget in BudgetOption.values) {
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, budget.label));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ChoiceChip, budget.label), findsOneWidget);
+    }
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'グループを作成'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'グループを作成'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('home to join group flow renders', (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(const GuruMeetApp());
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'コードで参加する'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('グループに参加'), findsOneWidget);
+    expect(find.text('招待コードで\n参加する。'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '参加する'))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(find.byType(TextFormField), 'ab12cd');
+    await tester.pump();
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller?.text,
+      'ABCD',
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '参加する'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '参加する'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('メンバー待機'), findsOneWidget);
+    expect(find.text('1 / 4人'), findsOneWidget);
+    expect(
+      find.textContaining('https://gurumeet.app/join/ABCD'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('home supports compact and web widths', (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -152,6 +242,7 @@ void main() {
 
       expect(find.text('今日、どこ食べに行く？'), findsOneWidget);
       expect(find.text('グループを作る'), findsOneWidget);
+      expect(find.text('コードで参加する'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });

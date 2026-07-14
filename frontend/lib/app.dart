@@ -5,6 +5,7 @@ import 'models/restaurant_preview.dart';
 import 'screens/create_group_page.dart';
 import 'screens/group_created_page.dart';
 import 'screens/home_page.dart';
+import 'screens/join_group_page.dart';
 import 'screens/match_page.dart';
 import 'screens/restaurant_detail_page.dart';
 import 'screens/swipe_page.dart';
@@ -32,6 +33,11 @@ class GuruMeetApp extends StatelessWidget {
           case CreateGroupPage.routeName:
             return MaterialPageRoute<void>(
               builder: (_) => const CreateGroupPage(),
+              settings: settings,
+            );
+          case JoinGroupPage.routeName:
+            return MaterialPageRoute<void>(
+              builder: (_) => const JoinGroupPage(),
               settings: settings,
             );
           case GroupCreatedPage.routeName:

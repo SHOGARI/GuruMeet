@@ -7,23 +7,42 @@ import 'restaurant_image.dart';
 class HeroCardStack extends StatelessWidget {
   const HeroCardStack({super.key});
 
-  static const double _stackHeight = 276;
-  static const double _frontCardHeight = 258;
-  static const double _cardWidthFactor = 0.74;
-  static const double _minimumCardWidth = 270;
-  static const double _maximumCardWidth = 430;
-  static const double _backCardScale = 0.91;
-  static const double _backCardHeightScale = 0.93;
-  static const double _sideOffsetFactor = 0.09;
-  static const double _minimumSideOffset = 24;
-  static const double _maximumSideOffset = 54;
-  static const double _backCardRotation = 0.04;
-  static const double _frontCardRotation = -0.008;
+  static const double _stackHeight = 456;
+  static const double _compactStackHeight = 360;
+  static const double _frontCardHeight = 408;
+  static const double _compactFrontCardHeight = 326;
+  static const double _cardWidthFactor = 0.92;
+  static const double _minimumCardWidth = 292;
+  static const double _maximumCardWidth = 486;
+  static const double _middleCardScale = 0.94;
+  static const double _backCardScale = 0.87;
+  static const double _sideOffsetFactor = 0.12;
+  static const double _minimumSideOffset = 28;
+  static const double _maximumSideOffset = 58;
+  static const double _gentleRotation = 0.072;
+
+  static const _featuredRestaurant = RestaurantPreview(
+    id: 'gyuraku-home',
+    name: '炭火焼肉 牛楽',
+    area: '新宿',
+    budget: '¥2,000〜3,000',
+    cuisine: '焼肉',
+    description: '香ばしい炭火焼肉をみんなで囲める、今夜の本命候補。',
+    imageUrl:
+        'https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=1200&q=90',
+  );
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final isCompactHeight = screenHeight < 860;
+    final stackHeight = isCompactHeight ? _compactStackHeight : _stackHeight;
+    final frontCardHeight = isCompactHeight
+        ? _compactFrontCardHeight
+        : _frontCardHeight;
+
     return SizedBox(
-      height: _stackHeight,
+      height: stackHeight,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cardWidth = (constraints.maxWidth * _cardWidthFactor).clamp(
@@ -40,19 +59,27 @@ class HeroCardStack extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               _RestaurantCard(
-                preview: mockRestaurants[1],
+                preview: mockRestaurants[3],
                 width: cardWidth * _backCardScale,
-                height: _frontCardHeight * _backCardHeightScale,
-                offset: Offset(sideOffset, AppSpacing.small),
-                rotation: _backCardRotation,
+                height: frontCardHeight * 0.9,
+                offset: Offset(-sideOffset, AppSpacing.xxLarge),
+                rotation: -_gentleRotation,
                 muted: true,
               ),
               _RestaurantCard(
-                preview: mockRestaurants[2],
+                preview: mockRestaurants[1],
+                width: cardWidth * _middleCardScale,
+                height: frontCardHeight * 0.96,
+                offset: Offset(sideOffset, AppSpacing.large),
+                rotation: _gentleRotation,
+                muted: true,
+              ),
+              _RestaurantCard(
+                preview: _featuredRestaurant,
                 width: cardWidth,
-                height: _frontCardHeight,
+                height: frontCardHeight,
                 offset: Offset.zero,
-                rotation: _frontCardRotation,
+                rotation: 0,
               ),
             ],
           );
@@ -79,6 +106,8 @@ class _RestaurantCard extends StatelessWidget {
   final double rotation;
   final bool muted;
 
+  static const double _radius = AppRadius.card;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -95,10 +124,10 @@ class _RestaurantCard extends StatelessWidget {
             height: height,
             decoration: BoxDecoration(
               color: colors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(AppRadius.card),
+              borderRadius: BorderRadius.circular(_radius),
               border: Border.all(
                 color: colors.outlineVariant.withValues(
-                  alpha: muted ? 0.42 : 0.72,
+                  alpha: muted ? 0.16 : 0.22,
                 ),
               ),
               boxShadow: AppShadows.restaurantCard(colors.shadow, muted: muted),
@@ -108,39 +137,48 @@ class _RestaurantCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
+                  flex: muted ? 1 : 8,
                   child: RestaurantImage(
                     imageUrl: preview.imageUrl,
                     semanticLabel: '${preview.name}の料理写真',
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.medium,
-                    AppSpacing.regular,
-                    AppSpacing.medium,
-                    AppSpacing.medium,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        preview.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
+                if (!muted)
+                  Expanded(
+                    flex: 4,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.large,
+                        AppSpacing.medium,
+                        AppSpacing.large,
+                        AppSpacing.large,
                       ),
-                      const SizedBox(height: AppSpacing.micro),
-                      Text(
-                        '${preview.area}  ·  ${preview.budget}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            preview.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.small),
+                          Text(
+                            '${preview.area}  ·  ${preview.budget}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),

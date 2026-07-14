@@ -15,8 +15,16 @@ ThemeData buildAppTheme() {
   final textTheme = ThemeData.light().textTheme.apply(
     bodyColor: inkColor,
     displayColor: inkColor,
-    fontFamily: 'Hiragino Sans',
-    fontFamilyFallback: const ['Noto Sans JP', 'Yu Gothic', 'sans-serif'],
+    fontFamily: 'Hiragino Kaku Gothic ProN',
+    fontFamilyFallback: const [
+      'Hiragino Sans',
+      'Yu Gothic',
+      'YuGothic',
+      'Meiryo',
+      'Noto Sans CJK JP',
+      'Noto Sans JP',
+      'sans-serif',
+    ],
   );
 
   return ThemeData(
