@@ -1,0 +1,134 @@
+import 'package:flutter/material.dart';
+
+import '../theme/app_tokens.dart';
+import '../widgets/app_shell.dart';
+import '../widgets/hero_card_stack.dart';
+import '../widgets/primary_action_button.dart';
+import 'create_group_page.dart';
+import 'join_group_page.dart';
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  static const routeName = '/';
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  static const double _maxContentWidth = 540;
+  static const double _ctaMaxWidth = 440;
+
+  bool _isNavigating = false;
+
+  Future<void> _openRoute(String routeName) async {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(context).pushNamed(routeName);
+    if (mounted) {
+      setState(() => _isNavigating = false);
+    }
+  }
+
+  Future<void> _openCreateGroup() => _openRoute(CreateGroupPage.routeName);
+
+  Future<void> _openJoinGroup() => _openRoute(JoinGroupPage.routeName);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final screenSize = MediaQuery.sizeOf(context);
+    final screenWidth = screenSize.width;
+    final verticalGap = screenSize.height < 860
+        ? AppSpacing.section
+        : AppSpacing.hero;
+    final headlineStyle = screenWidth < AppBreakpoints.compact
+        ? theme.textTheme.headlineLarge
+        : theme.textTheme.displaySmall;
+
+    return AppShell(
+      maxContentWidth: _maxContentWidth,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: AppMotion.pageEntrance,
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, AppSpacing.regular * (1 - value)),
+              child: child,
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'GuruMeet',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: colors.primary,
+                letterSpacing: AppSizes.codeLabelLetterSpacing,
+              ),
+            ),
+            SizedBox(height: verticalGap),
+            Text(
+              '今日、どこ食べに行く？',
+              style: headlineStyle?.copyWith(letterSpacing: 0),
+            ),
+            const SizedBox(height: AppSpacing.regular),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Text(
+                'みんなでスワイプして、行きたい店を決めよう。',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            SizedBox(height: verticalGap),
+            const HeroCardStack(),
+            SizedBox(height: verticalGap),
+            Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _ctaMaxWidth),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: PrimaryActionButton(
+                        label: 'グループを作る',
+                        onPressed: _isNavigating ? null : _openCreateGroup,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.regular),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _isNavigating ? null : _openJoinGroup,
+                        child: const Text('コードで参加する'),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.medium),
+                    Text(
+                      '招待された方は、共有されたURLまたはコードから参加できます',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
