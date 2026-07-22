@@ -187,6 +187,15 @@ develop push -> staging デプロイ
 main push    -> production デプロイ
 ```
 
+`.github/workflows/ci.yml` で以下の検証をする。
+
+```text
+任意 branch -> develop の pull request
+  -> backend 構文確認
+  -> frontend analyze / test
+  -> Worker 型チェック
+```
+
 GitHub Actions に必要な repository secrets:
 
 ```text
@@ -281,6 +290,14 @@ GitHub repository secret に登録する。
 ```text
 Secret name: CLOUDFLARE_ACCOUNT_ID
 Secret value: Cloudflare account ID
+```
+
+注意:
+
+```text
+前後に空白を入れない
+32文字の小文字 hex 文字列だけを入れる
+例: abcdef1234567890abcdef1234567890
 ```
 
 値の例:
