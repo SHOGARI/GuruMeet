@@ -1,3 +1,5 @@
+import '../core/demo_config.dart';
+
 class GroupCreationDraft {
   const GroupCreationDraft({
     required this.peopleCount,
@@ -11,6 +13,15 @@ class GroupCreationDraft {
     required String area,
     required BudgetOption budget,
   }) {
+    if (DemoConfig.isDemoMode) {
+      return GroupCreationDraft(
+        peopleCount: peopleCount,
+        area: area,
+        budget: budget,
+        groupId: DemoConfig.roomCode,
+      );
+    }
+
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     var value = DateTime.now().microsecondsSinceEpoch;
     final characters = <String>[];

@@ -35,7 +35,7 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
     final colors = theme.colorScheme;
     final horizontalPadding =
         MediaQuery.sizeOf(context).width < AppBreakpoints.compact
-        ? AppSpacing.large
+        ? AppSpacing.medium
         : AppSpacing.xLarge;
 
     return Scaffold(
