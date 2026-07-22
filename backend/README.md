@@ -27,10 +27,10 @@ backend/
       meeting_service.py
     db/
       session.py
+  compose.yaml
   docker/
     Dockerfile
     Dockerfile.dockerignore
-    compose.yaml
   Makefile
   requirements.txt
   README.md
@@ -45,7 +45,8 @@ backend/
 - `app/models/`: DB の table に対応する型を置く。DB 構造の source of truth にする。
 - `app/services/`: 業務ロジックを置く。`routes/` に処理を書きすぎず、複数 API で使う処理はここへ逃がす。
 - `app/db/`: DB 接続や session 管理を置く。
-- `docker/`: Docker 関連ファイルを置く。backend root に Docker 設定を散らさない。
+- `compose.yaml`: backend local 開発用の compose 設定を置く。
+- `docker/`: backend image の build に使う Dockerfile を置く。
 
 基本方針:
 
@@ -57,16 +58,60 @@ backend/
 
 ## 起動
 
+初回は local 用 `.env` を作る。
+
+```sh
+cp .env.example .env
+```
+
+通常は `.env.example` の値のままで起動できる。
+
+実際の `backend/.env` に書く値:
+
+```env
+API_PORT=8000
+
+POSTGRES_DB=gurumeet
+POSTGRES_USER=gurumeet
+POSTGRES_PASSWORD=change_me
+POSTGRES_PORT=5432
+```
+
+通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
+
+理由:
+
+```text
+backend/.env
+  -> compose.yaml が読む
+  -> api / db コンテナに POSTGRES_* を渡す
+  -> api コンテナは POSTGRES_HOST=db と POSTGRES_* から接続 URL を作る
+```
+
+FastAPI を Compose の外で直接起動する場合だけ、必要に応じて `DATABASE_URL` を shell に export する。
+
+```env
+DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
+```
+
+staging / production の `DATABASE_URL` は `backend/.env` には書かない。Cloudflare Wrangler secret に登録する。
+
+```sh
+cd ../infra/cloudflare/app-worker
+npx wrangler secret put DATABASE_URL --env staging
+npx wrangler secret put DATABASE_URL --env production
+```
+
 `backend` フォルダ内で実行:
 
 ```sh
-make dev
+docker compose up --build
 ```
 
 ログを見る:
 
 ```sh
-make logs
+docker compose logs -f
 ```
 
 API:
@@ -78,5 +123,5 @@ API:
 停止:
 
 ```sh
-make down
+docker compose down
 ```
