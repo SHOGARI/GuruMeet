@@ -42,13 +42,31 @@ flutter pub get
 Webで起動する場合：
 
 ```
-flutter run -d web-server
+make dev
 ```
 
 Chromeが利用可能な場合：
 
 ```
-flutter run -d chrome
+make dev-chrome
+```
+
+ローカル起動ポートは `frontend/.env` の `FRONTEND_PORT` で固定します。
+
+```env
+FRONTEND_PORT=3000
+```
+
+`make dev` は内部で以下を実行します。
+
+```sh
+flutter run -d web-server --web-hostname 0.0.0.0 --web-port ${FRONTEND_PORT}
+```
+
+`make dev-chrome` は内部で以下を実行します。
+
+```sh
+flutter run -d chrome --web-port ${FRONTEND_PORT}
 ```
 
 iOSまたはAndroid実機・シミュレータで起動する場合：
