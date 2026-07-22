@@ -67,6 +67,18 @@ jobs:
       - name: Docker を確認
         run: docker info
 
+      - name: Cloudflare secrets を検証
+        run: |
+          if [[ ! "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID must be exactly 32 lowercase hex characters. Check for leading/trailing spaces in the GitHub secret."
+            exit 1
+          fi
+
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty."
+            exit 1
+          fi
+
       - name: Worker を deploy
         working-directory: infra/cloudflare/app-worker
         run: npx wrangler deploy --env "$DEPLOY_ENV"
