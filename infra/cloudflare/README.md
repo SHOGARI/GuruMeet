@@ -191,6 +191,7 @@ main push    -> production デプロイ
 
 ```text
 任意 branch -> develop の pull request
+develop -> main の pull request
   -> backend 構文確認
   -> frontend analyze / test
   -> Worker 型チェック

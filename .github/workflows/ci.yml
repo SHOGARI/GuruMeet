@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - develop
+      - main
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
