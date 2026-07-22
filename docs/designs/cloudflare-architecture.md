@@ -2,20 +2,18 @@
 
 ## 目的
 
-GuruMeet は frontend を Flutter、backend を FastAPI で構成する。デプロイ先は Cloudflare を中心に寄せ、静的配信、API 入口、container 実行、storage、cache、非同期処理を Cloudflare のサービスでできるだけ管理する。
+GuruMeet は frontend を Flutter、backend を FastAPI で構成する。初期デプロイは Cloudflare Worker 1本に寄せ、静的配信、API 入口、container 実行、storage をまとめて管理する。
 
 ただし、DB は最初から Cloudflare D1 に寄せない。ユーザー、ミーティング、参加者、予定のようなリレーションを扱うため、backend の主 DB は PostgreSQL を前提にする。
 
 ## 採用方針
 
 ```text
-Frontend
-  Cloudflare Pages
-    Flutter Web の build/web を配信する
-
-Backend entrypoint
+Entrypoint
   Cloudflare Worker
-    /api/* または api.example.com の入口にする
+    Flutter Web の build/web を Workers Static Assets で配信する
+    /api/* を FastAPI container に流す
+    /files/* で R2 object を返す
     request を Workers Container に流す
 
 Backend runtime
@@ -24,7 +22,7 @@ Backend runtime
 
 Database
   PostgreSQL
-    Neon / Supabase / Railway Postgres などの managed PostgreSQL を候補にする
+    Neon PostgreSQL を使う
     必要になったら Cloudflare Hyperdrive を挟む
 
 Object storage
@@ -50,50 +48,34 @@ Scheduled jobs
 User
   |
   v
-Cloudflare Pages
-  |
-  | Flutter Web static assets
-  v
-Browser / App
-  |
-  | HTTPS JSON API
-  v
 Cloudflare Worker
-  |
-  | request forwarding
-  v
-Workers Container
-  |
-  | uvicorn
-  v
-FastAPI
-  |
-  | SQLAlchemy / Alembic
-  v
-PostgreSQL
+  |-- /             -> Flutter Web static assets
+  |-- /api/*        -> Workers Container -> FastAPI -> PostgreSQL
+  |-- /files/*      -> R2
+  |-- /edge/health  -> Worker health
 ```
 
 ## ドメイン案
 
-第一候補:
+初期:
 
 ```text
-app.example.com  -> Cloudflare Pages
-api.example.com  -> Cloudflare Worker + Workers Container
+stg.gurumeet.net  -> staging Worker
+gurumeet.net      -> production Worker
 ```
 
-代替:
+Pages を分ける場合の将来案:
 
 ```text
-example.com      -> Cloudflare Pages
-api.example.com  -> Cloudflare Worker + Workers Container
+gurumeet.net      -> Cloudflare Pages
+api.gurumeet.net  -> Cloudflare Worker + Workers Container
 ```
 
-`/api/*` を同一ドメイン配下にまとめる案もあるが、最初は `api.example.com` を分ける。frontend と backend の責務、CORS、ログ、deploy 単位を分けやすいため。
+初期は `/api/*` を同一ドメイン配下にまとめる。CORS と Access 保護を簡単にするため。
 
 ## Frontend
 
-Flutter Web は build 後に静的ファイルになるため、Cloudflare Pages に載せる。
+Flutter Web は build 後に静的ファイルになるため、Workers Static Assets に載せる。
 
 想定:
 
@@ -102,7 +84,7 @@ frontend/
   build/web/
 ```
 
-Cloudflare Pages 側では、Flutter の build output を Pages の公開対象にする。
+`infra/cloudflare/app-worker/wrangler.jsonc` の `assets.directory` で、Flutter の build output を Worker の配信対象にする。
 
 frontend から backend を呼ぶ API base URL は環境ごとに分ける。
 
@@ -113,8 +95,11 @@ local web:
 Android emulator:
   http://10.0.2.2:8000
 
+staging:
+  /api
+
 production:
-  https://api.example.com
+  /api
 ```
 
 ## Backend
@@ -126,24 +111,28 @@ backend 本体は FastAPI として保つ。Cloudflare Workers Containers の都
 ```text
 backend/
   app/          # FastAPI application
-  docker/       # local Docker / container image
+  compose.yaml  # backend local development
+  docker/       # backend image build files
   Makefile
   requirements.txt
 ```
 
-Cloudflare 用の Worker entrypoint は別ディレクトリに置く。
+Cloudflare 用の Worker entrypoint は `infra/` 配下に置く。
 
 ```text
-cloudflare/
-  backend-worker/
-    src/
-      index.ts
-    wrangler.toml
+infra/
+  cloudflare/
+    app-worker/
+      package.json
+      wrangler.jsonc
+      src/
+        index.ts
 ```
 
 理由:
 
 - FastAPI 本体と Cloudflare 接続層を分離する
+- infrastructure 関連の設定を `infra/` に寄せる
 - local Docker 開発と Cloudflare deploy の責務を混ぜない
 - 将来 Cloud Run / Fly.io などへ逃がす余地を残す
 
@@ -185,13 +174,10 @@ Cloudflare D1 は初期の主 DB にはしない。
 - D1 に寄せると FastAPI の DB 設計より Cloudflare runtime 前提の設計になる
 - まずは RDB として一般的な PostgreSQL を source of truth にする
 
-候補:
+採用:
 
 ```text
 Neon
-Supabase
-Railway Postgres
-その他 managed PostgreSQL
 ```
 
 DB 接続が課題になったら Cloudflare Hyperdrive を検討する。
@@ -199,11 +185,8 @@ DB 接続が課題になったら Cloudflare Hyperdrive を検討する。
 ## Cloudflare サービスの使い分け
 
 ```text
-Pages
-  Flutter Web の静的配信
-
 Workers
-  API 入口、routing、軽い request 前処理
+  Flutter Web 静的配信、API 入口、routing、軽い request 前処理
 
 Workers Containers
   FastAPI runtime
@@ -227,19 +210,19 @@ Access
 ## 初期実装でやること
 
 1. backend は local Docker で FastAPI を動かす
-2. backend compose に PostgreSQL を追加する
+2. `backend/compose.yaml` に PostgreSQL を追加する
 3. SQLAlchemy / Alembic の導入を検討する
-4. Cloudflare deploy layer を `cloudflare/backend-worker/` に追加する
+4. Cloudflare deploy layer を `infra/cloudflare/app-worker/` に追加する
 5. Workers Containers で FastAPI container を呼び出す最小構成を作る
-6. frontend から `https://api.example.com` を呼ぶ設定を用意する
-7. production DB を決める
+6. frontend から同一 origin の `/api` を呼ぶ設定を用意する
+7. production DB は Neon PostgreSQL にする
 
 ## 初期実装ではやらないこと
 
 - Cloudflare D1 を主 DB にする
 - backend を Pages Functions に寄せる
 - FastAPI の中に Cloudflare Worker の都合を混ぜる
-- frontend と backend を同じ deploy unit にする
+- frontend を Cloudflare Pages に分ける
 - R2 / KV / Queues を最初から全部実装する
 
 ## リスク
@@ -262,10 +245,10 @@ Cloudflare を使い倒す方針で進める。
 ただし、Cloudflare に寄せるのは deploy / routing / storage / cache / async layer であり、backend application code は FastAPI として独立させる。
 
 ```text
-frontend = Cloudflare Pages
-backend entrypoint = Cloudflare Worker
+frontend = Workers Static Assets
+entrypoint = Cloudflare Worker
 backend runtime = Workers Containers
-main DB = PostgreSQL
+main DB = Neon PostgreSQL
 blob storage = R2
 cache = KV
 async = Queues

@@ -15,8 +15,8 @@ Cloudflare はサービス数が多く、名前だけでは役割を誤解しや
 
 | サービス | 種類 | 何をするものか | GuruMeet での使い方 |
 | --- | --- | --- | --- |
-| Pages | 静的サイト/フロント配信 | build 済み frontend を Cloudflare global network から配信する | Flutter Web の `build/web` を配信する |
-| Workers | serverless compute | request を受けて edge で処理する | API 入口、routing、軽い前処理 |
+| Pages | 静的サイト/フロント配信 | build 済み frontend を Cloudflare global network から配信する | 初期は使わない。frontend 独立運用が必要になったら検討 |
+| Workers | serverless compute | request を受けて edge で処理する | Flutter Web 配信、API 入口、routing、軽い前処理 |
 | Workers Containers / Containers | container runtime | Workers から Docker container image を起動・呼び出す | FastAPI + uvicorn を container として動かす候補 |
 | D1 | serverless SQL database | Cloudflare native な SQL DB。SQLite 系 | Workers 中心の小規模 DB なら候補。FastAPI 主 DB には今は使わない |
 | R2 | object storage | S3 互換のファイル置き場 | 画像、添付、PDF、アップロードファイル |
@@ -29,7 +29,7 @@ Cloudflare はサービス数が多く、名前だけでは役割を誤解しや
 | Secrets Store | secrets management | account 横断で secret を安全に管理する | API key、DB credential 管理候補 |
 | Turnstile | bot 対策 | CAPTCHA 代替 | signup / login / public form の bot 対策 |
 | Access | Zero Trust access control | hostname や app に認証 policy をかける | 管理画面や internal endpoint の保護 |
-| DNS | domain management | DNS record を管理する | `app.example.com` / `api.example.com` の管理 |
+| DNS | domain management | DNS record を管理する | `stg.gurumeet.net` / `gurumeet.net` の管理 |
 | SSL/TLS | TLS 管理 | HTTPS 証明書と TLS 設定 | public domain の HTTPS |
 | WAF | web application firewall | HTTP request を rule で保護する | API / frontend の攻撃対策 |
 | Cache / CDN | cache | static / dynamic content を cache する | Pages 配信、画像配信、API cache の調整 |
@@ -146,7 +146,7 @@ GuruMeet では frontend は Flutter Web の静的配信が主目的なので、
 
 ### Pages
 
-Flutter Web は `flutter build web` 後に静的ファイルになるため、Pages に載せやすい。
+Flutter Web は `flutter build web` 後に静的ファイルになるため、Pages にも載せやすい。
 
 想定:
 
@@ -155,7 +155,7 @@ Build command: flutter build web
 Output: build/web
 ```
 
-実運用では Cloudflare Pages の build image に Flutter を入れるより、GitHub Actions で build して Pages Direct Upload する方が安定する可能性がある。
+GuruMeet 初期構成では Pages は使わず、Workers Static Assets で Worker と一体 deploy する。frontend だけ独立 deploy / preview したくなったら Pages を検討する。
 
 ## Security / Access 系
 
@@ -176,8 +176,8 @@ Access は Cloudflare 側で hostname / app に policy をかけるもの。ア�
 例:
 
 ```text
-admin.example.com -> Access で保護
-api.example.com   -> public API として公開
+stg.gurumeet.net -> Access で保護
+gurumeet.net     -> public app として公開
 ```
 
 Cloudflare Access と backend app の JWT/session 認証を混同しない。
@@ -229,11 +229,11 @@ Workers Containers を使う場合は、backend runtime が Cloudflare 側にあ
 
 | 段階 | 採用 | 保留 |
 | --- | --- | --- |
-| 初期 frontend deploy | Pages | Zaraz, Images, Stream |
+| 初期 frontend deploy | Workers Static Assets | Pages, Zaraz, Images, Stream |
 | 初期 backend deploy | Workers + Workers Containers | Pages Functions |
-| 初期 DB | PostgreSQL outside Cloudflare | D1 |
-| 初期 file storage | まだ不要。必要になったら R2 | Images |
-| 初期 security | DNS, SSL/TLS, WAF basics | API Shield, Access |
+| 初期 DB | Neon PostgreSQL | D1 |
+| 初期 file storage | R2 | Images |
+| 初期 security | Cloudflare Access for staging, DNS, SSL/TLS, WAF basics | API Shield |
 | 初期 async | まだ不要 | Queues, Workflows, Cron |
 | 初期 observability | Cloudflare dashboard / Logs later | Logpush 等の高度運用 |
 
@@ -261,7 +261,7 @@ Cloudflare を使い倒しつつ、FastAPI + Docker を維持するなら、Work
 
 ```text
 frontend:
-  Pages Free で開始可能
+  Workers Static Assets で Worker と一体 deploy
 
 backend:
   Workers Containers を使うなら Workers Paid $5/month から
@@ -280,7 +280,7 @@ main DB:
 
 ```text
 frontend:
-  Pages
+  Workers Static Assets または Pages
 
 backend:
   Workers
@@ -303,7 +303,9 @@ Cloudflare:
   Workers Paid $5/month を許容する
 
 PostgreSQL:
-  Neon / Supabase / Railway などの無料枠または低額 plan を比較する
+  GuruMeet では Neon を採用する
+  local は Docker Compose PostgreSQL
+  staging / production は Neon PostgreSQL
 ```
 
 初期段階で避けるべきこと:

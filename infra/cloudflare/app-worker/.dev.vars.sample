@@ -1,0 +1,19 @@
+# ローカル `wrangler dev` 用。
+# 使うときは `cp .dev.vars.sample .dev.vars` でコピーする。
+# `.dev.vars` 本体はコミットしない。
+#
+# staging / production はこのファイルを読まない。
+# 本番系の値は `wrangler secret put` で Cloudflare に登録する。
+
+ENVIRONMENT=development
+
+# ローカル `wrangler dev` だけで使う DB 接続先。
+# staging / production の DB 接続先は Cloudflare secret の DATABASE_URL。
+#
+# 通常のバックエンドのローカル開発では backend/compose.yaml を使う:
+#   api コンテナ -> db コンテナ
+#   DATABASE_URL=postgresql://gurumeet:change_me@db:5432/gurumeet
+#
+# `wrangler dev` から起動したコンテナは、上の db という名前を解決できないことがある。
+# その場合は、Mac 側に公開された PostgreSQL を host.docker.internal で見る。
+DATABASE_URL=postgresql://gurumeet:change_me@host.docker.internal:5432/gurumeet
