@@ -8,9 +8,9 @@ class HeroCardStack extends StatelessWidget {
   const HeroCardStack({super.key});
 
   static const double _stackHeight = 456;
-  static const double _compactStackHeight = 360;
+  static const double _compactStackHeight = 332;
   static const double _frontCardHeight = 408;
-  static const double _compactFrontCardHeight = 326;
+  static const double _compactFrontCardHeight = 304;
   static const double _cardWidthFactor = 0.92;
   static const double _minimumCardWidth = 292;
   static const double _maximumCardWidth = 486;
@@ -28,8 +28,10 @@ class HeroCardStack extends StatelessWidget {
     budget: '¥2,000〜3,000',
     cuisine: '焼肉',
     description: '香ばしい炭火焼肉をみんなで囲める、今夜の本命候補。',
-    imageUrl:
-        'https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=1200&q=90',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=1200&q=90',
+      'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=90',
+    ],
   );
 
   @override

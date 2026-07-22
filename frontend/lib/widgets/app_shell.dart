@@ -19,49 +19,60 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final horizontalPadding = screenWidth < AppBreakpoints.compact
-        ? AppSpacing.large
-        : AppSpacing.xLarge;
+    final horizontalPadding = switch (screenWidth) {
+      < AppBreakpoints.compact => AppSpacing.medium,
+      < 900 => AppSpacing.xLarge,
+      _ => AppSpacing.xxLarge,
+    };
+    final body = SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        AppSpacing.large,
+        horizontalPadding,
+        bottomBar == null ? AppSpacing.section : AppSizes.bottomBarClearance,
+      ),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxContentWidth),
+          child: child,
+        ),
+      ),
+    );
 
     return Scaffold(
       appBar: appBar,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            AppSpacing.large,
-            horizontalPadding,
-            bottomBar == null
-                ? AppSpacing.section
-                : AppSizes.bottomBarClearance,
-          ),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxContentWidth),
-              child: child,
-            ),
-          ),
-        ),
-      ),
+      body: SafeArea(child: screenWidth >= 900 ? Scrollbar(child: body) : body),
       bottomNavigationBar: bottomBar == null
           ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  AppSpacing.regular,
-                  horizontalPadding,
-                  AppSpacing.large,
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
                 ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: AppSizes.actionMaxWidth,
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.regular,
+                    horizontalPadding,
+                    AppSpacing.large,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: AppSizes.actionMaxWidth,
+                      ),
+                      child: SizedBox(width: double.infinity, child: bottomBar),
                     ),
-                    child: SizedBox(width: double.infinity, child: bottomBar),
                   ),
                 ),
               ),

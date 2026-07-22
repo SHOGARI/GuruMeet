@@ -71,10 +71,30 @@ class GuruMeetApp extends StatelessWidget {
             final arguments = settings.arguments;
             if (arguments case (
               draft: final GroupCreationDraft draft,
-              restaurant: final RestaurantPreview restaurant,
+              result: final RestaurantMatchResult result,
             )) {
               return MaterialPageRoute<void>(
-                builder: (_) => MatchPage(draft: draft, restaurant: restaurant),
+                builder: (_) => MatchPage(draft: draft, result: result),
+                settings: settings,
+              );
+            }
+            if (arguments case (
+              draft: final GroupCreationDraft draft,
+              restaurant: final RestaurantPreview restaurant,
+            )) {
+              final fallbackResult = RestaurantMatchResult(
+                restaurant: restaurant,
+                peopleCount: draft.peopleCount,
+                results: [
+                  RestaurantVoteResult(
+                    restaurant: restaurant,
+                    likeCount: draft.peopleCount,
+                    rejectCount: 0,
+                  ),
+                ],
+              );
+              return MaterialPageRoute<void>(
+                builder: (_) => MatchPage(draft: draft, result: fallbackResult),
                 settings: settings,
               );
             }

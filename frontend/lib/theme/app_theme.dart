@@ -130,6 +130,19 @@ ThemeData buildAppTheme() {
         textStyle: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
       ),
     ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size.fromHeight(AppSizes.secondaryButtonHeight),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.large,
+          vertical: AppSpacing.regular,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         minimumSize: const Size.square(AppSizes.touchTarget),

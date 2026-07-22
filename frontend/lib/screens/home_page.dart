@@ -17,7 +17,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  static const double _maxContentWidth = 540;
+  static const double _mobileContentWidth = 540;
+  static const double _desktopContentWidth = 1040;
   static const double _ctaMaxWidth = 440;
 
   bool _isNavigating = false;
@@ -43,6 +44,7 @@ class _HomePageState extends State<HomePage> {
     final colors = theme.colorScheme;
     final screenSize = MediaQuery.sizeOf(context);
     final screenWidth = screenSize.width;
+    final isDesktop = screenWidth >= 900;
     final verticalGap = screenSize.height < 860
         ? AppSpacing.section
         : AppSpacing.hero;
@@ -51,7 +53,9 @@ class _HomePageState extends State<HomePage> {
         : theme.textTheme.displaySmall;
 
     return AppShell(
-      maxContentWidth: _maxContentWidth,
+      maxContentWidth: screenWidth >= 900
+          ? _desktopContentWidth
+          : _mobileContentWidth,
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
         duration: AppMotion.pageEntrance,
@@ -75,55 +79,141 @@ class _HomePageState extends State<HomePage> {
                 letterSpacing: AppSizes.codeLabelLetterSpacing,
               ),
             ),
-            SizedBox(height: verticalGap),
-            Text(
-              '今日、どこ食べに行く？',
-              style: headlineStyle?.copyWith(letterSpacing: 0),
+            SizedBox(height: isDesktop ? AppSpacing.xxLarge : verticalGap),
+            if (isDesktop)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: _HomeIntro(
+                      headlineStyle: headlineStyle,
+                      onCreateGroup: _isNavigating ? null : _openCreateGroup,
+                      onJoinGroup: _isNavigating ? null : _openJoinGroup,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.display),
+                  const Expanded(child: HeroCardStack()),
+                ],
+              )
+            else ...[
+              _HomeIntroText(headlineStyle: headlineStyle),
+              SizedBox(height: verticalGap),
+              const HeroCardStack(),
+              SizedBox(height: verticalGap),
+              _HomeActions(
+                onCreateGroup: _isNavigating ? null : _openCreateGroup,
+                onJoinGroup: _isNavigating ? null : _openJoinGroup,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeIntro extends StatelessWidget {
+  const _HomeIntro({
+    required this.headlineStyle,
+    required this.onCreateGroup,
+    required this.onJoinGroup,
+  });
+
+  final TextStyle? headlineStyle;
+  final VoidCallback? onCreateGroup;
+  final VoidCallback? onJoinGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _HomeIntroText(headlineStyle: headlineStyle),
+        const SizedBox(height: AppSpacing.section),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: _HomePageState._ctaMaxWidth,
+            child: _HomeActions(
+              onCreateGroup: onCreateGroup,
+              onJoinGroup: onJoinGroup,
             ),
-            const SizedBox(height: AppSpacing.regular),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: Text(
-                'みんなでスワイプして、行きたい店を決めよう。',
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeIntroText extends StatelessWidget {
+  const _HomeIntroText({required this.headlineStyle});
+
+  final TextStyle? headlineStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('今日、どこ食べに行く？', style: headlineStyle?.copyWith(letterSpacing: 0)),
+        const SizedBox(height: AppSpacing.regular),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Text(
+            'みんなでスワイプして、行きたい店を決めよう。',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeActions extends StatelessWidget {
+  const _HomeActions({required this.onCreateGroup, required this.onJoinGroup});
+
+  final VoidCallback? onCreateGroup;
+  final VoidCallback? onJoinGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return Align(
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: _HomePageState._ctaMaxWidth,
+        ),
+        child: Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: PrimaryActionButton(
+                label: 'グループを作る',
+                onPressed: onCreateGroup,
               ),
             ),
-            SizedBox(height: verticalGap),
-            const HeroCardStack(),
-            SizedBox(height: verticalGap),
-            Align(
-              alignment: Alignment.center,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _ctaMaxWidth),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: PrimaryActionButton(
-                        label: 'グループを作る',
-                        onPressed: _isNavigating ? null : _openCreateGroup,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.regular),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: _isNavigating ? null : _openJoinGroup,
-                        child: const Text('コードで参加する'),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.medium),
-                    Text(
-                      '招待された方は、共有されたURLまたはコードから参加できます',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: AppSpacing.regular),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onJoinGroup,
+                child: const Text('コードで参加する'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            Text(
+              '招待された方は、共有されたURLまたはコードから参加できます',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
               ),
             ),
           ],
