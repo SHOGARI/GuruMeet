@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class Settings(BaseModel):
-    app_name: str = "Gurumeet Backend"
+    app_name: str = "GuruMeet Backend"
 
 
 settings = Settings()
