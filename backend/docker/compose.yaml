@@ -4,6 +4,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: gurumeet-backend-api
+    env_file:
+      - ../.env
     ports:
       - "8000:8000"
     volumes:
