@@ -3,8 +3,12 @@ from sqlalchemy import engine_from_config, pool
 
 from app.db.base import Base
 from app.db.database_url import build_database_url
-from app.models import User  # noqa: F401
-
+from app.models import (  # noqa: F401
+    AnonymousUser,
+    TemporaryGroup,
+    TemporaryGroupParticipant,
+    User,
+)
 
 config = context.config
 

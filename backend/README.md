@@ -75,7 +75,23 @@ POSTGRES_DB=gurumeet
 POSTGRES_USER=gurumeet
 POSTGRES_PASSWORD=change_me
 POSTGRES_PORT=5432
+
+TEMPORARY_GROUP_TTL_MINUTES=1440
+TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
+JOIN_RATE_LIMIT_REQUESTS=10
+JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 ```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` は匿名参加者トークンをDB保存用にhash化するときのサーバー秘密値。
+
+生成例:
+
+```sh
+openssl rand -hex 32
+```
+
+この値はfrontendには渡さない。本番ではGitに置かず、Cloudflare Wrangler secretなどのsecret storeに登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
 
 通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
 
@@ -125,3 +141,17 @@ API:
 ```sh
 docker compose down
 ```
+
+## DB 認証エラーが出る場合
+
+`password authentication failed for user "gurumeet"` が出る場合は、既存の Docker volume に保存されている PostgreSQL のパスワードと、現在の `backend/.env` の `POSTGRES_PASSWORD` がずれている。
+
+PostgreSQL の公式 image は、初回に volume を作ったときだけ `POSTGRES_PASSWORD` を反映する。あとから `.env` を変えても、既存 DB ユーザーのパスワードは自動では変わらない。
+
+ローカル開発 DB を消してよい場合だけ、`backend` フォルダで実行する。
+
+```sh
+make reset-db
+```
+
+これは `postgres_data` volume を削除するため、ローカル DB のデータは消える。残したいデータがある場合は、`.env` の `POSTGRES_PASSWORD` を既存 DB 作成時の値に戻す。
