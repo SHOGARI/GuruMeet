@@ -4,6 +4,55 @@
 
 backendは共有URLを作らない。frontendが返却された `id` を使って `/groups/{id}` のようなURLを組み立てる。
 
+## Frontend Usage
+
+frontendは初回アクセス時に匿名参加者トークンを用意する。
+
+```text
+participant_token = crypto.randomUUID()
+```
+
+同じ値をlocalStorageとcookieに保存する。
+
+```text
+localStorage:
+  gurumeet_participant_token
+
+cookie:
+  gurumeet_participant_token
+```
+
+起動時はlocalStorageとcookieのどちらかに値があれば復元し、両方なければ新規生成する。backendには `participant_token` を送る。backendは生の値を保存せず、hash化して `anonymous_users.participant_token_hash` に保存する。
+
+グループ作成時に作成者も参加者として登録する場合:
+
+```text
+POST /temporary-groups
+  participant_token を含める
+```
+
+共有URLから参加する場合:
+
+```text
+POST /temporary-groups/{group_id}/participants
+  participant_token を含める
+```
+
+手入力コードから参加する場合:
+
+```text
+POST /temporary-groups/join
+  code と participant_token を含める
+```
+
+人数表示はレスポンスの `joined_participant_count` と `participant_count` を使う。
+
+```text
+2 / 4人
+```
+
+`is_full` はDBカラムではなくAPI側の計算結果。新規参加者が満員グループへ参加しようとした場合は409を返す。同じ `participant_token` の既存参加者は再実行しても人数を増やさず、既存参加として扱う。
+
 ## 設計理由
 
 一時グループには `id` と `code` の2つの識別子を持たせる。
@@ -32,7 +81,7 @@ URL共有:
 A7K2F
 ```
 
-レート制限は `POST /temporary-groups/join` にだけ適用する。UUID URLは推測困難な主導線として扱い、5桁コードは総当たり対策つきの補助導線として扱う。
+レート制限は参加系APIに適用する。UUID URLは推測困難な主導線として扱い、5桁コードは総当たり対策つきの補助導線として扱う。
 
 ## POST /temporary-groups
 
@@ -57,7 +106,16 @@ bodyなしでも作成可能。
 
 ```json
 {
-  "creator_id": "user_123"
+  "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a",
+  "creator_id": "user_123",
+  "participant_count": 4,
+  "location": "渋谷",
+  "budget_min": 2000,
+  "budget_max": 3000,
+  "restaurant": {
+    "id": "restaurant_123",
+    "name": "渋谷ビストロ"
+  }
 }
 ```
 
@@ -65,8 +123,10 @@ bodyなしでも作成可能。
 
 1. `id` にUUID v4を発行する。
 2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から5文字の `code` を生成する。
-3. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
-4. `code` のunique制約に衝突した場合はrollbackして再生成する。
+3. リクエストに希望条件があれば保存する。
+4. `participant_token` があれば作成者を参加者として登録する。
+5. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
+6. `code` のunique制約に衝突した場合はrollbackして再生成する。
 
 ### Response
 
@@ -76,7 +136,9 @@ bodyなしでも作成可能。
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "code": "A7K2F",
-  "expires_at": "2026-07-16T12:00:00Z"
+  "expires_at": "2026-07-16T12:00:00Z",
+  "joined_participant_count": 1,
+  "is_full": false
 }
 ```
 
@@ -112,8 +174,18 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
+  "joined_participant_count": 2,
+  "is_full": false,
   "created_at": "2026-07-15T12:00:00Z",
-  "creator_id": "user_123"
+  "creator_id": "user_123",
+  "participant_count": 4,
+  "location": "渋谷",
+  "budget_min": 2000,
+  "budget_max": 3000,
+  "restaurant": {
+    "id": "restaurant_123",
+    "name": "渋谷ビストロ"
+  }
 }
 ```
 
@@ -124,6 +196,75 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
 ```json
 {
   "detail": "一時グループが存在しない、または期限切れです。"
+}
+```
+
+## POST /temporary-groups/{group_id}/participants
+
+UUIDから一時グループに参加する。
+
+### Why
+
+共有URLから参加する主導線。frontendはlocalStorageとcookieに保存した同じ `participant_token` を送る。
+
+同じ `participant_token` で再実行した場合は既存参加者として扱い、参加人数を増やさない。
+
+### Request
+
+```json
+{
+  "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"
+}
+```
+
+### Processing
+
+1. `group_id` で有効な一時グループを検索し、行ロックする。
+2. `participant_token` をhash化して `anonymous_users` を取得または作成する。
+3. 既に `temporary_group_participants` に参加行があれば、人数は増やさず既存参加扱いにする。
+4. 未参加の場合は現在参加人数を数える。
+5. `participant_count` に達していれば409を返す。
+6. 空きがあれば `temporary_group_participants` に参加行を作成する。
+
+### Response
+
+`200 OK`
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "code": "A7K2F",
+  "expires_at": "2026-07-16T12:00:00Z",
+  "joined_participant_count": 2,
+  "is_full": false,
+  "created_at": "2026-07-15T12:00:00Z",
+  "creator_id": "user_123",
+  "participant_count": 4,
+  "location": "渋谷",
+  "budget_min": 2000,
+  "budget_max": 3000,
+  "restaurant": {
+    "id": "restaurant_123",
+    "name": "渋谷ビストロ"
+  }
+}
+```
+
+### Errors
+
+`404 Not Found`
+
+```json
+{
+  "detail": "一時グループが存在しない、または期限切れです。"
+}
+```
+
+`409 Conflict`
+
+```json
+{
+  "detail": "一時グループの参加人数が上限に達しています。"
 }
 ```
 
@@ -142,16 +283,19 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
 
 ```json
 {
-  "code": "A7K2F"
+  "code": "A7K2F",
+  "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"
 }
 ```
 
 ### Processing
 
 1. client IPごとのrate limitを確認する。
-2. `code` をuppercaseにして検索する。
-3. `expires_at > now` の行だけ有効扱いにする。
-4. 存在しないコードと期限切れコードは同じ404を返す。
+2. `code` をuppercaseにして有効な一時グループを検索し、行ロックする。
+3. `participant_token` をhash化して `anonymous_users` を取得または作成する。
+4. 既に参加済みなら人数を増やさず既存参加扱いにする。
+5. 未参加かつ満員なら409を返す。
+6. 空きがあれば参加行を作成する。
 
 ### Response
 
@@ -162,8 +306,18 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
+  "joined_participant_count": 2,
+  "is_full": false,
   "created_at": "2026-07-15T12:00:00Z",
-  "creator_id": "user_123"
+  "creator_id": "user_123",
+  "participant_count": 4,
+  "location": "渋谷",
+  "budget_min": 2000,
+  "budget_max": 3000,
+  "restaurant": {
+    "id": "restaurant_123",
+    "name": "渋谷ビストロ"
+  }
 }
 ```
 
@@ -177,6 +331,14 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
 }
 ```
 
+`409 Conflict`
+
+```json
+{
+  "detail": "一時グループの参加人数が上限に達しています。"
+}
+```
+
 `429 Too Many Requests`
 
 ```json
@@ -187,13 +349,21 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
 
 ## Rate Limit
 
-`POST /temporary-groups/join` は1 IPあたり1分10回まで。
+参加系APIは1 IPあたり1分10回まで。
+
+対象:
+
+```text
+POST /temporary-groups/{group_id}/participants
+POST /temporary-groups/join
+```
 
 設定:
 
 ```env
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+PARTICIPANT_TOKEN_HASH_SECRET=change_me_to_a_long_random_value
 ```
 
 現時点ではin-memory実装。複数processや複数containerで厳密に共有する必要が出たら、DBまたは外部ストアに差し替える。
@@ -205,5 +375,15 @@ TEMPORARY_GROUP_TTL_MINUTES=1440
 TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+PARTICIPANT_TOKEN_HASH_SECRET=change_me_to_a_long_random_value
 ```
 
+`PARTICIPANT_TOKEN_HASH_SECRET` は本番では長いランダム値に変える。
+
+生成例:
+
+```sh
+openssl rand -hex 32
+```
+
+この値はfrontendへ渡さず、Gitにもコミットしない。途中で変更すると既存の匿名参加者token hashと照合できなくなるため、既存匿名ユーザーを捨てるか移行処理が必要になる。

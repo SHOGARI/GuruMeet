@@ -25,11 +25,12 @@ backend/app/db/database_url.py
 | table | purpose | detail |
 | --- | --- | --- |
 | `users` | user情報 | 既存setup-db-etc由来 |
-| `temporary_groups` | 一時グループのUUID、5桁コード、有効期限 | [Temporary Groups Table](./temporary-groups.md) |
+| `anonymous_users` | 登録なし参加者の匿名識別子 | [Anonymous Users Table](./anonymous-users.md) |
+| `temporary_groups` | 一時グループのUUID、5桁コード、有効期限、希望条件 | [Temporary Groups Table](./temporary-groups.md) |
+| `temporary_group_participants` | 一時グループと匿名参加者の参加関係 | [Temporary Group Participants Table](./temporary-group-participants.md) |
 
 ## Migration
 
 DB schema変更はAlembicで管理する。
 
 運用方針は [Migration](../migration/migration.md) を参照。
-

@@ -15,6 +15,10 @@ class Settings(BaseModel):
     join_rate_limit_window_seconds: int = int(
         os.getenv("JOIN_RATE_LIMIT_WINDOW_SECONDS", "60")
     )
+    participant_token_hash_secret: str = os.getenv(
+        "PARTICIPANT_TOKEN_HASH_SECRET",
+        "gurumeet-dev-participant-token-secret",
+    )
 
 
 settings = Settings()
