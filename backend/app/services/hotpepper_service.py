@@ -63,11 +63,37 @@ async def search_hotpepper_restaurants(
     count: int,
 ) -> dict[str, object]:
     params = {
-        "key": settings.hotpepper_api_key.get_secret_value(),
         "lat": lat,
         "lng": lng,
         "range": search_range,
         "count": count,
+    }
+    shops = await _fetch_hotpepper_shops(params)
+    return _build_search_response(shops)
+
+
+async def search_restaurants_by_location(
+    location: str,
+    count: int = 20,
+) -> dict[str, object]:
+    normalized_location = location.strip()
+    if not normalized_location:
+        raise ValueError("location must not be blank")
+
+    params = {
+        "keyword": normalized_location,
+        "count": count,
+    }
+    shops = await _fetch_hotpepper_shops(params)
+    return _build_search_response(shops)
+
+
+async def _fetch_hotpepper_shops(
+    search_params: dict[str, object],
+) -> list[dict[str, object]]:
+    params = {
+        "key": settings.hotpepper_api_key.get_secret_value(),
+        **search_params,
         "format": "json",
     }
 
@@ -92,15 +118,20 @@ async def search_hotpepper_restaurants(
     if not isinstance(results, dict) or results.get("error"):
         raise HotPepperAPIError
 
-    shops = results.get("shop", [])
+    shops = results.get("shop")
+    if shops is None:
+        return []
     if not isinstance(shops, list):
         raise HotPepperAPIError
 
+    return [shop for shop in shops if isinstance(shop, dict)]
+
+
+def _build_search_response(
+    shops: list[dict[str, object]],
+) -> dict[str, object]:
     shop_summaries = []
     for shop in shops:
-        if not isinstance(shop, dict):
-            continue
-
         photo = shop.get("photo")
         pc_photo = photo.get("pc") if isinstance(photo, dict) else None
         image_url = pc_photo.get("l") if isinstance(pc_photo, dict) else ""
