@@ -27,6 +27,12 @@ tmp/
 temp/
 *.tmp
 
+# Node / Cloudflare Workers
+node_modules/
+.wrangler/
+.mf/
+.dev.vars
+
 # Python / FastAPI backend
 __pycache__/
 *.py[cod]
