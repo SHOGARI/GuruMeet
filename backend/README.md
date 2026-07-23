@@ -125,3 +125,17 @@ API:
 ```sh
 docker compose down
 ```
+
+## DB 認証エラーが出る場合
+
+`password authentication failed for user "gurumeet"` が出る場合は、既存の Docker volume に保存されている PostgreSQL のパスワードと、現在の `backend/.env` の `POSTGRES_PASSWORD` がずれている。
+
+PostgreSQL の公式 image は、初回に volume を作ったときだけ `POSTGRES_PASSWORD` を反映する。あとから `.env` を変えても、既存 DB ユーザーのパスワードは自動では変わらない。
+
+ローカル開発 DB を消してよい場合だけ、`backend` フォルダで実行する。
+
+```sh
+make reset-db
+```
+
+これは `postgres_data` volume を削除するため、ローカル DB のデータは消える。残したいデータがある場合は、`.env` の `POSTGRES_PASSWORD` を既存 DB 作成時の値に戻す。

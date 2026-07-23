@@ -1,6 +1,6 @@
 COMPOSE = docker compose --env-file .env -f compose.yaml
 
-.PHONY: dev logs down migrate db-shell cleanup-temporary-groups
+.PHONY: dev logs down reset-db migrate db-shell cleanup-temporary-groups
 
 dev:
 	$(COMPOSE) up -d --build
@@ -10,6 +10,10 @@ logs:
 
 down:
 	$(COMPOSE) down
+
+reset-db:
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d --build
 
 migrate:
 	$(COMPOSE) run --rm api alembic upgrade head
