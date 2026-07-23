@@ -1,0 +1,118 @@
+{
+  "name": "gurumeet",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-21",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../../../frontend/build/web",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/files/*", "/edge/*"],
+  },
+  "containers": [
+    {
+      "class_name": "BackendContainer",
+      "image": "../../../backend/Dockerfile.cloudflare",
+      "max_instances": 1,
+      "instance_type": "lite",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "BACKEND_CONTAINER",
+        "class_name": "BackendContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["BackendContainer"],
+    },
+  ],
+  "env": {
+    "staging": {
+      "name": "gurumeet-staging",
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "staging",
+      },
+      "containers": [
+        {
+          "class_name": "BackendContainer",
+          "image": "../../../backend/Dockerfile.cloudflare",
+          "max_instances": 1,
+          "instance_type": "lite",
+        },
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "BACKEND_CONTAINER",
+            "class_name": "BackendContainer",
+          },
+        ],
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["BackendContainer"],
+        },
+      ],
+      "routes": [
+        {
+          "pattern": "stg.gurumeet.net",
+          "custom_domain": true,
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "ASSETS_BUCKET",
+          "bucket_name": "gurumeet-staging-assets",
+        },
+      ],
+    },
+    "production": {
+      "name": "gurumeet",
+      "workers_dev": false,
+      "vars": {
+        "ENVIRONMENT": "production",
+      },
+      "containers": [
+        {
+          "class_name": "BackendContainer",
+          "image": "../../../backend/Dockerfile.cloudflare",
+          "max_instances": 1,
+          "instance_type": "lite",
+        },
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "BACKEND_CONTAINER",
+            "class_name": "BackendContainer",
+          },
+        ],
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["BackendContainer"],
+        },
+      ],
+      "routes": [
+        {
+          "pattern": "gurumeet.net",
+          "custom_domain": true,
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "ASSETS_BUCKET",
+          "bucket_name": "gurumeet-assets",
+        },
+      ],
+    },
+  },
+}
