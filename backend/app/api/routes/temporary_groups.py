@@ -11,11 +11,18 @@ from app.schemas.temporary_group import (
     TemporaryGroupDetail,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
+    TemporaryGroupRestaurantSearchResult,
     TemporaryGroupResponse,
+)
+from app.services.hotpepper_service import (
+    HotPepperAPIError,
+    HotPepperAPITimeoutError,
 )
 from app.services.temporary_group_service import (
     TemporaryGroupCodeCollisionError,
     TemporaryGroupFullError,
+    TemporaryGroupNotFoundError,
+    TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
 )
 
@@ -121,6 +128,37 @@ def get_temporary_group(
         raise _not_found()
 
     return _to_detail(group, service)
+
+
+@router.post(
+    "/{group_id}/restaurants/search",
+    response_model=TemporaryGroupRestaurantSearchResult,
+    summary="一時グループの条件で店舗候補を検索して保存する",
+)
+async def search_temporary_group_restaurants(
+    group_id: UUID,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    service = TemporaryGroupService(db)
+    try:
+        return await service.search_and_save_restaurants(group_id)
+    except TemporaryGroupNotFoundError:
+        raise _not_found() from None
+    except TemporaryGroupSearchCriteriaError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except HotPepperAPITimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Hot Pepper API request timed out",
+        ) from None
+    except HotPepperAPIError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to communicate with Hot Pepper API",
+        ) from None
 
 
 @router.post(

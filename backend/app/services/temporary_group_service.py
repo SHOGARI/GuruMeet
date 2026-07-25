@@ -12,6 +12,10 @@ from app.models.temporary_group_participant import TemporaryGroupParticipant
 from app.repositories.temporary_group_repository import TemporaryGroupRepository
 from app.schemas.temporary_group import TemporaryGroupCreate
 from app.services.code_generator import generate_temporary_group_code
+from app.services.hotpepper_service import (
+    HotPepperBudgetRangeError,
+    search_restaurants_for_group,
+)
 
 
 class TemporaryGroupCodeCollisionError(RuntimeError):
@@ -19,6 +23,14 @@ class TemporaryGroupCodeCollisionError(RuntimeError):
 
 
 class TemporaryGroupFullError(RuntimeError):
+    pass
+
+
+class TemporaryGroupNotFoundError(RuntimeError):
+    pass
+
+
+class TemporaryGroupSearchCriteriaError(ValueError):
     pass
 
 
@@ -40,7 +52,6 @@ class TemporaryGroupService:
                 location=data.location,
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
-                restaurant=data.restaurant,
                 expires_at=expires_at,
             )
             try:
@@ -99,6 +110,47 @@ class TemporaryGroupService:
             group.participant_count is not None
             and joined_participant_count >= group.participant_count
         )
+
+    async def search_and_save_restaurants(
+        self,
+        group_id: UUID,
+    ) -> dict[str, object]:
+        group = self.get_active_by_id(group_id)
+        if group is None:
+            raise TemporaryGroupNotFoundError
+
+        location = group.location.strip() if group.location else ""
+        if not location:
+            raise TemporaryGroupSearchCriteriaError("location is required")
+        if (
+            group.budget_min is not None
+            and group.budget_max is not None
+            and group.budget_min > group.budget_max
+        ):
+            raise TemporaryGroupSearchCriteriaError(
+                "budget_min must not exceed budget_max"
+            )
+
+        try:
+            search_result = await search_restaurants_for_group(
+                location=location,
+                budget_min=group.budget_min,
+                budget_max=group.budget_max,
+            )
+        except HotPepperBudgetRangeError as exc:
+            raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
+
+        previous_restaurant = group.restaurant
+        try:
+            self.repository.update_restaurant(group, search_result)
+            self.db.commit()
+            self.db.refresh(group)
+        except Exception:
+            self.db.rollback()
+            group.restaurant = previous_restaurant
+            raise
+
+        return search_result
 
     def _join_group(
         self,
