@@ -90,19 +90,3 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
         default=None,
         description="選択済み、または候補の店舗情報。",
     )
-
-
-class TemporaryGroupRestaurant(BaseModel):
-    id: str
-    name: str
-    address: str
-    access: str
-    genre: str
-    budget: str
-    image_url: str
-    shop_url: str
-
-
-class TemporaryGroupRestaurantSearchResult(BaseModel):
-    restaurants: list[TemporaryGroupRestaurant]
-    searched_at: datetime

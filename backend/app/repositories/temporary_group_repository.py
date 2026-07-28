@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -18,15 +17,6 @@ class TemporaryGroupRepository:
         self.db.add(group)
         self.db.flush()
         self.db.refresh(group)
-        return group
-
-    def update_restaurant(
-        self,
-        group: TemporaryGroup,
-        restaurant: dict[str, Any],
-    ) -> TemporaryGroup:
-        group.restaurant = restaurant
-        self.db.flush()
         return group
 
     def get_active_by_id(

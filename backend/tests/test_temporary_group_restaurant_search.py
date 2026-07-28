@@ -1,4 +1,5 @@
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -12,6 +13,7 @@ from app.services.hotpepper_service import (
     BUDGET_SCORE_FALLBACK,
     CAPACITY_SCORE_FALLBACK,
     HotPepperAPIError,
+    HotPepperAPITimeoutError,
     HotPepperBudgetRangeError,
     HotPepperBudgetRange,
     TEMPORARY_GROUP_RESTAURANT_CANDIDATE_LIMIT,
@@ -26,7 +28,6 @@ from app.services.hotpepper_service import (
     select_hotpepper_budget_codes,
 )
 from app.services.temporary_group_service import (
-    TemporaryGroupNotFoundError,
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
 )
@@ -458,34 +459,30 @@ class HotPepperGroupSearchTests(unittest.IsolatedAsyncioTestCase):
         fetch_mock.assert_not_awaited()
 
 
-class TemporaryGroupRestaurantPersistenceTests(unittest.IsolatedAsyncioTestCase):
+class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.db = MagicMock()
         self.service = TemporaryGroupService(self.db)
-        self.group_id = uuid4()
-        self.group = SimpleNamespace(
-            id=self.group_id,
-            location="渋谷",
-            budget_min=2000,
-            budget_max=3000,
-            participant_count=4,
-            restaurant={"restaurants": [{"id": "OLD"}], "searched_at": "old"},
-        )
-        self.service.repository.get_active_by_id = MagicMock(
-            return_value=self.group
-        )
+        self.service.repository.add = MagicMock(side_effect=lambda group: group)
 
-    async def test_latest_result_overwrites_entire_restaurant_value(self) -> None:
-        latest_result = {
+    async def test_create_group_searches_and_saves_restaurants(self) -> None:
+        search_result = {
             "restaurants": [{"id": "NEW"}],
             "searched_at": "2026-07-25T00:00:00+00:00",
         }
 
         with patch(
             "app.services.temporary_group_service.search_restaurants_for_group",
-            new=AsyncMock(return_value=latest_result),
+            new=AsyncMock(return_value=search_result),
         ) as search_mock:
-            result = await self.service.search_and_save_restaurants(self.group_id)
+            group = await self.service.create_group_with_restaurants(
+                TemporaryGroupCreate(
+                    location="  渋谷  ",
+                    budget_min=2000,
+                    budget_max=3000,
+                    participant_count=4,
+                )
+            )
 
         search_mock.assert_awaited_once_with(
             location="渋谷",
@@ -493,74 +490,54 @@ class TemporaryGroupRestaurantPersistenceTests(unittest.IsolatedAsyncioTestCase)
             budget_max=3000,
             participant_count=4,
         )
-        self.assertIs(result, latest_result)
-        self.assertIs(self.group.restaurant, latest_result)
+        self.assertIs(group.restaurant, search_result)
         self.db.commit.assert_called_once_with()
-        self.db.refresh.assert_called_once_with(self.group)
 
-    async def test_external_api_error_preserves_existing_restaurant(self) -> None:
-        original_restaurant = self.group.restaurant
-
+    async def test_external_api_error_stops_before_group_creation(self) -> None:
         with patch(
             "app.services.temporary_group_service.search_restaurants_for_group",
             new=AsyncMock(side_effect=HotPepperAPIError),
         ):
             with self.assertRaises(HotPepperAPIError):
-                await self.service.search_and_save_restaurants(self.group_id)
+                await self.service.create_group_with_restaurants(
+                    TemporaryGroupCreate(location="渋谷")
+                )
 
-        self.assertIs(self.group.restaurant, original_restaurant)
+        self.service.repository.add.assert_not_called()
         self.db.commit.assert_not_called()
-        self.db.rollback.assert_not_called()
 
-    async def test_database_error_rolls_back_and_restores_in_memory_value(
-        self,
-    ) -> None:
-        original_restaurant = self.group.restaurant
-        self.db.flush.side_effect = RuntimeError("database unavailable")
-
-        with patch(
-            "app.services.temporary_group_service.search_restaurants_for_group",
-            new=AsyncMock(
-                return_value={
-                    "restaurants": [{"id": "NEW"}],
-                    "searched_at": "2026-07-25T00:00:00+00:00",
-                }
-            ),
-        ):
-            with self.assertRaises(RuntimeError):
-                await self.service.search_and_save_restaurants(self.group_id)
-
-        self.db.rollback.assert_called_once_with()
-        self.assertIs(self.group.restaurant, original_restaurant)
-
-    async def test_missing_or_expired_group_stops_before_external_api(self) -> None:
-        self.service.repository.get_active_by_id.return_value = None
-
+    async def test_missing_location_creates_group_without_search(self) -> None:
         with patch(
             "app.services.temporary_group_service.search_restaurants_for_group",
             new=AsyncMock(),
         ) as search_mock:
-            with self.assertRaises(TemporaryGroupNotFoundError):
-                await self.service.search_and_save_restaurants(self.group_id)
+            group = await self.service.create_group_with_restaurants(
+                TemporaryGroupCreate(location="   ")
+            )
 
         search_mock.assert_not_awaited()
-        self.db.commit.assert_not_called()
+        self.assertIsNone(group.restaurant)
+        self.db.commit.assert_called_once_with()
 
-    async def test_missing_location_stops_before_external_api(self) -> None:
-        self.group.location = "   "
-
+    async def test_invalid_budget_stops_before_group_creation(self) -> None:
         with patch(
             "app.services.temporary_group_service.search_restaurants_for_group",
-            new=AsyncMock(),
         ) as search_mock:
             with self.assertRaises(TemporaryGroupSearchCriteriaError):
-                await self.service.search_and_save_restaurants(self.group_id)
+                await self.service.create_group_with_restaurants(
+                    TemporaryGroupCreate(
+                        location="渋谷",
+                        budget_min=3000,
+                        budget_max=2000,
+                    )
+                )
 
         search_mock.assert_not_awaited()
+        self.service.repository.add.assert_not_called()
         self.db.commit.assert_not_called()
 
 
-class TemporaryGroupRestaurantRouteTests(unittest.TestCase):
+class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         self.db = MagicMock()
         app.dependency_overrides[get_db] = lambda: self.db
@@ -570,8 +547,8 @@ class TemporaryGroupRestaurantRouteTests(unittest.TestCase):
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
 
-    def test_search_endpoint_returns_saved_restaurants(self) -> None:
-        search_result = {
+    def test_create_endpoint_returns_saved_restaurants(self) -> None:
+        restaurant = {
             "restaurants": [
                 {
                     "id": "J0001",
@@ -584,67 +561,92 @@ class TemporaryGroupRestaurantRouteTests(unittest.TestCase):
                     "shop_url": "https://example.com/shop",
                 }
             ],
-            "searched_at": "2026-07-25T00:00:00+00:00",
-        }
-
-        with patch(
-            "app.api.routes.temporary_groups.TemporaryGroupService"
-        ) as service_class:
-            service_class.return_value.search_and_save_restaurants = AsyncMock(
-                return_value=search_result
-            )
-            response = self.client.post(
-                f"/temporary-groups/{self.group_id}/restaurants/search"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        expected_response = {
-            **search_result,
             "searched_at": "2026-07-25T00:00:00Z",
         }
-        self.assertEqual(response.json(), expected_response)
+        group = self._group(restaurant=restaurant)
 
-    def test_missing_or_expired_group_returns_not_found(self) -> None:
         with patch(
             "app.api.routes.temporary_groups.TemporaryGroupService"
         ) as service_class:
-            service_class.return_value.search_and_save_restaurants = AsyncMock(
-                side_effect=TemporaryGroupNotFoundError
-            )
+            service = service_class.return_value
+            service.create_group_with_restaurants = AsyncMock(return_value=group)
+            service.count_participants.return_value = 1
+            service.is_full.return_value = False
+
             response = self.client.post(
-                f"/temporary-groups/{self.group_id}/restaurants/search"
+                "/temporary-groups",
+                json={
+                    "location": "渋谷",
+                    "budget_min": 2000,
+                    "budget_max": 3000,
+                    "participant_count": 4,
+                },
             )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["restaurant"], restaurant)
+        request = service.create_group_with_restaurants.await_args.args[0]
+        self.assertEqual(request.location, "渋谷")
+
+    def test_removed_search_endpoint_returns_not_found(self) -> None:
+        response = self.client.post(
+            f"/temporary-groups/{self.group_id}/restaurants/search"
+        )
 
         self.assertEqual(response.status_code, 404)
 
-    def test_missing_search_criteria_returns_bad_request(self) -> None:
+    def test_create_search_criteria_error_returns_bad_request(self) -> None:
         with patch(
             "app.api.routes.temporary_groups.TemporaryGroupService"
         ) as service_class:
-            service_class.return_value.search_and_save_restaurants = AsyncMock(
+            service_class.return_value.create_group_with_restaurants = AsyncMock(
                 side_effect=TemporaryGroupSearchCriteriaError(
-                    "location is required"
+                    "budget_min must not exceed budget_max"
                 )
             )
-            response = self.client.post(
-                f"/temporary-groups/{self.group_id}/restaurants/search"
-            )
+            response = self.client.post("/temporary-groups", json={"location": "渋谷"})
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"detail": "location is required"})
+        self.assertEqual(
+            response.json(),
+            {"detail": "budget_min must not exceed budget_max"},
+        )
 
-    def test_hotpepper_error_returns_bad_gateway(self) -> None:
+    def test_create_hotpepper_error_returns_bad_gateway(self) -> None:
         with patch(
             "app.api.routes.temporary_groups.TemporaryGroupService"
         ) as service_class:
-            service_class.return_value.search_and_save_restaurants = AsyncMock(
+            service_class.return_value.create_group_with_restaurants = AsyncMock(
                 side_effect=HotPepperAPIError
             )
-            response = self.client.post(
-                f"/temporary-groups/{self.group_id}/restaurants/search"
-            )
+            response = self.client.post("/temporary-groups", json={"location": "渋谷"})
 
         self.assertEqual(response.status_code, 502)
+
+    def test_create_hotpepper_timeout_returns_gateway_timeout(self) -> None:
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service_class.return_value.create_group_with_restaurants = AsyncMock(
+                side_effect=HotPepperAPITimeoutError
+            )
+            response = self.client.post("/temporary-groups", json={"location": "渋谷"})
+
+        self.assertEqual(response.status_code, 504)
+
+    def _group(self, restaurant: dict[str, object]) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=self.group_id,
+            code="A7K2F",
+            expires_at=datetime(2026, 7, 26, 0, 0, tzinfo=UTC),
+            created_at=datetime(2026, 7, 25, 0, 0, tzinfo=UTC),
+            creator_id="user_123",
+            participant_count=4,
+            location="渋谷",
+            budget_min=2000,
+            budget_max=3000,
+            restaurant=restaurant,
+        )
 
 
 if __name__ == "__main__":

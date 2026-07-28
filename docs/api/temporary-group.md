@@ -94,6 +94,8 @@ A7K2F
 
 backendは共有URLを返さない。共有URLはfrontendのroute設計に依存するため、backendは `id` と `code` の発行に責務を絞る。
 
+希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に別APIで店舗検索を実行しない。
+
 ### Request
 
 bodyなしでも作成可能。
@@ -111,11 +113,7 @@ bodyなしでも作成可能。
   "participant_count": 4,
   "location": "渋谷",
   "budget_min": 2000,
-  "budget_max": 3000,
-  "restaurant": {
-    "id": "restaurant_123",
-    "name": "渋谷ビストロ"
-  }
+  "budget_max": 3000
 }
 ```
 
@@ -124,9 +122,11 @@ bodyなしでも作成可能。
 1. `id` にUUID v4を発行する。
 2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から5文字の `code` を生成する。
 3. リクエストに希望条件があれば保存する。
-4. `participant_token` があれば作成者を参加者として登録する。
-5. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
-6. `code` のunique制約に衝突した場合はrollbackして再生成する。
+4. `location` が空でなければ、作成前にHot Pepper APIで店舗候補を検索する。
+5. 検索結果があれば `restaurant` に保存する。
+6. `participant_token` があれば作成者を参加者として登録する。
+7. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
+8. `code` のunique制約に衝突した場合はrollbackして再生成する。
 
 ### Response
 
@@ -138,15 +138,48 @@ bodyなしでも作成可能。
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "joined_participant_count": 1,
-  "is_full": false
+  "is_full": false,
+  "created_at": "2026-07-15T12:00:00Z",
+  "creator_id": "user_123",
+  "participant_count": 4,
+  "location": "渋谷",
+  "budget_min": 2000,
+  "budget_max": 3000,
+  "restaurant": {
+    "restaurants": [
+      {
+        "id": "J0001",
+        "name": "渋谷ビストロ",
+        "address": "東京都渋谷区",
+        "access": "渋谷駅徒歩5分",
+        "genre": "イタリアン",
+        "budget": "2001～3000円",
+        "image_url": "https://example.com/shop.jpg",
+        "shop_url": "https://example.com/shop"
+      }
+    ],
+    "searched_at": "2026-07-15T12:00:00Z"
+  }
 }
 ```
 
 ### Errors
 
+`400 Bad Request`
+
+検索条件が不正な場合。
+
 `503 Service Unavailable`
 
 コード生成が設定回数以内に成功しなかった場合。
+
+`502 Bad Gateway`
+
+Hot Pepper APIとの通信に失敗した場合。
+
+`504 Gateway Timeout`
+
+Hot Pepper APIのリクエストがタイムアウトした場合。
 
 ## GET /temporary-groups/{group_id}
 

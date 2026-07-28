@@ -6,7 +6,7 @@ TemporaryGroupに保存されている条件を利用してHotPepper APIから�
 取得した店舗情報をDBへ保存すると同時にフロントへ返却する機能を実装した。
 
 フロントは検索条件を毎回送信するのではなく、
-グループIDのみを指定して店舗検索を実行する。
+TemporaryGroup作成APIに希望条件を送信する。店舗検索専用APIは持たない。
 
 ---
 
@@ -25,8 +25,7 @@ TemporaryGroupに保存されている条件を利用してHotPepper APIから�
 
 そこで、
 
-TemporaryGroupに保存されている条件を利用して店舗検索を行い、
-取得した店舗情報をTemporaryGroupへ保存する設計へ変更した。
+TemporaryGroup作成時に店舗検索を行い、取得した店舗情報をTemporaryGroupへ保存する設計へ変更した。
 
 ---
 
@@ -49,41 +48,29 @@ POST /temporary-groups
 
 ↓
 
-② 店舗検索
-
-```
-POST /temporary-groups/{group_id}/restaurants/search
-```
-
-↓
-
-③ group_idからTemporaryGroup取得
-
-↓
-
-④ DBに保存されている
+② リクエストの
 
 - location
 - budget_min
 - budget_max
 
-を取得
+を利用
 
 ↓
 
-⑤ HotPepper API検索
+③ HotPepper API検索
 
 ↓
 
-⑥ 必要な項目のみ整形
+④ 必要な項目のみ整形
 
 ↓
 
-⑦ restaurant(JSONB)へ保存
+⑤ restaurant(JSONB)へ保存
 
 ↓
 
-⑧ 同じデータをフロントへ返却
+⑥ グループ情報と同じレスポンスでフロントへ返却
 
 ---
 
@@ -97,21 +84,7 @@ POST /temporary-groups
 
 役割
 
-TemporaryGroupを作成する。
-
----
-
-## 店舗検索
-
-```
-POST /temporary-groups/{group_id}/restaurants/search
-```
-
-役割
-
-TemporaryGroupの条件を利用して店舗検索を行う。
-
-フロントから検索条件を送信する必要はない。
+TemporaryGroupを作成し、希望場所があれば店舗候補も検索して保存する。
 
 ---
 
@@ -218,8 +191,7 @@ B002
 - 最大10件取得
 - 店舗IDで重複除外
 - searched_at保存
-- restaurant全体を上書き
-- 再検索時は追加しない
+- restaurantに検索結果を保存
 
 ---
 
@@ -227,14 +199,8 @@ B002
 
 400
 
-- location不足
 - 予算範囲不正
 - 対応外予算
-
-404
-
-- グループが存在しない
-- 有効期限切れ
 
 502
 
@@ -247,7 +213,7 @@ B002
 DB保存失敗時
 
 - rollback
-- 既存restaurantを保持
+- グループ作成を完了しない
 
 店舗0件
 
@@ -259,7 +225,7 @@ DB保存失敗時
 # 実装して確認済み
 
 - TemporaryGroup作成
-- 店舗検索
+- 作成時の店舗検索
 - HotPepper API通信
 - JSON整形
 - restaurant保存
@@ -269,7 +235,6 @@ DB保存失敗時
 - 実環境確認
 - Docker確認
 - PostgreSQL確認
-- 再検索時の上書き確認
 
 ---
 
