@@ -54,7 +54,17 @@ jobs:
 
       - name: frontend web を build
         working-directory: frontend
-        run: flutter build web --release
+        run: |
+          if [[ "$DEPLOY_ENV" == "production" ]]; then
+            FRONTEND_URL="https://gurumeet.net"
+          else
+            FRONTEND_URL="https://stg.gurumeet.net"
+          fi
+
+          flutter build web --release \
+            --dart-define=GURUMEET_ENABLE_MOCKS=false \
+            --dart-define=GURUMEET_API_BASE_URL="${FRONTEND_URL}/api" \
+            --dart-define=GURUMEET_INVITE_BASE_URL="${FRONTEND_URL}"
 
       - name: Worker の依存関係を install
         working-directory: infra/cloudflare/app-worker

@@ -4,6 +4,11 @@ import { env as workerEnv } from "cloudflare:workers";
 const INSTANCE_COUNT = 1;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
 };
 
@@ -12,6 +17,13 @@ export class BackendContainer extends Container {
   sleepAfter = "5m";
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
+    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY ?? "",
+    CORS_ALLOW_ORIGINS: runtimeEnv.CORS_ALLOW_ORIGINS ?? "",
+    PARTICIPANT_TOKEN_HASH_SECRET:
+      runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET ?? "",
+    INTERNAL_TASK_SECRET: runtimeEnv.INTERNAL_TASK_SECRET ?? "",
+    GURUMEET_ENABLE_MOCK_RESTAURANTS:
+      runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
   };
 }
@@ -21,6 +33,11 @@ interface Env {
   BACKEND_CONTAINER: DurableObjectNamespace<BackendContainer>;
   ASSETS_BUCKET: R2Bucket;
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
 }
 
@@ -42,6 +59,30 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+    if (!env.INTERNAL_TASK_SECRET) {
+      console.error("INTERNAL_TASK_SECRET is not configured.");
+      return;
+    }
+    const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
+    const response = await container.fetch(
+      new Request("http://container/internal/cleanup-expired-temporary-groups", {
+        method: "POST",
+        headers: {
+          "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
+        },
+      }),
+    );
+    if (!response.ok) {
+      console.error(
+        JSON.stringify({
+          event: "cleanup_expired_temporary_groups_failed",
+          status: response.status,
+        }),
+      );
+    }
   },
 };
 

@@ -40,23 +40,30 @@ install:
 whoami:
 	cd $(APP_WORKER_DIR) && npx wrangler whoami
 
-.PHONY: build-frontend
-build-frontend:
-	cd $(FRONTEND_DIR) && flutter build web
+.PHONY: build-frontend-staging
+build-frontend-staging:
+	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=GURUMEET_ENABLE_MOCKS=false \
+		--dart-define=GURUMEET_API_BASE_URL=https://stg.gurumeet.net/api \
+		--dart-define=GURUMEET_INVITE_BASE_URL=https://stg.gurumeet.net
+
+.PHONY: build-frontend-production
+build-frontend-production:
+	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=GURUMEET_ENABLE_MOCKS=false \
+		--dart-define=GURUMEET_API_BASE_URL=https://gurumeet.net/api \
+		--dart-define=GURUMEET_INVITE_BASE_URL=https://gurumeet.net
 
 .PHONY: check
 check:
 	cd $(APP_WORKER_DIR) && npm run check
 
-.PHONY: predeploy
-predeploy: build-frontend check
-
 .PHONY: deploy-staging
-deploy-staging: predeploy
+deploy-staging: build-frontend-staging check
 	cd $(APP_WORKER_DIR) && npm run deploy:staging
 
 .PHONY: deploy-production
-deploy-production: predeploy
+deploy-production: build-frontend-production check
 	cd $(APP_WORKER_DIR) && npm run deploy:production
 
 .PHONY: dev-staging
@@ -70,10 +77,16 @@ r2-list:
 .PHONY: secret-staging
 secret-staging:
 	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env staging
+	cd $(APP_WORKER_DIR) && npx wrangler secret put HOTPEPPER_API_KEY --env staging
+	cd $(APP_WORKER_DIR) && npx wrangler secret put PARTICIPANT_TOKEN_HASH_SECRET --env staging
+	cd $(APP_WORKER_DIR) && npx wrangler secret put INTERNAL_TASK_SECRET --env staging
 
 .PHONY: secret-production
 secret-production:
 	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env production
+	cd $(APP_WORKER_DIR) && npx wrangler secret put HOTPEPPER_API_KEY --env production
+	cd $(APP_WORKER_DIR) && npx wrangler secret put PARTICIPANT_TOKEN_HASH_SECRET --env production
+	cd $(APP_WORKER_DIR) && npx wrangler secret put INTERNAL_TASK_SECRET --env production
 
 .PHONY: tail-staging
 tail-staging:

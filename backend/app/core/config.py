@@ -1,3 +1,5 @@
+import json
+
 from pydantic import Field, SecretStr
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,11 +30,24 @@ class Settings(BaseSettings):
     participant_token_hash_secret: str = (
         "gurumeet-dev-participant-token-secret"
     )
+    internal_task_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias="INTERNAL_TASK_SECRET",
+    )
+    request_body_max_bytes: int = 1024 * 1024
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
     def parse_cors_allow_origins(cls, value: object) -> object:
         if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return parsed
             return [
                 origin.strip()
                 for origin in value.split(",")
@@ -44,6 +59,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
 

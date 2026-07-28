@@ -307,7 +307,37 @@ Secret value: Cloudflare account ID
 <Cloudflare account ID>
 ```
 
-`DATABASE_URL` は GitHub Secrets ではなく Cloudflare Wrangler secret に登録する。
+アプリ用の実行時 secret は GitHub Secrets ではなく Cloudflare Wrangler secret に登録する。
+
+staging / production それぞれで必要:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は以下のような長いランダム値を使う。
+
+```sh
+openssl rand -hex 32
+```
+
+登録コマンド:
+
+```sh
+cd infra/cloudflare
+make secret-staging
+make secret-production
+```
+
+公開時のCORSは `wrangler.jsonc` の環境別 `CORS_ALLOW_ORIGINS` で制限する。
+
+```text
+staging:    https://stg.gurumeet.net
+production: https://gurumeet.net
+```
 
 ## Cloudflare Access
 
@@ -516,4 +546,18 @@ Neon も usage を確認する。
 Compute hours
 Storage
 Branch
+```
+
+## 自動削除とバックアップ
+
+一時グループの期限切れデータは Cloudflare Cron Trigger から毎時1回、
+Backend Container の `/internal/cleanup-expired-temporary-groups` を呼んで削除する。
+
+Neon PostgreSQL のバックアップ / PITR は Neon Dashboard 側で有効化・確認する。
+本番公開前に最低限以下を確認する。
+
+```text
+staging branch と production branch が分離されている
+production branch のバックアップ / restore 手順を確認済み
+復元テスト用 branch を作成して restore できる
 ```
