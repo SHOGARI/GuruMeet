@@ -265,7 +265,14 @@ class ApiRoomRepository implements RoomRepository {
 
   @override
   Future<void> startVoting(GroupCreationDraft draft) async {
-    // The backend currently has no voting-session endpoint.
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.startVoting(draft);
+    }
+    await _apiClient.postJson(
+      '/temporary-groups/$roomId/voting/start',
+      body: {'participant_token': _participantToken},
+    );
   }
 
   @override
@@ -294,12 +301,39 @@ class ApiRoomRepository implements RoomRepository {
     required GroupCreationDraft draft,
     required VoteChoice choice,
   }) async {
-    await _fallback.submitVote(draft: draft, choice: choice);
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.submitVote(draft: draft, choice: choice);
+    }
+    await _apiClient.postJson(
+      '/temporary-groups/$roomId/votes',
+      body: {
+        'participant_token': _participantToken,
+        'restaurant_id': choice.restaurantId,
+        'liked': choice.liked,
+      },
+    );
   }
 
   @override
   Future<VotingStatus> getVotingStatus(GroupCreationDraft draft) async {
-    return _fallback.getVotingStatus(draft);
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.getVotingStatus(draft);
+    }
+    final json = await _apiClient.getJson(
+      '/temporary-groups/$roomId/voting/progress',
+    );
+    final joinedCount =
+        json['joined_participant_count'] as int? ?? draft.peopleCount;
+    final completedCount = json['completed_participant_count'] as int? ?? 0;
+    return VotingStatus(
+      members: _membersFromCount(
+        joinedCount: joinedCount,
+        peopleCount: draft.peopleCount,
+        completedVotingCount: completedCount,
+      ),
+    );
   }
 
   @override
@@ -308,10 +342,41 @@ class ApiRoomRepository implements RoomRepository {
     required List<RestaurantPreview> restaurants,
     required List<VoteChoice> localChoices,
   }) async {
-    return _buildResult(
-      draft: draft,
-      restaurants: restaurants,
-      localChoices: localChoices,
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _buildResult(
+        draft: draft,
+        restaurants: restaurants,
+        localChoices: localChoices,
+      );
+    }
+    final json = await _apiClient.getJson(
+      '/temporary-groups/$roomId/voting/result',
+    );
+    final resultItems = json['results'];
+    if (resultItems is! List) {
+      throw const ApiException('投票結果のレスポンス形式が不正です');
+    }
+    final voteResults = resultItems.whereType<Map<String, dynamic>>().map((
+      item,
+    ) {
+      final restaurantJson = item['restaurant'];
+      if (restaurantJson is! Map<String, dynamic>) {
+        throw const ApiException('投票結果の店舗形式が不正です');
+      }
+      return RestaurantVoteResult(
+        restaurant: _restaurantFromJson(restaurantJson),
+        likeCount: item['like_count'] as int? ?? 0,
+        rejectCount: item['reject_count'] as int? ?? 0,
+      );
+    }).toList();
+    final winner = voteResults.isEmpty
+        ? (restaurants.isEmpty ? mockRestaurants.first : restaurants.first)
+        : voteResults.first.restaurant;
+    return RestaurantMatchResult(
+      restaurant: winner,
+      results: voteResults,
+      peopleCount: draft.peopleCount,
     );
   }
 

@@ -9,8 +9,17 @@ from app.core.config import settings
 from app.models.anonymous_user import AnonymousUser
 from app.models.temporary_group import TemporaryGroup
 from app.models.temporary_group_participant import TemporaryGroupParticipant
+from app.models.temporary_group_vote import TemporaryGroupVote
 from app.repositories.temporary_group_repository import TemporaryGroupRepository
-from app.schemas.temporary_group import TemporaryGroupCreate
+from app.schemas.temporary_group import (
+    TemporaryGroupCreate,
+    TemporaryGroupRestaurant,
+    TemporaryGroupRestaurantResult,
+    TemporaryGroupVoteSubmitResponse,
+    TemporaryGroupVotingProgress,
+    TemporaryGroupVotingResult,
+    TemporaryGroupParticipantVotingProgress,
+)
 from app.services.code_generator import generate_temporary_group_code
 from app.services.hotpepper_service import (
     HotPepperBudgetRangeError,
@@ -31,6 +40,22 @@ class TemporaryGroupNotFoundError(RuntimeError):
 
 
 class TemporaryGroupSearchCriteriaError(ValueError):
+    pass
+
+
+class TemporaryGroupVotingCandidatesError(ValueError):
+    pass
+
+
+class TemporaryGroupVotingNotStartedError(RuntimeError):
+    pass
+
+
+class TemporaryGroupParticipantNotFoundError(RuntimeError):
+    pass
+
+
+class TemporaryGroupRestaurantNotFoundError(ValueError):
     pass
 
 
@@ -153,6 +178,179 @@ class TemporaryGroupService:
 
         return search_result
 
+    def start_voting(
+        self,
+        group_id: UUID,
+        participant_token: str,
+    ) -> TemporaryGroupVotingProgress:
+        group = self.repository.get_active_by_id_for_update(group_id, self._now())
+        if group is None:
+            raise TemporaryGroupNotFoundError
+
+        self._require_participant(group.id, participant_token)
+        self._candidate_restaurants(group)
+        self.repository.start_voting(group, self._now())
+        self.db.commit()
+        self.db.refresh(group)
+        return self.get_voting_progress(group.id)
+
+    def submit_vote(
+        self,
+        group_id: UUID,
+        participant_token: str,
+        restaurant_id: str,
+        liked: bool,
+    ) -> TemporaryGroupVoteSubmitResponse:
+        group = self.repository.get_active_by_id_for_update(group_id, self._now())
+        if group is None:
+            raise TemporaryGroupNotFoundError
+        if group.voting_started_at is None:
+            raise TemporaryGroupVotingNotStartedError
+
+        participant = self._require_participant(group.id, participant_token)
+        restaurants = self._candidate_restaurants(group)
+        if restaurant_id not in {restaurant.id for restaurant in restaurants}:
+            raise TemporaryGroupRestaurantNotFoundError
+
+        vote = self.repository.get_vote(
+            group.id,
+            participant.anonymous_user_id,
+            restaurant_id,
+        )
+        if vote is None:
+            self.repository.add_vote(
+                TemporaryGroupVote(
+                    temporary_group_id=group.id,
+                    anonymous_user_id=participant.anonymous_user_id,
+                    restaurant_id=restaurant_id,
+                    liked=liked,
+                )
+            )
+        else:
+            vote.liked = liked
+            self.db.flush()
+
+        self.db.commit()
+        return TemporaryGroupVoteSubmitResponse(
+            restaurant_id=restaurant_id,
+            liked=liked,
+            progress=self.get_voting_progress(group.id),
+        )
+
+    def get_voting_progress(self, group_id: UUID) -> TemporaryGroupVotingProgress:
+        group = self.get_active_by_id(group_id)
+        if group is None:
+            raise TemporaryGroupNotFoundError
+
+        candidate_count = len(self._candidate_restaurants(group))
+        participants = self.repository.list_participants(group.id)
+        votes = self.repository.list_votes(group.id)
+        completed_vote_counts = {
+            participant.anonymous_user_id: 0 for participant in participants
+        }
+        for vote in votes:
+            if vote.anonymous_user_id in completed_vote_counts:
+                completed_vote_counts[vote.anonymous_user_id] += 1
+
+        participant_progress = [
+            TemporaryGroupParticipantVotingProgress(
+                anonymous_user_id=participant.anonymous_user_id,
+                completed_vote_count=min(
+                    completed_vote_counts[participant.anonymous_user_id],
+                    candidate_count,
+                ),
+                is_complete=(
+                    candidate_count > 0
+                    and completed_vote_counts[participant.anonymous_user_id]
+                    >= candidate_count
+                ),
+            )
+            for participant in participants
+        ]
+        completed_participant_count = sum(
+            1 for participant in participant_progress if participant.is_complete
+        )
+        joined_participant_count = len(participants)
+
+        return TemporaryGroupVotingProgress(
+            voting_started_at=group.voting_started_at,
+            candidate_count=candidate_count,
+            participant_count=group.participant_count,
+            joined_participant_count=joined_participant_count,
+            completed_participant_count=completed_participant_count,
+            is_complete=(
+                joined_participant_count > 0
+                and completed_participant_count == joined_participant_count
+            ),
+            participants=participant_progress,
+        )
+
+    def get_voting_result(self, group_id: UUID) -> TemporaryGroupVotingResult:
+        group = self.get_active_by_id(group_id)
+        if group is None:
+            raise TemporaryGroupNotFoundError
+        if group.voting_started_at is None:
+            raise TemporaryGroupVotingNotStartedError
+
+        restaurants = self._candidate_restaurants(group)
+        progress = self.get_voting_progress(group.id)
+        votes = self.repository.list_votes(group.id)
+        votes_by_restaurant = {
+            restaurant.id: {"like": 0, "reject": 0} for restaurant in restaurants
+        }
+        for vote in votes:
+            counts = votes_by_restaurant.get(vote.restaurant_id)
+            if counts is None:
+                continue
+            counts["like" if vote.liked else "reject"] += 1
+
+        sorted_restaurants = sorted(
+            restaurants,
+            key=lambda restaurant: (
+                -votes_by_restaurant[restaurant.id]["like"],
+                votes_by_restaurant[restaurant.id]["reject"],
+                restaurants.index(restaurant),
+            ),
+        )
+
+        results: list[TemporaryGroupRestaurantResult] = []
+        previous_like_count = -1
+        current_rank = 0
+        for index, restaurant in enumerate(sorted_restaurants):
+            counts = votes_by_restaurant[restaurant.id]
+            like_count = counts["like"]
+            reject_count = counts["reject"]
+            vote_count = like_count + reject_count
+            if like_count != previous_like_count:
+                current_rank = index + 1
+                previous_like_count = like_count
+            results.append(
+                TemporaryGroupRestaurantResult(
+                    restaurant=restaurant,
+                    like_count=like_count,
+                    reject_count=reject_count,
+                    vote_count=vote_count,
+                    rank=current_rank,
+                    like_rate=0 if vote_count == 0 else like_count / vote_count,
+                )
+            )
+
+        top_like_count = results[0].like_count if results else 0
+        top_result_count = sum(
+            1 for result in results if result.like_count == top_like_count
+        )
+
+        return TemporaryGroupVotingResult(
+            voting_started_at=group.voting_started_at,
+            candidate_count=progress.candidate_count,
+            joined_participant_count=progress.joined_participant_count,
+            completed_participant_count=progress.completed_participant_count,
+            is_complete=progress.is_complete,
+            has_tie=top_result_count > 1,
+            top_like_count=top_like_count,
+            results=results,
+        )
+
     def _join_group(
         self,
         group: TemporaryGroup,
@@ -216,6 +414,44 @@ class TemporaryGroupService:
             f"{settings.participant_token_hash_secret}:{participant_token}"
         ).encode("utf-8")
         return sha256(payload).hexdigest()
+
+    def _require_participant(
+        self,
+        group_id: UUID,
+        participant_token: str,
+    ) -> TemporaryGroupParticipant:
+        user = self.repository.get_anonymous_user_by_token_hash(
+            self._hash_participant_token(participant_token)
+        )
+        if user is None:
+            raise TemporaryGroupParticipantNotFoundError
+
+        participant = self.repository.get_participant(group_id, user.id)
+        if participant is None:
+            raise TemporaryGroupParticipantNotFoundError
+
+        now = self._now()
+        user.last_seen_at = now
+        participant.last_seen_at = now
+        self.db.flush()
+        return participant
+
+    def _candidate_restaurants(
+        self,
+        group: TemporaryGroup,
+    ) -> list[TemporaryGroupRestaurant]:
+        restaurant_payload = group.restaurant
+        if not isinstance(restaurant_payload, dict):
+            raise TemporaryGroupVotingCandidatesError("restaurant candidates are required")
+
+        restaurants_payload = restaurant_payload.get("restaurants")
+        if not isinstance(restaurants_payload, list) or not restaurants_payload:
+            raise TemporaryGroupVotingCandidatesError("restaurant candidates are required")
+
+        return [
+            TemporaryGroupRestaurant.model_validate(restaurant)
+            for restaurant in restaurants_payload
+        ]
 
     @staticmethod
     def _now() -> datetime:

@@ -106,3 +106,67 @@ class TemporaryGroupRestaurant(BaseModel):
 class TemporaryGroupRestaurantSearchResult(BaseModel):
     restaurants: list[TemporaryGroupRestaurant]
     searched_at: datetime
+
+
+class TemporaryGroupVotingStartRequest(BaseModel):
+    participant_token: str = Field(
+        min_length=16,
+        max_length=256,
+        description="投票開始を行う参加者の匿名参加者トークン。",
+    )
+
+
+class TemporaryGroupVoteSubmitRequest(BaseModel):
+    participant_token: str = Field(
+        min_length=16,
+        max_length=256,
+        description="投票する参加者の匿名参加者トークン。",
+    )
+    restaurant_id: str = Field(
+        min_length=1,
+        max_length=128,
+        description="店舗候補ID。",
+    )
+    liked: bool = Field(description="食べたい場合はtrue、見送りの場合はfalse。")
+
+
+class TemporaryGroupParticipantVotingProgress(BaseModel):
+    anonymous_user_id: UUID
+    completed_vote_count: int
+    is_complete: bool
+
+
+class TemporaryGroupVotingProgress(BaseModel):
+    voting_started_at: datetime | None
+    candidate_count: int
+    participant_count: int | None
+    joined_participant_count: int
+    completed_participant_count: int
+    is_complete: bool
+    participants: list[TemporaryGroupParticipantVotingProgress]
+
+
+class TemporaryGroupVoteSubmitResponse(BaseModel):
+    restaurant_id: str
+    liked: bool
+    progress: TemporaryGroupVotingProgress
+
+
+class TemporaryGroupRestaurantResult(BaseModel):
+    restaurant: TemporaryGroupRestaurant
+    like_count: int
+    reject_count: int
+    vote_count: int
+    rank: int
+    like_rate: float
+
+
+class TemporaryGroupVotingResult(BaseModel):
+    voting_started_at: datetime | None
+    candidate_count: int
+    joined_participant_count: int
+    completed_participant_count: int
+    is_complete: bool
+    has_tie: bool
+    top_like_count: int
+    results: list[TemporaryGroupRestaurantResult]
