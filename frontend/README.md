@@ -57,6 +57,19 @@ make dev-chrome
 FRONTEND_PORT=3000
 ```
 
+実APIへ接続する場合は、Flutter起動またはbuild時に以下を渡します。
+
+```sh
+flutter run -d chrome \
+  --dart-define=GURUMEET_ENABLE_MOCKS=false \
+  --dart-define=GURUMEET_API_BASE_URL=http://localhost:8000 \
+  --dart-define=GURUMEET_INVITE_BASE_URL=http://localhost:3000
+```
+
+本番デプロイ時は `GURUMEET_API_BASE_URL` を公開APIのURL、
+`GURUMEET_INVITE_BASE_URL` を公開フロントエンドURLにしてください。
+招待URLとQRコードは `GURUMEET_INVITE_BASE_URL/#/join/{roomId}` 形式で生成されます。
+
 `make dev` は内部で以下を実行します。
 
 ```sh
@@ -94,28 +107,7 @@ flutter test
 - 各画面のルーティング
 - フロントエンド上の入力バリデーション
 
-モック実装
+モック切り替え
 
-現在はバックエンド未接続のため、以下はモックです。
-
-- 招待URL
-- 飲食店データ
-- 参加メンバー
-- グループ作成処理
-- 店舗のマッチ判定
-- 共有ボタンの一部挙動
-
-仮の招待URL：
-
-https://gurumeet.app/join/demo-group
-
-今後の接続予定
-
-- グループ作成API
-- 招待URL発行
-- URLからのグループ参加
-- 待機ルームのリアルタイム同期
-- ホットペッパーグルメAPIからの店舗取得
-- 投票結果の送信
-- マッチ結果の取得
-- Google Maps連携
+`GURUMEET_ENABLE_MOCKS=true` の場合はUI確認用のモックデータを使います。
+公開環境では必ず `false` にしてください。

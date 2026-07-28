@@ -39,6 +39,7 @@ dependencies:
   http: ^1.2.2
   url_launcher: ^6.3.2
   qr_flutter: ^4.1.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

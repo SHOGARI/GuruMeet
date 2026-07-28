@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/api_config.dart';
 import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
@@ -210,7 +212,7 @@ class ApiRoomRepository implements RoomRepository {
 
   final ApiClient _apiClient;
   final RoomRepository _fallback;
-  final String _participantToken = _newParticipantToken();
+  Future<String>? _participantTokenFuture;
 
   @override
   Future<GroupCreationDraft> createRoom({
@@ -218,10 +220,11 @@ class ApiRoomRepository implements RoomRepository {
     required String area,
     required BudgetOption budget,
   }) async {
+    final participantToken = await _participantToken();
     final json = await _apiClient.postJson(
       '/temporary-groups',
       body: {
-        'participant_token': _participantToken,
+        'participant_token': participantToken,
         'participant_count': peopleCount,
         'location': area,
         'budget_min': budget.minAmount,
@@ -241,16 +244,17 @@ class ApiRoomRepository implements RoomRepository {
   @override
   Future<GroupCreationDraft> joinRoom({required String code}) async {
     final inviteToken = code.trim();
+    final participantToken = await _participantToken();
     final json = _isUuid(inviteToken)
         ? await _apiClient.postJson(
             '/temporary-groups/$inviteToken/participants',
-            body: {'participant_token': _participantToken},
+            body: {'participant_token': participantToken},
           )
         : await _apiClient.postJson(
             '/temporary-groups/join',
             body: {
               'code': inviteToken.toUpperCase(),
-              'participant_token': _participantToken,
+              'participant_token': participantToken,
             },
           );
     final roomId = json['id'] as String;
@@ -296,9 +300,10 @@ class ApiRoomRepository implements RoomRepository {
     if (roomId == null) {
       return _fallback.startVoting(draft);
     }
+    final participantToken = await _participantToken();
     await _apiClient.postJson(
       '/temporary-groups/$roomId/voting/start',
-      body: {'participant_token': _participantToken},
+      body: {'participant_token': participantToken},
     );
   }
 
@@ -347,10 +352,11 @@ class ApiRoomRepository implements RoomRepository {
     if (roomId == null) {
       return _fallback.submitVote(draft: draft, choice: choice);
     }
+    final participantToken = await _participantToken();
     await _apiClient.postJson(
       '/temporary-groups/$roomId/votes',
       body: {
-        'participant_token': _participantToken,
+        'participant_token': participantToken,
         'restaurant_id': choice.restaurantId,
         'liked': choice.liked,
       },
@@ -453,6 +459,23 @@ class ApiRoomRepository implements RoomRepository {
         hasCompletedVoting: index < completedVotingCount,
       );
     });
+  }
+
+  Future<String> _participantToken() {
+    return _participantTokenFuture ??= _loadOrCreateParticipantToken();
+  }
+
+  Future<String> _loadOrCreateParticipantToken() async {
+    const storageKey = 'gurumeet_participant_token';
+    final preferences = await SharedPreferences.getInstance();
+    final storedToken = preferences.getString(storageKey);
+    if (storedToken != null && storedToken.length >= 16) {
+      return storedToken;
+    }
+
+    final token = _newParticipantToken();
+    await preferences.setString(storageKey, token);
+    return token;
   }
 
   static String _newParticipantToken() {
