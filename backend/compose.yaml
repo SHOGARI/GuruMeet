@@ -5,7 +5,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: gurumeet-backend-api
     ports:
-      - "${API_PORT}:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - .:/app
     environment:
@@ -19,6 +19,9 @@ services:
       TEMPORARY_GROUP_CODE_MAX_ATTEMPTS: ${TEMPORARY_GROUP_CODE_MAX_ATTEMPTS:-20}
       JOIN_RATE_LIMIT_REQUESTS: ${JOIN_RATE_LIMIT_REQUESTS:-10}
       JOIN_RATE_LIMIT_WINDOW_SECONDS: ${JOIN_RATE_LIMIT_WINDOW_SECONDS:-60}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8080","http://127.0.0.1:8080"]}
+      GURUMEET_ENABLE_MOCK_RESTAURANTS: ${GURUMEET_ENABLE_MOCK_RESTAURANTS:-false}
+      PARTICIPANT_TOKEN_HASH_SECRET: ${PARTICIPANT_TOKEN_HASH_SECRET:-change_me_to_a_long_random_value}
     depends_on:
       db:
         condition: service_healthy
