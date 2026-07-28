@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "GuruMeet Backend"
-    hotpepper_api_key: SecretStr = Field(
+    hotpepper_api_key: SecretStr | None = Field(
+        default=None,
         validation_alias="HOTPEPPER_API_KEY",
-        min_length=1,
     )
     temporary_group_ttl_minutes: int = 1440
     temporary_group_code_max_attempts: int = 20

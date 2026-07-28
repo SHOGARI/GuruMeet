@@ -61,13 +61,17 @@ class HotPepperAPITimeoutError(HotPepperAPIError):
     """Raised when the Hot Pepper API request exceeds the timeout."""
 
 
+class HotPepperConfigurationError(HotPepperAPIError):
+    """Raised when the Hot Pepper API key is not configured."""
+
+
 class HotPepperBudgetRangeError(ValueError):
     """Raised when a requested budget does not overlap a supported range."""
 
 
 async def test_hotpepper_connection() -> dict[str, bool | int]:
     params = {
-        "key": settings.hotpepper_api_key.get_secret_value(),
+        "key": _get_hotpepper_api_key(),
         "lat": 35.6812,
         "lng": 139.7671,
         "range": 3,
@@ -217,7 +221,7 @@ async def _fetch_hotpepper_shops(
     search_params: dict[str, object],
 ) -> list[dict[str, object]]:
     params = {
-        "key": settings.hotpepper_api_key.get_secret_value(),
+        "key": _get_hotpepper_api_key(),
         **search_params,
         "format": "json",
     }
@@ -250,6 +254,22 @@ async def _fetch_hotpepper_shops(
         raise HotPepperAPIError
 
     return [shop for shop in shops if isinstance(shop, dict)]
+
+
+def _get_hotpepper_api_key() -> str:
+    api_key = settings.hotpepper_api_key
+    if api_key is None:
+        raise HotPepperConfigurationError(
+            "HOTPEPPER_API_KEY is not configured"
+        )
+
+    secret_value = api_key.get_secret_value()
+    if not secret_value.strip():
+        raise HotPepperConfigurationError(
+            "HOTPEPPER_API_KEY is not configured"
+        )
+
+    return secret_value
 
 
 def _build_search_response(
