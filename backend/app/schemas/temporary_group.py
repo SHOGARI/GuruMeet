@@ -81,6 +81,10 @@ class TemporaryGroupResponse(BaseModel):
 
 class TemporaryGroupDetail(TemporaryGroupResponse):
     created_at: datetime = Field(description="一時グループが作成された時刻。")
+    voting_started_at: datetime | None = Field(
+        default=None,
+        description="投票開始時刻。未開始の場合はnull。",
+    )
     creator_id: str | None = Field(default=None, description="任意の作成者ID。")
     participant_count: int | None = Field(default=None, description="参加人数。")
     location: str | None = Field(default=None, description="希望場所。")

@@ -128,12 +128,14 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertEqual(progress.joined_participant_count, 1)
         self.assertFalse(progress.is_complete)
 
-    def test_start_voting_requires_restaurant_candidates(self) -> None:
+    def test_start_voting_allows_missing_restaurant_candidates(self) -> None:
         group = make_group(restaurant={"restaurants": []})
         service, _ = self.make_service(group)
 
-        with self.assertRaises(TemporaryGroupVotingCandidatesError):
-            service.start_voting(group.id, TOKEN)
+        progress = service.start_voting(group.id, TOKEN)
+
+        self.assertEqual(progress.candidate_count, 0)
+        self.assertIsNotNone(group.voting_started_at)
 
     def test_submit_vote_requires_started_voting(self) -> None:
         group = make_group()

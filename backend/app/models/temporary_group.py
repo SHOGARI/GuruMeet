@@ -3,7 +3,7 @@ from datetime import datetime
 
 from typing import Any
 
-from sqlalchemy import CHAR, DateTime, Integer, String
+from sqlalchemy import CHAR, DateTime, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -25,7 +25,10 @@ class TemporaryGroup(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    restaurant: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    restaurant: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
     voting_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

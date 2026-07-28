@@ -28,9 +28,10 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   Timer? _joinTimer;
   bool _isNavigating = false;
   bool _isLoadingMembers = true;
+  bool _isVotingStarted = false;
   String? _memberLoadError;
 
-  bool get _isHost => _members.any((member) => member.isHost);
+  bool get _isHost => widget.draft.isHost;
   bool get _isRoomReady =>
       _members.length == widget.draft.peopleCount &&
       _members.every((member) => member.isReady);
@@ -62,15 +63,19 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     }
     try {
       final members = await _roomRepository.getMembers(widget.draft);
+      final votingStarted = _isHost
+          ? _isVotingStarted
+          : await _roomRepository.isVotingStarted(widget.draft);
       if (!mounted) {
         return;
       }
       setState(() {
         _members = members;
+        _isVotingStarted = votingStarted;
         _isLoadingMembers = false;
         _memberLoadError = null;
       });
-      if (_isRoomReady) {
+      if ((_isHost && _isRoomReady) || (!_isHost && votingStarted)) {
         _joinTimer?.cancel();
       }
     } catch (_) {
@@ -108,6 +113,19 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       if (mounted) {
         setState(() => _isNavigating = false);
       }
+    }
+  }
+
+  Future<void> _enterSwipe() async {
+    if (_isNavigating || !_isVotingStarted) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(
+      context,
+    ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+    if (mounted) {
+      setState(() => _isNavigating = false);
     }
   }
 
@@ -184,6 +202,15 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                       onPressed: _isNavigating || !_isRoomReady
                           ? null
                           : _startSwipe,
+                    ),
+                  ] else ...[
+                    _ParticipantVotingHint(isVotingStarted: _isVotingStarted),
+                    const SizedBox(height: AppSpacing.regular),
+                    PrimaryActionButton(
+                      label: '投票画面へ進む',
+                      onPressed: _isNavigating || !_isVotingStarted
+                          ? null
+                          : _enterSwipe,
                     ),
                   ],
                 ],
@@ -681,6 +708,31 @@ class _StartHint extends StatelessWidget {
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall?.copyWith(
           color: isReady ? colors.primary : colors.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantVotingHint extends StatelessWidget {
+  const _ParticipantVotingHint({required this.isVotingStarted});
+
+  final bool isVotingStarted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return AnimatedSwitcher(
+      duration: AppMotion.medium,
+      child: Text(
+        isVotingStarted ? '投票が始まりました。' : 'ホストが投票を開始するまで待っています',
+        key: ValueKey(isVotingStarted),
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: isVotingStarted ? colors.primary : colors.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
       ),

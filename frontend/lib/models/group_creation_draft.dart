@@ -6,6 +6,7 @@ class GroupCreationDraft {
     required this.area,
     required this.budget,
     required this.groupId,
+    required this.isHost,
     this.roomId,
   });
 
@@ -20,6 +21,7 @@ class GroupCreationDraft {
         area: area,
         budget: budget,
         groupId: DemoConfig.roomCode,
+        isHost: true,
         roomId: null,
       );
     }
@@ -39,6 +41,7 @@ class GroupCreationDraft {
       area: area,
       budget: budget,
       groupId: groupCode,
+      isHost: true,
       roomId: null,
     );
   }
@@ -49,6 +52,7 @@ class GroupCreationDraft {
       area: '新宿',
       budget: BudgetOption.from2000To3000,
       groupId: groupId.toUpperCase(),
+      isHost: false,
       roomId: null,
     );
   }
@@ -59,12 +63,14 @@ class GroupCreationDraft {
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    required bool isHost,
   }) {
     return GroupCreationDraft(
       peopleCount: peopleCount,
       area: area,
       budget: budget,
       groupId: groupId.toUpperCase(),
+      isHost: isHost,
       roomId: roomId,
     );
   }
@@ -73,6 +79,7 @@ class GroupCreationDraft {
   final String area;
   final BudgetOption budget;
   final String groupId;
+  final bool isHost;
   final String? roomId;
 
   String get inviteUrl => 'https://gurumeet.app/join/${roomId ?? groupId}';

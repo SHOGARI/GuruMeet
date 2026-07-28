@@ -400,6 +400,7 @@ def _to_detail(
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
         created_at=group.created_at,
+        voting_started_at=group.voting_started_at,
         creator_id=group.creator_id,
         participant_count=group.participant_count,
         location=group.location,

@@ -29,7 +29,6 @@ class _SwipePageState extends State<SwipePage> {
   int _currentIndex = 0;
   final List<VoteChoice> _localChoices = [];
   _SwipeChoice? _lastChoice;
-  RestaurantMatchResult? _matchResult;
   List<RestaurantPreview> _restaurants = const [];
   List<RoomMember> _votingMembers = const [];
   int _restoredPhotoIndex = 0;
@@ -127,18 +126,12 @@ class _SwipePageState extends State<SwipePage> {
     _localChoices.add(voteChoice);
 
     if (_currentIndex == _restaurants.length - 1) {
-      final matchResult = await _roomRepository.getResult(
-        draft: widget.draft,
-        restaurants: _restaurants,
-        localChoices: _localChoices,
-      );
       final votingStatus = await _roomRepository.getVotingStatus(widget.draft);
       if (!mounted) {
         return;
       }
       setState(() {
         _lastChoice = choice;
-        _matchResult = matchResult;
         _votingMembers = votingStatus.members;
         _restoredPhotoIndex = 0;
         _isComplete = true;
@@ -166,7 +159,6 @@ class _SwipePageState extends State<SwipePage> {
     setState(() {
       _currentIndex = choice.restaurantIndex;
       _lastChoice = null;
-      _matchResult = null;
       _votingMembers = const [];
       _restoredPhotoIndex = choice.photoIndex;
       _isComplete = false;
@@ -184,20 +176,34 @@ class _SwipePageState extends State<SwipePage> {
     }
   }
 
-  void _openResult() {
-    final matchResult = _matchResult;
-    if (_isOpeningResult ||
-        !_isComplete ||
-        !_isAllVotingComplete ||
-        matchResult == null) {
+  Future<void> _openResult() async {
+    if (_isOpeningResult || !_isComplete || !_isAllVotingComplete) {
       return;
     }
     setState(() => _isOpeningResult = true);
     _completionTimer?.cancel();
-    Navigator.of(context).pushReplacementNamed(
-      MatchPage.routeName,
-      arguments: (draft: widget.draft, result: matchResult),
-    );
+    try {
+      final latestResult = await _roomRepository.getResult(
+        draft: widget.draft,
+        restaurants: _restaurants,
+        localChoices: _localChoices,
+      );
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pushReplacementNamed(
+        MatchPage.routeName,
+        arguments: (draft: widget.draft, result: latestResult),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isOpeningResult = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('結果を取得できませんでした')));
+    }
   }
 
   void _startCompletionSimulation() {
@@ -353,7 +359,7 @@ class _SwipePageState extends State<SwipePage> {
                         members: _votingMembers,
                         onOpenResult: _isOpeningResult || !_isAllVotingComplete
                             ? null
-                            : _openResult,
+                            : () => unawaited(_openResult()),
                       )
                     : _SwipeCard(
                         key: ValueKey(_currentRestaurant.id),

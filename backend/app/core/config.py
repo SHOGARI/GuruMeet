@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     temporary_group_code_max_attempts: int = 20
     join_rate_limit_requests: int = 10
     join_rate_limit_window_seconds: int = 60
+    enable_mock_restaurants: bool = Field(
+        default=False,
+        validation_alias="GURUMEET_ENABLE_MOCK_RESTAURANTS",
+    )
     cors_allow_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",

@@ -157,12 +157,15 @@ class TemporaryGroupService:
             )
 
         try:
-            search_result = await search_restaurants_for_group(
-                location=location,
-                budget_min=group.budget_min,
-                budget_max=group.budget_max,
-                participant_count=group.participant_count,
-            )
+            if settings.enable_mock_restaurants:
+                search_result = self._mock_restaurant_search_result(location)
+            else:
+                search_result = await search_restaurants_for_group(
+                    location=location,
+                    budget_min=group.budget_min,
+                    budget_max=group.budget_max,
+                    participant_count=group.participant_count,
+                )
         except HotPepperBudgetRangeError as exc:
             raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
 
@@ -188,7 +191,6 @@ class TemporaryGroupService:
             raise TemporaryGroupNotFoundError
 
         self._require_participant(group.id, participant_token)
-        self._candidate_restaurants(group)
         self.repository.start_voting(group, self._now())
         self.db.commit()
         self.db.refresh(group)
@@ -242,7 +244,7 @@ class TemporaryGroupService:
         if group is None:
             raise TemporaryGroupNotFoundError
 
-        candidate_count = len(self._candidate_restaurants(group))
+        candidate_count = len(self._candidate_restaurants(group, required=False))
         participants = self.repository.list_participants(group.id)
         votes = self.repository.list_votes(group.id)
         completed_vote_counts = {
@@ -439,19 +441,73 @@ class TemporaryGroupService:
     def _candidate_restaurants(
         self,
         group: TemporaryGroup,
+        *,
+        required: bool = True,
     ) -> list[TemporaryGroupRestaurant]:
         restaurant_payload = group.restaurant
         if not isinstance(restaurant_payload, dict):
+            if not required:
+                return []
             raise TemporaryGroupVotingCandidatesError("restaurant candidates are required")
 
         restaurants_payload = restaurant_payload.get("restaurants")
         if not isinstance(restaurants_payload, list) or not restaurants_payload:
+            if not required:
+                return []
             raise TemporaryGroupVotingCandidatesError("restaurant candidates are required")
 
         return [
             TemporaryGroupRestaurant.model_validate(restaurant)
             for restaurant in restaurants_payload
         ]
+
+    @staticmethod
+    def _mock_restaurant_search_result(location: str) -> dict[str, object]:
+        restaurants = [
+            {
+                "id": "e2e-ginza-sora",
+                "name": "GINZA SORA",
+                "address": f"東京都{location}1-2-3",
+                "access": f"{location}駅 徒歩3分",
+                "genre": "モダンビストロ",
+                "budget": "3,000〜5,000円",
+                "image_url": (
+                    "https://images.unsplash.com/photo-1555396273-367ea4eb4db5"
+                    "?auto=format&fit=crop&w=1200&q=85"
+                ),
+                "shop_url": "https://example.com/e2e-ginza-sora",
+            },
+            {
+                "id": "e2e-kitchen-noka",
+                "name": "KITCHEN noka",
+                "address": f"東京都{location}4-5-6",
+                "access": f"{location}駅 徒歩6分",
+                "genre": "イタリアン",
+                "budget": "2,000〜3,000円",
+                "image_url": (
+                    "https://images.unsplash.com/photo-1544148103-0773bf10d330"
+                    "?auto=format&fit=crop&w=1200&q=85"
+                ),
+                "shop_url": "https://example.com/e2e-kitchen-noka",
+            },
+            {
+                "id": "e2e-shokudo-koharu",
+                "name": "食堂 こはる",
+                "address": f"東京都{location}7-8-9",
+                "access": f"{location}駅 徒歩8分",
+                "genre": "創作和食",
+                "budget": "2,000〜3,000円",
+                "image_url": (
+                    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4"
+                    "?auto=format&fit=crop&w=1200&q=85"
+                ),
+                "shop_url": "https://example.com/e2e-shokudo-koharu",
+            },
+        ]
+        return {
+            "restaurants": restaurants,
+            "searched_at": datetime.now(UTC).isoformat(),
+        }
 
     @staticmethod
     def _now() -> datetime:

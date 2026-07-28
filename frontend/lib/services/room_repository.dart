@@ -38,6 +38,8 @@ abstract class RoomRepository {
 
   Future<void> startVoting(GroupCreationDraft draft);
 
+  Future<bool> isVotingStarted(GroupCreationDraft draft);
+
   Future<List<RestaurantPreview>> getRestaurantCandidates(
     GroupCreationDraft draft,
   );
@@ -107,6 +109,12 @@ class MockRoomRepository implements RoomRepository {
   @override
   Future<void> startVoting(GroupCreationDraft draft) async {
     await Future<void>.delayed(const Duration(milliseconds: 160));
+  }
+
+  @override
+  Future<bool> isVotingStarted(GroupCreationDraft draft) async {
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    return false;
   }
 
   @override
@@ -226,6 +234,7 @@ class ApiRoomRepository implements RoomRepository {
       peopleCount: peopleCount,
       area: area,
       budget: budget,
+      isHost: true,
     );
   }
 
@@ -244,6 +253,7 @@ class ApiRoomRepository implements RoomRepository {
         minAmount: json['budget_min'] as int?,
         maxAmount: json['budget_max'] as int?,
       ),
+      isHost: false,
     );
   }
 
@@ -273,6 +283,16 @@ class ApiRoomRepository implements RoomRepository {
       '/temporary-groups/$roomId/voting/start',
       body: {'participant_token': _participantToken},
     );
+  }
+
+  @override
+  Future<bool> isVotingStarted(GroupCreationDraft draft) async {
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.isVotingStarted(draft);
+    }
+    final json = await _apiClient.getJson('/temporary-groups/$roomId');
+    return json['voting_started_at'] != null;
   }
 
   @override
