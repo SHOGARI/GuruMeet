@@ -41,20 +41,7 @@ class TemporaryGroupService:
         self.db = db
         self.repository = TemporaryGroupRepository(db)
 
-    async def create_group_with_restaurants(
-        self,
-        data: TemporaryGroupCreate,
-    ) -> TemporaryGroup:
-        restaurant, restaurant_search_status = await self._search_restaurants_for_create(
-            data
-        )
-        return self._create_group(
-            data,
-            restaurant=restaurant,
-            restaurant_search_status=restaurant_search_status,
-        )
-
-    def _create_group(
+    def create_group(
         self,
         data: TemporaryGroupCreate,
         restaurant: dict[str, Any] | None,
@@ -90,8 +77,8 @@ class TemporaryGroupService:
             "temporary group code generation exceeded max attempts"
         )
 
-    async def _search_restaurants_for_create(
-        self,
+    @staticmethod
+    async def search_restaurants_for_create(
         data: TemporaryGroupCreate,
     ) -> tuple[dict[str, Any] | None, str]:
         if (

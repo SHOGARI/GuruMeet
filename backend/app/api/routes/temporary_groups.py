@@ -2,8 +2,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.rate_limit import limit_join_by_ip
+from app.db.database import SessionLocal
 from app.db.session import get_db
 from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
@@ -72,12 +74,17 @@ router = APIRouter(
 )
 async def create_temporary_group(
     request_body: TemporaryGroupCreate | None = None,
-    db: Session = Depends(get_db),
 ) -> TemporaryGroupResponse:
-    service = TemporaryGroupService(db)
+    data = request_body or TemporaryGroupCreate()
     try:
-        group = await service.create_group_with_restaurants(
-            request_body or TemporaryGroupCreate()
+        restaurant, restaurant_search_status = (
+            await TemporaryGroupService.search_restaurants_for_create(data)
+        )
+        return await run_in_threadpool(
+            _create_temporary_group_response,
+            data,
+            restaurant,
+            restaurant_search_status,
         )
     except TemporaryGroupCodeCollisionError as exc:
         raise HTTPException(
@@ -101,8 +108,6 @@ async def create_temporary_group(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to communicate with Hot Pepper API",
         ) from None
-
-    return _to_response(group, service)
 
 
 @router.get(
@@ -288,6 +293,21 @@ def _to_response(
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
     )
+
+
+def _create_temporary_group_response(
+    data: TemporaryGroupCreate,
+    restaurant: dict[str, object] | None,
+    restaurant_search_status: str,
+) -> TemporaryGroupResponse:
+    with SessionLocal() as db:
+        service = TemporaryGroupService(db)
+        group = service.create_group(
+            data,
+            restaurant=restaurant,
+            restaurant_search_status=restaurant_search_status,
+        )
+        return _to_response(group, service)
 
 
 def _not_found() -> HTTPException:
