@@ -37,6 +37,7 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
+        "GURUMEET_API_ROOT_PATH": "/api",
       },
       "containers": [
         {
@@ -78,6 +79,7 @@
       "workers_dev": false,
       "vars": {
         "ENVIRONMENT": "production",
+        "GURUMEET_API_ROOT_PATH": "/api",
       },
       "containers": [
         {

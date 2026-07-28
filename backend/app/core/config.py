@@ -4,6 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "GuruMeet Backend"
+    environment: str = Field(default="development", validation_alias="ENVIRONMENT")
+    api_root_path: str = Field(
+        default="",
+        validation_alias="GURUMEET_API_ROOT_PATH",
+    )
     hotpepper_api_key: SecretStr | None = Field(
         default=None,
         validation_alias="HOTPEPPER_API_KEY",
@@ -15,6 +20,10 @@ class Settings(BaseSettings):
     participant_token_hash_secret: str = (
         "gurumeet-dev-participant-token-secret"
     )
+
+    @property
+    def api_docs_enabled(self) -> bool:
+        return self.environment.lower() not in {"production", "product"}
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -5,6 +5,7 @@ const INSTANCE_COUNT = 1;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 };
 
 export class BackendContainer extends Container {
@@ -13,6 +14,7 @@ export class BackendContainer extends Container {
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
+    GURUMEET_API_ROOT_PATH: runtimeEnv.GURUMEET_API_ROOT_PATH ?? "",
   };
 }
 
@@ -22,6 +24,7 @@ interface Env {
   ASSETS_BUCKET: R2Bucket;
   DATABASE_URL: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 }
 
 export default {
@@ -34,6 +37,10 @@ export default {
 
     if (url.pathname.startsWith("/files/")) {
       return handleFileRequest(request, env);
+    }
+
+    if (isProduction(env) && isApiDocsPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
     }
 
     if (url.pathname.startsWith("/api/")) {
@@ -89,6 +96,20 @@ function stripApiPrefix(request: Request): Request {
   const url = new URL(request.url);
   url.pathname = url.pathname.replace(/^\/api/, "") || "/";
   return new Request(url, request);
+}
+
+function isProduction(env: Env): boolean {
+  return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
+}
+
+function isApiDocsPath(pathname: string): boolean {
+  return (
+    pathname === "/api/openapi.json" ||
+    pathname === "/api/redoc" ||
+    pathname.startsWith("/api/redoc/") ||
+    pathname === "/api/docs" ||
+    pathname.startsWith("/api/docs/")
+  );
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
