@@ -60,6 +60,7 @@ router = APIRouter(
                         "location": "渋谷",
                         "budget_min": 2000,
                         "budget_max": 3000,
+                        "restaurant_search_status": "succeeded",
                         "restaurant": {
                             "restaurants": [
                                 {
@@ -150,6 +151,7 @@ async def create_temporary_group(
                         "location": "渋谷",
                         "budget_min": 2000,
                         "budget_max": 3000,
+                        "restaurant_search_status": "succeeded",
                         "restaurant": {
                             "id": "restaurant_123",
                             "name": "渋谷ビストロ",
@@ -237,6 +239,7 @@ def join_temporary_group_by_id(
                         "location": "渋谷",
                         "budget_min": 2000,
                         "budget_max": 3000,
+                        "restaurant_search_status": "succeeded",
                         "restaurant": {
                             "id": "restaurant_123",
                             "name": "渋谷ビストロ",
@@ -289,6 +292,7 @@ def _to_detail(
         location=group.location,
         budget_min=group.budget_min,
         budget_max=group.budget_max,
+        restaurant_search_status=group.restaurant_search_status,
         restaurant=group.restaurant,
     )
 

@@ -491,7 +491,27 @@ class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTes
             participant_count=4,
         )
         self.assertIs(group.restaurant, search_result)
+        self.assertEqual(group.restaurant_search_status, "succeeded")
         self.db.commit.assert_called_once_with()
+
+    async def test_create_group_marks_no_results_when_search_returns_empty(
+        self,
+    ) -> None:
+        search_result = {
+            "restaurants": [],
+            "searched_at": "2026-07-25T00:00:00+00:00",
+        }
+
+        with patch(
+            "app.services.temporary_group_service.search_restaurants_for_group",
+            new=AsyncMock(return_value=search_result),
+        ):
+            group = await self.service.create_group_with_restaurants(
+                TemporaryGroupCreate(location="渋谷")
+            )
+
+        self.assertIs(group.restaurant, search_result)
+        self.assertEqual(group.restaurant_search_status, "no_results")
 
     async def test_external_api_error_stops_before_group_creation(self) -> None:
         with patch(
@@ -517,6 +537,7 @@ class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTes
 
         search_mock.assert_not_awaited()
         self.assertIsNone(group.restaurant)
+        self.assertEqual(group.restaurant_search_status, "not_requested")
         self.db.commit.assert_called_once_with()
 
     async def test_invalid_budget_stops_before_group_creation(self) -> None:
@@ -585,6 +606,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["restaurant"], restaurant)
+        self.assertEqual(response.json()["restaurant_search_status"], "succeeded")
         request = service.create_group_with_restaurants.await_args.args[0]
         self.assertEqual(request.location, "渋谷")
 
@@ -645,6 +667,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             location="渋谷",
             budget_min=2000,
             budget_max=3000,
+            restaurant_search_status="succeeded",
             restaurant=restaurant,
         )
 

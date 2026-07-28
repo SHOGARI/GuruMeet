@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.anonymous_user import AnonymousUser
-from app.models.temporary_group import TemporaryGroup
+from app.models.temporary_group import (
+    RESTAURANT_SEARCH_STATUS_NOT_REQUESTED,
+    RESTAURANT_SEARCH_STATUS_NO_RESULTS,
+    RESTAURANT_SEARCH_STATUS_SUCCEEDED,
+    TemporaryGroup,
+)
 from app.models.temporary_group_participant import TemporaryGroupParticipant
 from app.repositories.temporary_group_repository import TemporaryGroupRepository
 from app.schemas.temporary_group import TemporaryGroupCreate
@@ -40,13 +45,20 @@ class TemporaryGroupService:
         self,
         data: TemporaryGroupCreate,
     ) -> TemporaryGroup:
-        restaurant = await self._search_restaurants_for_create(data)
-        return self._create_group(data, restaurant=restaurant)
+        restaurant, restaurant_search_status = await self._search_restaurants_for_create(
+            data
+        )
+        return self._create_group(
+            data,
+            restaurant=restaurant,
+            restaurant_search_status=restaurant_search_status,
+        )
 
     def _create_group(
         self,
         data: TemporaryGroupCreate,
         restaurant: dict[str, Any] | None,
+        restaurant_search_status: str,
     ) -> TemporaryGroup:
         expires_at = self._now() + timedelta(
             minutes=settings.temporary_group_ttl_minutes
@@ -61,6 +73,7 @@ class TemporaryGroupService:
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
                 restaurant=restaurant,
+                restaurant_search_status=restaurant_search_status,
                 expires_at=expires_at,
             )
             try:
@@ -80,7 +93,7 @@ class TemporaryGroupService:
     async def _search_restaurants_for_create(
         self,
         data: TemporaryGroupCreate,
-    ) -> dict[str, Any] | None:
+    ) -> tuple[dict[str, Any] | None, str]:
         if (
             data.budget_min is not None
             and data.budget_max is not None
@@ -92,10 +105,10 @@ class TemporaryGroupService:
 
         location = data.location.strip() if data.location else ""
         if not location:
-            return None
+            return None, RESTAURANT_SEARCH_STATUS_NOT_REQUESTED
 
         try:
-            return await search_restaurants_for_group(
+            restaurant = await search_restaurants_for_group(
                 location=location,
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
@@ -103,6 +116,12 @@ class TemporaryGroupService:
             )
         except HotPepperBudgetRangeError as exc:
             raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
+
+        restaurants = restaurant.get("restaurants")
+        if isinstance(restaurants, list) and restaurants:
+            return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
+
+        return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
 
     def get_active_by_id(self, group_id: UUID) -> TemporaryGroup | None:
         return self.repository.get_active_by_id(group_id, self._now())

@@ -70,7 +70,11 @@ POST /temporary-groups
 
 ↓
 
-⑥ グループ情報と同じレスポンスでフロントへ返却
+⑥ restaurant_search_statusへ検索状態を保存
+
+↓
+
+⑦ グループ情報と同じレスポンスでフロントへ返却
 
 ---
 
@@ -105,6 +109,14 @@ TemporaryGroup情報と保存済み店舗情報を取得する。
 restaurantはフロントから送信されるデータではない。
 
 バックエンドがHotPepper APIから取得した店舗情報を保存するためのJSONBカラムである。
+
+restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラムである。
+
+| value | meaning |
+| --- | --- |
+| `not_requested` | locationが空で検索していない。 |
+| `succeeded` | Hot Pepperから1件以上の店舗候補を取得した。 |
+| `no_results` | Hot Pepper検索は成功したが候補が0件だった。 |
 
 保存例
 
@@ -192,6 +204,7 @@ B002
 - 店舗IDで重複除外
 - searched_at保存
 - restaurantに検索結果を保存
+- restaurant_search_statusに検索状態を保存
 
 ---
 
@@ -218,6 +231,7 @@ DB保存失敗時
 店舗0件
 
 - restaurantsを空配列で保存
+- restaurant_search_statusはno_results
 - 正常終了
 
 ---

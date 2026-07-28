@@ -94,7 +94,7 @@ A7K2F
 
 backendは共有URLを返さない。共有URLはfrontendのroute設計に依存するため、backendは `id` と `code` の発行に責務を絞る。
 
-希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に別APIで店舗検索を実行しない。
+希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に別APIで店舗検索を実行しない。検索状態は `restaurant_search_status` に保存する。
 
 ### Request
 
@@ -123,7 +123,7 @@ bodyなしでも作成可能。
 2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から5文字の `code` を生成する。
 3. リクエストに希望条件があれば保存する。
 4. `location` が空でなければ、作成前にHot Pepper APIで店舗候補を検索する。
-5. 検索結果があれば `restaurant` に保存する。
+5. 検索結果を `restaurant` に保存し、`restaurant_search_status` を更新する。
 6. `participant_token` があれば作成者を参加者として登録する。
 7. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
 8. `code` のunique制約に衝突した場合はrollbackして再生成する。
@@ -145,6 +145,7 @@ bodyなしでも作成可能。
   "location": "渋谷",
   "budget_min": 2000,
   "budget_max": 3000,
+  "restaurant_search_status": "succeeded",
   "restaurant": {
     "restaurants": [
       {
@@ -215,6 +216,7 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
   "location": "渋谷",
   "budget_min": 2000,
   "budget_max": 3000,
+  "restaurant_search_status": "succeeded",
   "restaurant": {
     "id": "restaurant_123",
     "name": "渋谷ビストロ"
@@ -276,6 +278,7 @@ UUIDから一時グループに参加する。
   "location": "渋谷",
   "budget_min": 2000,
   "budget_max": 3000,
+  "restaurant_search_status": "succeeded",
   "restaurant": {
     "id": "restaurant_123",
     "name": "渋谷ビストロ"
@@ -347,6 +350,7 @@ UUIDから一時グループに参加する。
   "location": "渋谷",
   "budget_min": 2000,
   "budget_max": 3000,
+  "restaurant_search_status": "succeeded",
   "restaurant": {
     "id": "restaurant_123",
     "name": "渋谷ビストロ"

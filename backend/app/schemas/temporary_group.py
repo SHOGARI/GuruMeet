@@ -86,6 +86,11 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     location: str | None = Field(default=None, description="希望場所。")
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
+    restaurant_search_status: str = Field(
+        description=(
+            "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
+        )
+    )
     restaurant: dict[str, Any] | None = Field(
         default=None,
         description="選択済み、または候補の店舗情報。",
