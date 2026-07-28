@@ -94,7 +94,7 @@ A7K2F
 
 backendは共有URLを返さない。共有URLはfrontendのroute設計に依存するため、backendは `id` と `code` の発行に責務を絞る。
 
-希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に別APIで店舗検索を実行しない。検索状態は `restaurant_search_status` に保存する。
+希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に検索APIを実行せず、必要な表示データを `GET /temporary-groups/{group_id}` で取得する。検索状態は `restaurant_search_status` に保存する。
 
 ### Request
 
@@ -128,6 +128,8 @@ bodyなしでも作成可能。
 7. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
 8. `code` のunique制約に衝突した場合はrollbackして再生成する。
 
+作成成功レスポンスは作成結果だけを返す。店舗候補や希望条件は、返却された `id` を使って `GET /temporary-groups/{group_id}` で取得する。
+
 ### Response
 
 `201 Created`
@@ -138,23 +140,7 @@ bodyなしでも作成可能。
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "joined_participant_count": 1,
-  "is_full": false,
-  "restaurant_search_status": "succeeded",
-  "restaurant": {
-    "restaurants": [
-      {
-        "id": "J0001",
-        "name": "渋谷ビストロ",
-        "address": "東京都渋谷区",
-        "access": "渋谷駅徒歩5分",
-        "genre": "イタリアン",
-        "budget": "2001～3000円",
-        "image_url": "https://example.com/shop.jpg",
-        "shop_url": "https://example.com/shop"
-      }
-    ],
-    "searched_at": "2026-07-15T12:00:00Z"
-  }
+  "is_full": false
 }
 ```
 

@@ -8,7 +8,6 @@ from app.db.session import get_db
 from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
     TemporaryGroupCreate,
-    TemporaryGroupCreateResponse,
     TemporaryGroupDetail,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
@@ -37,7 +36,7 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=TemporaryGroupCreateResponse,
+    response_model=TemporaryGroupResponse,
     status_code=status.HTTP_201_CREATED,
     summary="一時グループを作成する",
     description=(
@@ -56,22 +55,6 @@ router = APIRouter(
                         "expires_at": "2026-07-16T12:00:00Z",
                         "joined_participant_count": 1,
                         "is_full": False,
-                        "restaurant_search_status": "succeeded",
-                        "restaurant": {
-                            "restaurants": [
-                                {
-                                    "id": "J0001",
-                                    "name": "渋谷ビストロ",
-                                    "address": "東京都渋谷区",
-                                    "access": "渋谷駅徒歩5分",
-                                    "genre": "イタリアン",
-                                    "budget": "2001～3000円",
-                                    "image_url": "https://example.com/shop.jpg",
-                                    "shop_url": "https://example.com/shop",
-                                }
-                            ],
-                            "searched_at": "2026-07-15T12:00:00Z",
-                        },
                     }
                 }
             },
@@ -90,7 +73,7 @@ router = APIRouter(
 async def create_temporary_group(
     request_body: TemporaryGroupCreate | None = None,
     db: Session = Depends(get_db),
-) -> TemporaryGroupCreateResponse:
+) -> TemporaryGroupResponse:
     service = TemporaryGroupService(db)
     try:
         group = await service.create_group_with_restaurants(
@@ -119,7 +102,7 @@ async def create_temporary_group(
             detail="Failed to communicate with Hot Pepper API",
         ) from None
 
-    return _to_create_response(group, service)
+    return _to_response(group, service)
 
 
 @router.get(
@@ -288,22 +271,6 @@ def _to_detail(
         location=group.location,
         budget_min=group.budget_min,
         budget_max=group.budget_max,
-        restaurant_search_status=group.restaurant_search_status,
-        restaurant=group.restaurant,
-    )
-
-
-def _to_create_response(
-    group: TemporaryGroup,
-    service: TemporaryGroupService,
-) -> TemporaryGroupCreateResponse:
-    joined_participant_count = service.count_participants(group.id)
-    return TemporaryGroupCreateResponse(
-        id=group.id,
-        code=group.code,
-        expires_at=group.expires_at,
-        joined_participant_count=joined_participant_count,
-        is_full=service.is_full(group, joined_participant_count),
         restaurant_search_status=group.restaurant_search_status,
         restaurant=group.restaurant,
     )

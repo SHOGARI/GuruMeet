@@ -568,7 +568,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
 
-    def test_create_endpoint_returns_saved_restaurants(self) -> None:
+    def test_create_endpoint_returns_create_result_only(self) -> None:
         restaurant = {
             "restaurants": [
                 {
@@ -606,8 +606,6 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         response_body = response.json()
-        self.assertEqual(response_body["restaurant"], restaurant)
-        self.assertEqual(response_body["restaurant_search_status"], "succeeded")
         self.assertEqual(
             set(response_body),
             {
@@ -616,8 +614,6 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
                 "expires_at",
                 "joined_participant_count",
                 "is_full",
-                "restaurant_search_status",
-                "restaurant",
             },
         )
         request = service.create_group_with_restaurants.await_args.args[0]
