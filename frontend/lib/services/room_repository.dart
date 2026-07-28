@@ -244,14 +244,16 @@ class ApiRoomRepository implements RoomRepository {
       '/temporary-groups/join',
       body: {'code': code, 'participant_token': _participantToken},
     );
+    final roomId = json['id'] as String;
+    final detail = await _apiClient.getJson('/temporary-groups/$roomId');
     return GroupCreationDraft.fromApi(
-      roomId: json['id'] as String,
+      roomId: roomId,
       groupId: json['code'] as String,
-      peopleCount: json['participant_count'] as int? ?? 4,
-      area: json['location'] as String? ?? 'エリア未設定',
+      peopleCount: detail['participant_count'] as int? ?? 4,
+      area: detail['location'] as String? ?? 'エリア未設定',
       budget: BudgetOption.fromRange(
-        minAmount: json['budget_min'] as int?,
-        maxAmount: json['budget_max'] as int?,
+        minAmount: detail['budget_min'] as int?,
+        maxAmount: detail['budget_max'] as int?,
       ),
       isHost: false,
     );
@@ -303,10 +305,15 @@ class ApiRoomRepository implements RoomRepository {
     if (roomId == null) {
       return _fallback.getRestaurantCandidates(draft);
     }
-    final json = await _apiClient.postJson(
-      '/temporary-groups/$roomId/restaurants/search',
-    );
-    final restaurants = json['restaurants'];
+    final json = await _apiClient.getJson('/temporary-groups/$roomId');
+    final restaurantPayload = json['restaurant'];
+    if (restaurantPayload == null) {
+      throw const ApiException('店舗候補がまだ取得されていません');
+    }
+    if (restaurantPayload is! Map<String, dynamic>) {
+      throw const ApiException('店舗候補のレスポンス形式が不正です');
+    }
+    final restaurants = restaurantPayload['restaurants'];
     if (restaurants is! List) {
       throw const ApiException('店舗候補のレスポンス形式が不正です');
     }

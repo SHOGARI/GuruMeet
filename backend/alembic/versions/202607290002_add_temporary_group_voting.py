@@ -1,7 +1,7 @@
 """add temporary group voting
 
-Revision ID: 202607290001
-Revises: 202607230001
+Revision ID: 202607290002
+Revises: 202607290001
 Create Date: 2026-07-29 00:00:01.000000
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "202607290001"
-down_revision: str | None = "202607230001"
+revision: str = "202607290002"
+down_revision: str | None = "202607290001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

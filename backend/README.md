@@ -139,17 +139,11 @@ API:
 - `http://localhost:8000/health`
 - `http://localhost:8000/docs`
 
-店舗を地名で検索:
+店舗候補は一時グループ作成時に希望場所が指定されていれば同時に検索・保存されます。
 
 ```text
-GET /restaurants/search-by-location?location=渋谷
-GET /restaurants/search-by-location?location=東京都&count=30
+POST /temporary-groups
 ```
-
-クエリパラメータ:
-
-- `location`（必須）: 都道府県、市区町村、駅名、地域名
-- `count`（任意）: 取得する店舗数。デフォルト20、1〜100
 
 停止:
 

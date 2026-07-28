@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -7,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.anonymous_user import AnonymousUser
-from app.models.temporary_group import TemporaryGroup
+from app.models.temporary_group import (
+    RESTAURANT_SEARCH_STATUS_NOT_REQUESTED,
+    RESTAURANT_SEARCH_STATUS_NO_RESULTS,
+    RESTAURANT_SEARCH_STATUS_SUCCEEDED,
+    TemporaryGroup,
+)
 from app.models.temporary_group_participant import TemporaryGroupParticipant
 from app.models.temporary_group_vote import TemporaryGroupVote
 from app.repositories.temporary_group_repository import TemporaryGroupRepository
@@ -64,7 +70,12 @@ class TemporaryGroupService:
         self.db = db
         self.repository = TemporaryGroupRepository(db)
 
-    def create_group(self, data: TemporaryGroupCreate) -> TemporaryGroup:
+    def create_group(
+        self,
+        data: TemporaryGroupCreate,
+        restaurant: dict[str, Any] | None,
+        restaurant_search_status: str,
+    ) -> TemporaryGroup:
         expires_at = self._now() + timedelta(
             minutes=settings.temporary_group_ttl_minutes
         )
@@ -77,6 +88,8 @@ class TemporaryGroupService:
                 location=data.location,
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
+                restaurant=restaurant,
+                restaurant_search_status=restaurant_search_status,
                 expires_at=expires_at,
             )
             try:
@@ -92,6 +105,44 @@ class TemporaryGroupService:
         raise TemporaryGroupCodeCollisionError(
             "temporary group code generation exceeded max attempts"
         )
+
+    @staticmethod
+    async def search_restaurants_for_create(
+        data: TemporaryGroupCreate,
+    ) -> tuple[dict[str, Any] | None, str]:
+        if (
+            data.budget_min is not None
+            and data.budget_max is not None
+            and data.budget_min > data.budget_max
+        ):
+            raise TemporaryGroupSearchCriteriaError(
+                "budget_min must not exceed budget_max"
+            )
+
+        location = data.location.strip() if data.location else ""
+        if not location:
+            return None, RESTAURANT_SEARCH_STATUS_NOT_REQUESTED
+
+        try:
+            if settings.enable_mock_restaurants:
+                restaurant = TemporaryGroupService._mock_restaurant_search_result(
+                    location
+                )
+            else:
+                restaurant = await search_restaurants_for_group(
+                    location=location,
+                    budget_min=data.budget_min,
+                    budget_max=data.budget_max,
+                    participant_count=data.participant_count,
+                )
+        except HotPepperBudgetRangeError as exc:
+            raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
+
+        restaurants = restaurant.get("restaurants")
+        if isinstance(restaurants, list) and restaurants:
+            return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
+
+        return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
 
     def get_active_by_id(self, group_id: UUID) -> TemporaryGroup | None:
         return self.repository.get_active_by_id(group_id, self._now())
@@ -135,51 +186,6 @@ class TemporaryGroupService:
             group.participant_count is not None
             and joined_participant_count >= group.participant_count
         )
-
-    async def search_and_save_restaurants(
-        self,
-        group_id: UUID,
-    ) -> dict[str, object]:
-        group = self.get_active_by_id(group_id)
-        if group is None:
-            raise TemporaryGroupNotFoundError
-
-        location = group.location.strip() if group.location else ""
-        if not location:
-            raise TemporaryGroupSearchCriteriaError("location is required")
-        if (
-            group.budget_min is not None
-            and group.budget_max is not None
-            and group.budget_min > group.budget_max
-        ):
-            raise TemporaryGroupSearchCriteriaError(
-                "budget_min must not exceed budget_max"
-            )
-
-        try:
-            if settings.enable_mock_restaurants:
-                search_result = self._mock_restaurant_search_result(location)
-            else:
-                search_result = await search_restaurants_for_group(
-                    location=location,
-                    budget_min=group.budget_min,
-                    budget_max=group.budget_max,
-                    participant_count=group.participant_count,
-                )
-        except HotPepperBudgetRangeError as exc:
-            raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
-
-        previous_restaurant = group.restaurant
-        try:
-            self.repository.update_restaurant(group, search_result)
-            self.db.commit()
-            self.db.refresh(group)
-        except Exception:
-            self.db.rollback()
-            group.restaurant = previous_restaurant
-            raise
-
-        return search_result
 
     def start_voting(
         self,

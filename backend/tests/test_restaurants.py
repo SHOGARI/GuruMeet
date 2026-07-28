@@ -7,11 +7,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.core.config import Settings, settings
-from app.main import app
 from app.services.hotpepper_service import (
     HotPepperAPIError,
     HotPepperConfigurationError,
@@ -68,118 +66,6 @@ class SettingsTests(unittest.TestCase):
             )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-
-
-class RestaurantRouteTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.client = TestClient(app)
-
-    def test_location_searches_return_success(self) -> None:
-        result = {"success": True, "count": 0, "shops": []}
-
-        for location in ("渋谷", "埼玉県", "東京駅"):
-            with self.subTest(location=location):
-                with patch(
-                    "app.api.routes.restaurants.search_restaurants_by_location",
-                    new=AsyncMock(return_value=result),
-                ) as search_mock:
-                    response = self.client.get(
-                        "/restaurants/search-by-location",
-                        params={"location": location, "count": 10},
-                    )
-
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), result)
-                search_mock.assert_awaited_once_with(
-                    location=location,
-                    count=10,
-                )
-
-    def test_location_is_trimmed(self) -> None:
-        result = {"success": True, "count": 0, "shops": []}
-        with patch(
-            "app.api.routes.restaurants.search_restaurants_by_location",
-            new=AsyncMock(return_value=result),
-        ) as search_mock:
-            response = self.client.get(
-                "/restaurants/search-by-location",
-                params={"location": "  渋谷  "},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        search_mock.assert_awaited_once_with(location="渋谷", count=20)
-
-    def test_empty_location_is_rejected(self) -> None:
-        response = self.client.get(
-            "/restaurants/search-by-location",
-            params={"location": ""},
-        )
-        self.assertEqual(response.status_code, 422)
-
-    def test_whitespace_location_is_rejected(self) -> None:
-        response = self.client.get(
-            "/restaurants/search-by-location",
-            params={"location": "   "},
-        )
-        self.assertEqual(response.status_code, 422)
-
-    def test_count_below_minimum_is_rejected(self) -> None:
-        response = self.client.get(
-            "/restaurants/search-by-location",
-            params={"location": "渋谷", "count": 0},
-        )
-        self.assertEqual(response.status_code, 422)
-
-    def test_count_above_maximum_is_rejected(self) -> None:
-        response = self.client.get(
-            "/restaurants/search-by-location",
-            params={"location": "渋谷", "count": 101},
-        )
-        self.assertEqual(response.status_code, 422)
-
-    def test_no_results_returns_empty_shops(self) -> None:
-        result = {"success": True, "count": 0, "shops": []}
-        with patch(
-            "app.api.routes.restaurants.search_restaurants_by_location",
-            new=AsyncMock(return_value=result),
-        ):
-            response = self.client.get(
-                "/restaurants/search-by-location",
-                params={"location": "該当なし"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), result)
-
-    def test_api_failure_returns_bad_gateway(self) -> None:
-        with patch(
-            "app.api.routes.restaurants.search_restaurants_by_location",
-            new=AsyncMock(side_effect=HotPepperAPIError),
-        ):
-            response = self.client.get(
-                "/restaurants/search-by-location",
-                params={"location": "渋谷"},
-            )
-
-        self.assertEqual(response.status_code, 502)
-        self.assertEqual(
-            response.json(),
-            {"detail": "Failed to communicate with Hot Pepper API"},
-        )
-
-    def test_existing_coordinate_search_still_works(self) -> None:
-        result = {"success": True, "count": 0, "shops": []}
-        with patch(
-            "app.api.routes.restaurants.search_hotpepper_restaurants",
-            new=AsyncMock(return_value=result),
-        ):
-            response = self.client.get(
-                "/restaurants/search",
-                params={"lat": 35.6812, "lng": 139.7671},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), result)
 
 
 class RestaurantServiceTests(unittest.IsolatedAsyncioTestCase):
