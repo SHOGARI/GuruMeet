@@ -1,23 +1,25 @@
-import os
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pydantic import BaseModel
 
+class Settings(BaseSettings):
+    app_name: str = "GuruMeet Backend"
+    hotpepper_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="HOTPEPPER_API_KEY",
+    )
+    temporary_group_ttl_minutes: int = 1440
+    temporary_group_code_max_attempts: int = 20
+    join_rate_limit_requests: int = 10
+    join_rate_limit_window_seconds: int = 60
+    participant_token_hash_secret: str = (
+        "gurumeet-dev-participant-token-secret"
+    )
 
-class Settings(BaseModel):
-    app_name: str = "Gurumeet Backend"
-    temporary_group_ttl_minutes: int = int(
-        os.getenv("TEMPORARY_GROUP_TTL_MINUTES", "1440")
-    )
-    temporary_group_code_max_attempts: int = int(
-        os.getenv("TEMPORARY_GROUP_CODE_MAX_ATTEMPTS", "20")
-    )
-    join_rate_limit_requests: int = int(os.getenv("JOIN_RATE_LIMIT_REQUESTS", "10"))
-    join_rate_limit_window_seconds: int = int(
-        os.getenv("JOIN_RATE_LIMIT_WINDOW_SECONDS", "60")
-    )
-    participant_token_hash_secret: str = os.getenv(
-        "PARTICIPANT_TOKEN_HASH_SECRET",
-        "gurumeet-dev-participant-token-secret",
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 

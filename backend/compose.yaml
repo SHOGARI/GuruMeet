@@ -9,6 +9,7 @@ services:
     volumes:
       - .:/app
     environment:
+      HOTPEPPER_API_KEY: ${HOTPEPPER_API_KEY}
       POSTGRES_DB: ${POSTGRES_DB:-gurumeet}
       POSTGRES_USER: ${POSTGRES_USER:-gurumeet}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}

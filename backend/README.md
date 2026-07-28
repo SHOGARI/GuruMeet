@@ -69,6 +69,7 @@ cp .env.example .env
 実際の `backend/.env` に書く値:
 
 ```env
+HOTPEPPER_API_KEY=取得したAPIキー
 API_PORT=8000
 
 POSTGRES_DB=gurumeet
@@ -135,6 +136,18 @@ API:
 - `http://localhost:8000/`
 - `http://localhost:8000/health`
 - `http://localhost:8000/docs`
+
+店舗を地名で検索:
+
+```text
+GET /restaurants/search-by-location?location=渋谷
+GET /restaurants/search-by-location?location=東京都&count=30
+```
+
+クエリパラメータ:
+
+- `location`（必須）: 都道府県、市区町村、駅名、地域名
+- `count`（任意）: 取得する店舗数。デフォルト20、1〜100
 
 停止:
 
