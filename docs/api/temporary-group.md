@@ -45,7 +45,7 @@ POST /temporary-groups/join
   code と participant_token を含める
 ```
 
-人数表示はレスポンスの `joined_participant_count` と `participant_count` を使う。
+人数表示で上限人数まで必要な画面は、詳細取得レスポンスの `joined_participant_count` と `participant_count` を使う。
 
 ```text
 2 / 4人
@@ -139,12 +139,6 @@ bodyなしでも作成可能。
   "expires_at": "2026-07-16T12:00:00Z",
   "joined_participant_count": 1,
   "is_full": false,
-  "created_at": "2026-07-15T12:00:00Z",
-  "creator_id": "user_123",
-  "participant_count": 4,
-  "location": "渋谷",
-  "budget_min": 2000,
-  "budget_max": 3000,
   "restaurant_search_status": "succeeded",
   "restaurant": {
     "restaurants": [
@@ -244,6 +238,8 @@ UUIDから一時グループに参加する。
 
 同じ `participant_token` で再実行した場合は既存参加者として扱い、参加人数を増やさない。
 
+参加成功レスポンスは参加結果だけを返す。店舗候補や希望条件は `GET /temporary-groups/{group_id}` で取得する。
+
 ### Request
 
 ```json
@@ -271,18 +267,7 @@ UUIDから一時グループに参加する。
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "joined_participant_count": 2,
-  "is_full": false,
-  "created_at": "2026-07-15T12:00:00Z",
-  "creator_id": "user_123",
-  "participant_count": 4,
-  "location": "渋谷",
-  "budget_min": 2000,
-  "budget_max": 3000,
-  "restaurant_search_status": "succeeded",
-  "restaurant": {
-    "id": "restaurant_123",
-    "name": "渋谷ビストロ"
-  }
+  "is_full": false
 }
 ```
 
@@ -315,6 +300,8 @@ UUIDから一時グループに参加する。
 
 存在しないコードと期限切れコードは同じ404にする。コードの有効性を推測しやすいレスポンスにしないため。
 
+参加成功レスポンスは参加結果だけを返す。店舗候補や希望条件は、返却された `id` を使って `GET /temporary-groups/{group_id}` で取得する。
+
 ### Request
 
 ```json
@@ -343,18 +330,7 @@ UUIDから一時グループに参加する。
   "code": "A7K2F",
   "expires_at": "2026-07-16T12:00:00Z",
   "joined_participant_count": 2,
-  "is_full": false,
-  "created_at": "2026-07-15T12:00:00Z",
-  "creator_id": "user_123",
-  "participant_count": 4,
-  "location": "渋谷",
-  "budget_min": 2000,
-  "budget_max": 3000,
-  "restaurant_search_status": "succeeded",
-  "restaurant": {
-    "id": "restaurant_123",
-    "name": "渋谷ビストロ"
-  }
+  "is_full": false
 }
 ```
 

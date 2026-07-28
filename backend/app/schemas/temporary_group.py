@@ -79,13 +79,7 @@ class TemporaryGroupResponse(BaseModel):
     is_full: bool = Field(description="参加人数が上限に達しているか。")
 
 
-class TemporaryGroupDetail(TemporaryGroupResponse):
-    created_at: datetime = Field(description="一時グループが作成された時刻。")
-    creator_id: str | None = Field(default=None, description="任意の作成者ID。")
-    participant_count: int | None = Field(default=None, description="参加人数。")
-    location: str | None = Field(default=None, description="希望場所。")
-    budget_min: int | None = Field(default=None, description="予算下限。")
-    budget_max: int | None = Field(default=None, description="予算上限。")
+class TemporaryGroupCreateResponse(TemporaryGroupResponse):
     restaurant_search_status: str = Field(
         description=(
             "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
@@ -95,3 +89,12 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
         default=None,
         description="選択済み、または候補の店舗情報。",
     )
+
+
+class TemporaryGroupDetail(TemporaryGroupCreateResponse):
+    created_at: datetime = Field(description="一時グループが作成された時刻。")
+    creator_id: str | None = Field(default=None, description="任意の作成者ID。")
+    participant_count: int | None = Field(default=None, description="参加人数。")
+    location: str | None = Field(default=None, description="希望場所。")
+    budget_min: int | None = Field(default=None, description="予算下限。")
+    budget_max: int | None = Field(default=None, description="予算上限。")

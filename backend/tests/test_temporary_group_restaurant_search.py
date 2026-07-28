@@ -605,8 +605,21 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["restaurant"], restaurant)
-        self.assertEqual(response.json()["restaurant_search_status"], "succeeded")
+        response_body = response.json()
+        self.assertEqual(response_body["restaurant"], restaurant)
+        self.assertEqual(response_body["restaurant_search_status"], "succeeded")
+        self.assertEqual(
+            set(response_body),
+            {
+                "id",
+                "code",
+                "expires_at",
+                "joined_participant_count",
+                "is_full",
+                "restaurant_search_status",
+                "restaurant",
+            },
+        )
         request = service.create_group_with_restaurants.await_args.args[0]
         self.assertEqual(request.location, "渋谷")
 
@@ -655,6 +668,65 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             response = self.client.post("/temporary-groups", json={"location": "渋谷"})
 
         self.assertEqual(response.status_code, 504)
+
+    def test_join_by_id_endpoint_returns_join_result_only(self) -> None:
+        group = self._group(restaurant={"restaurants": [{"id": "J0001"}]})
+
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service = service_class.return_value
+            service.join_active_by_id.return_value = group
+            service.count_participants.return_value = 2
+            service.is_full.return_value = False
+
+            response = self.client.post(
+                f"/temporary-groups/{self.group_id}/participants",
+                json={"participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response.json()),
+            {
+                "id",
+                "code",
+                "expires_at",
+                "joined_participant_count",
+                "is_full",
+            },
+        )
+
+    def test_join_by_code_endpoint_returns_join_result_only(self) -> None:
+        group = self._group(restaurant={"restaurants": [{"id": "J0001"}]})
+
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service = service_class.return_value
+            service.join_active_by_code.return_value = group
+            service.count_participants.return_value = 2
+            service.is_full.return_value = False
+
+            response = self.client.post(
+                "/temporary-groups/join",
+                json={
+                    "code": "A7K2F",
+                    "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response.json()),
+            {
+                "id",
+                "code",
+                "expires_at",
+                "joined_participant_count",
+                "is_full",
+            },
+        )
 
     def _group(self, restaurant: dict[str, object]) -> SimpleNamespace:
         return SimpleNamespace(

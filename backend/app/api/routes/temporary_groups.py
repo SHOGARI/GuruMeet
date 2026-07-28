@@ -8,9 +8,11 @@ from app.db.session import get_db
 from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
     TemporaryGroupCreate,
+    TemporaryGroupCreateResponse,
     TemporaryGroupDetail,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
+    TemporaryGroupResponse,
 )
 from app.services.hotpepper_service import (
     HotPepperAPIError,
@@ -35,7 +37,7 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=TemporaryGroupDetail,
+    response_model=TemporaryGroupCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="一時グループを作成する",
     description=(
@@ -54,12 +56,6 @@ router = APIRouter(
                         "expires_at": "2026-07-16T12:00:00Z",
                         "joined_participant_count": 1,
                         "is_full": False,
-                        "created_at": "2026-07-15T12:00:00Z",
-                        "creator_id": "user_123",
-                        "participant_count": 4,
-                        "location": "渋谷",
-                        "budget_min": 2000,
-                        "budget_max": 3000,
                         "restaurant_search_status": "succeeded",
                         "restaurant": {
                             "restaurants": [
@@ -94,7 +90,7 @@ router = APIRouter(
 async def create_temporary_group(
     request_body: TemporaryGroupCreate | None = None,
     db: Session = Depends(get_db),
-) -> TemporaryGroupDetail:
+) -> TemporaryGroupCreateResponse:
     service = TemporaryGroupService(db)
     try:
         group = await service.create_group_with_restaurants(
@@ -123,7 +119,7 @@ async def create_temporary_group(
             detail="Failed to communicate with Hot Pepper API",
         ) from None
 
-    return _to_detail(group, service)
+    return _to_create_response(group, service)
 
 
 @router.get(
@@ -176,7 +172,7 @@ def get_temporary_group(
 
 @router.post(
     "/{group_id}/participants",
-    response_model=TemporaryGroupDetail,
+    response_model=TemporaryGroupResponse,
     dependencies=[Depends(limit_join_by_ip)],
     summary="UUIDから一時グループに参加する",
     description=(
@@ -186,6 +182,17 @@ def get_temporary_group(
     responses={
         status.HTTP_200_OK: {
             "description": "一時グループへ参加しました。",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                        "code": "A7K2F",
+                        "expires_at": "2026-07-16T12:00:00Z",
+                        "joined_participant_count": 2,
+                        "is_full": False,
+                    }
+                }
+            },
         },
         status.HTTP_409_CONFLICT: {
             "description": "一時グループの参加人数が上限に達しています。"
@@ -199,7 +206,7 @@ def join_temporary_group_by_id(
     group_id: UUID,
     request_body: TemporaryGroupParticipantJoinRequest,
     db: Session = Depends(get_db),
-) -> TemporaryGroupDetail:
+) -> TemporaryGroupResponse:
     service = TemporaryGroupService(db)
     try:
         group = service.join_active_by_id(group_id, request_body.participant_token)
@@ -209,12 +216,12 @@ def join_temporary_group_by_id(
     if group is None:
         raise _not_found()
 
-    return _to_detail(group, service)
+    return _to_response(group, service)
 
 
 @router.post(
     "/join",
-    response_model=TemporaryGroupDetail,
+    response_model=TemporaryGroupResponse,
     dependencies=[Depends(limit_join_by_ip)],
     summary="コードから一時グループに参加する",
     description=(
@@ -233,17 +240,6 @@ def join_temporary_group_by_id(
                         "expires_at": "2026-07-16T12:00:00Z",
                         "joined_participant_count": 2,
                         "is_full": False,
-                        "created_at": "2026-07-15T12:00:00Z",
-                        "creator_id": "user_123",
-                        "participant_count": 4,
-                        "location": "渋谷",
-                        "budget_min": 2000,
-                        "budget_max": 3000,
-                        "restaurant_search_status": "succeeded",
-                        "restaurant": {
-                            "id": "restaurant_123",
-                            "name": "渋谷ビストロ",
-                        },
                     }
                 }
             },
@@ -259,7 +255,7 @@ def join_temporary_group_by_id(
 def join_temporary_group(
     request_body: TemporaryGroupJoinRequest,
     db: Session = Depends(get_db),
-) -> TemporaryGroupDetail:
+) -> TemporaryGroupResponse:
     service = TemporaryGroupService(db)
     try:
         group = service.join_active_by_code(
@@ -272,7 +268,7 @@ def join_temporary_group(
     if group is None:
         raise _not_found()
 
-    return _to_detail(group, service)
+    return _to_response(group, service)
 
 
 def _to_detail(
@@ -294,6 +290,36 @@ def _to_detail(
         budget_max=group.budget_max,
         restaurant_search_status=group.restaurant_search_status,
         restaurant=group.restaurant,
+    )
+
+
+def _to_create_response(
+    group: TemporaryGroup,
+    service: TemporaryGroupService,
+) -> TemporaryGroupCreateResponse:
+    joined_participant_count = service.count_participants(group.id)
+    return TemporaryGroupCreateResponse(
+        id=group.id,
+        code=group.code,
+        expires_at=group.expires_at,
+        joined_participant_count=joined_participant_count,
+        is_full=service.is_full(group, joined_participant_count),
+        restaurant_search_status=group.restaurant_search_status,
+        restaurant=group.restaurant,
+    )
+
+
+def _to_response(
+    group: TemporaryGroup,
+    service: TemporaryGroupService,
+) -> TemporaryGroupResponse:
+    joined_participant_count = service.count_participants(group.id)
+    return TemporaryGroupResponse(
+        id=group.id,
+        code=group.code,
+        expires_at=group.expires_at,
+        joined_participant_count=joined_participant_count,
+        is_full=service.is_full(group, joined_participant_count),
     )
 
 
