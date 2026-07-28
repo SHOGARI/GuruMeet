@@ -4,6 +4,7 @@ import 'package:gurumeet/app.dart';
 import 'package:gurumeet/models/group_creation_draft.dart';
 import 'package:gurumeet/models/restaurant_preview.dart';
 import 'package:gurumeet/screens/match_page.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   test('mock group code uses five uppercase alphanumeric characters', () {
@@ -15,7 +16,7 @@ void main() {
 
     expect(draft.groupId, matches(RegExp(r'^[A-Z0-9]{5}$')));
     expect(draft.groupId, 'G7M24');
-    expect(draft.inviteUrl, 'https://gurumeet.app/join/${draft.groupId}');
+    expect(draft.inviteUrl, 'https://gurumeet.app/#/join/${draft.groupId}');
   });
 
   testWidgets('home to create group flow renders', (tester) async {
@@ -84,7 +85,8 @@ void main() {
     expect(find.text('GROUP CODE  |  招待コード'), findsOneWidget);
     expect(find.text('渋谷'), findsOneWidget);
     expect(find.text('3,000〜5,000円'), findsOneWidget);
-    expect(find.textContaining('https://gurumeet.app/join/'), findsOneWidget);
+    expect(find.textContaining('https://gurumeet.app/#/join/'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
     expect(tester.getTopLeft(find.text('招待を送ろう')).dy, greaterThan(0));
 
     await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
@@ -190,6 +192,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('GuruMeet'), findsOneWidget);
+  });
+
+  testWidgets('invite link route renders join screen', (tester) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/join/123e4567-e89b-12d3-a456-426614174000');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('グループに参加'), findsOneWidget);
+    expect(find.text('招待リンクで\n参加する。'), findsOneWidget);
+    expect(find.text('123e4567...174000'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '参加する'))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('tie result shows runoff action', (tester) async {
@@ -306,7 +327,7 @@ void main() {
     expect(find.text('メンバー待機'), findsOneWidget);
     expect(find.text('1 / 4人'), findsOneWidget);
     expect(
-      find.textContaining('https://gurumeet.app/join/AB12C'),
+      find.textContaining('https://gurumeet.app/#/join/AB12C'),
       findsOneWidget,
     );
   });

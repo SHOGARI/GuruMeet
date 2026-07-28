@@ -8,9 +8,11 @@ import '../widgets/primary_action_button.dart';
 import 'waiting_room_page.dart';
 
 class JoinGroupPage extends StatefulWidget {
-  const JoinGroupPage({super.key});
+  const JoinGroupPage({super.key, this.initialInviteToken});
 
   static const routeName = '/join-group';
+
+  final String? initialInviteToken;
 
   @override
   State<JoinGroupPage> createState() => _JoinGroupPageState();
@@ -25,7 +27,22 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
   bool _hasTriedSubmit = false;
   bool _isNavigating = false;
 
+  String? get _inviteToken {
+    final token = widget.initialInviteToken?.trim();
+    return token == null || token.isEmpty ? null : token;
+  }
+
   bool get _hasValidLength => _codeController.text.trim().length == 5;
+  bool get _hasInviteToken => _inviteToken != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final token = _inviteToken;
+    if (token != null && RegExp(r'^[A-Za-z0-9]{5}$').hasMatch(token)) {
+      _codeController.text = token.toUpperCase();
+    }
+  }
 
   @override
   void dispose() {
@@ -40,7 +57,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
     }
     setState(() => _hasTriedSubmit = true);
 
-    final isValid = _formKey.currentState!.validate();
+    final isValid = _hasInviteToken || _formKey.currentState!.validate();
     if (!isValid) {
       _codeFocusNode.requestFocus();
       return;
@@ -50,7 +67,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
     FocusManager.instance.primaryFocus?.unfocus();
     try {
       final draft = await _roomRepository.joinRoom(
-        code: _codeController.text.trim(),
+        code: _inviteToken ?? _codeController.text.trim(),
       );
       if (!mounted) {
         return;
@@ -98,41 +115,51 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('招待コードで\n参加する。', style: theme.textTheme.headlineLarge),
+            Text(
+              _hasInviteToken ? '招待リンクで\n参加する。' : '招待コードで\n参加する。',
+              style: theme.textTheme.headlineLarge,
+            ),
             const SizedBox(height: AppSpacing.regular),
             Text(
-              '共有された5桁のコードを入力してください。',
+              _hasInviteToken
+                  ? '共有されたリンクから対象のルームへ参加します。'
+                  : '共有された5桁のコードを入力してください。',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.section),
-            TextFormField(
-              controller: _codeController,
-              focusNode: _codeFocusNode,
-              autofocus: true,
-              maxLength: 5,
-              textCapitalization: TextCapitalization.characters,
-              textInputAction: TextInputAction.done,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                letterSpacing: AppSizes.groupCodeLetterSpacing,
+            if (_hasInviteToken)
+              _InviteTokenPanel(token: _inviteToken!)
+            else
+              TextFormField(
+                controller: _codeController,
+                focusNode: _codeFocusNode,
+                autofocus: true,
+                maxLength: 5,
+                textCapitalization: TextCapitalization.characters,
+                textInputAction: TextInputAction.done,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  letterSpacing: AppSizes.groupCodeLetterSpacing,
+                ),
+                decoration: const InputDecoration(
+                  counterText: '',
+                  hintText: 'G7M24',
+                ),
+                inputFormatters: [
+                  const _UppercaseTextFormatter(),
+                  LengthLimitingTextInputFormatter(5),
+                ],
+                validator: _validateCode,
+                onChanged: (_) => setState(() {}),
+                onFieldSubmitted: (_) => _joinGroup(),
               ),
-              decoration: const InputDecoration(
-                counterText: '',
-                hintText: 'G7M24',
-              ),
-              inputFormatters: [
-                const _UppercaseTextFormatter(),
-                LengthLimitingTextInputFormatter(5),
-              ],
-              validator: _validateCode,
-              onChanged: (_) => setState(() {}),
-              onFieldSubmitted: (_) => _joinGroup(),
-            ),
             const SizedBox(height: AppSpacing.medium),
             Text(
-              '見つからない場合はコードを確認してください。',
+              _hasInviteToken
+                  ? '参加できない場合は、招待リンクが正しいか確認してください。'
+                  : '見つからない場合はコードを確認してください。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
@@ -142,13 +169,53 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               width: double.infinity,
               child: PrimaryActionButton(
                 label: '参加する',
-                onPressed: _isNavigating || !_hasValidLength
+                onPressed:
+                    _isNavigating || (!_hasInviteToken && !_hasValidLength)
                     ? null
                     : _joinGroup,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InviteTokenPanel extends StatelessWidget {
+  const _InviteTokenPanel({required this.token});
+
+  final String token;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final visibleToken = token.length > 18
+        ? '${token.substring(0, 8)}...${token.substring(token.length - 6)}'
+        : token;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.medium),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.link_rounded, color: colors.primary),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              visibleToken,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

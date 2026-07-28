@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/group_creation_draft.dart';
 import '../models/room_member.dart';
@@ -289,7 +290,7 @@ class _RoomCodePanel extends StatelessWidget {
               final qrCode = Align(
                 alignment: isNarrow ? Alignment.centerLeft : Alignment.center,
                 child: _QrPlaceholder(
-                  code: draft.groupId,
+                  value: draft.inviteUrl,
                   size: constraints.maxWidth < 360 ? 92 : 108,
                 ),
               );
@@ -336,9 +337,9 @@ class _RoomCodePanel extends StatelessWidget {
 }
 
 class _QrPlaceholder extends StatelessWidget {
-  const _QrPlaceholder({required this.code, required this.size});
+  const _QrPlaceholder({required this.value, required this.size});
 
-  final String code;
+  final String value;
   final double size;
 
   @override
@@ -353,24 +354,20 @@ class _QrPlaceholder extends StatelessWidget {
         color: colors.onPrimary,
         borderRadius: BorderRadius.circular(AppRadius.small),
       ),
-      child: GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 7,
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
+      child: QrImageView(
+        data: value,
+        version: QrVersions.auto,
+        gapless: false,
+        padding: EdgeInsets.zero,
+        backgroundColor: colors.onPrimary,
+        eyeStyle: QrEyeStyle(
+          eyeShape: QrEyeShape.square,
+          color: colors.primary,
         ),
-        itemCount: 49,
-        itemBuilder: (context, index) {
-          final filled =
-              (index + code.codeUnitAt(index % code.length)) % 3 != 0;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: filled ? colors.primary : Colors.transparent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          );
-        },
+        dataModuleStyle: QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: colors.primary,
+        ),
       ),
     );
   }

@@ -24,7 +24,16 @@ class GuruMeetApp extends StatelessWidget {
       theme: buildAppTheme(),
       initialRoute: HomePage.routeName,
       onGenerateRoute: (settings) {
-        switch (settings.name) {
+        final routeName = settings.name ?? HomePage.routeName;
+        final joinInviteToken = _joinInviteToken(routeName);
+        if (joinInviteToken != null) {
+          return MaterialPageRoute<void>(
+            builder: (_) => JoinGroupPage(initialInviteToken: joinInviteToken),
+            settings: settings,
+          );
+        }
+
+        switch (routeName) {
           case HomePage.routeName:
             return MaterialPageRoute<void>(
               builder: (_) => const HomePage(),
@@ -132,5 +141,15 @@ class GuruMeetApp extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String? _joinInviteToken(String routeName) {
+    final uri = Uri.tryParse(routeName);
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (segments.length == 2 && segments.first == 'join') {
+      final token = Uri.decodeComponent(segments.last).trim();
+      return token.isEmpty ? null : token;
+    }
+    return null;
   }
 }

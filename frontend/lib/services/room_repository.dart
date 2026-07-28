@@ -240,10 +240,19 @@ class ApiRoomRepository implements RoomRepository {
 
   @override
   Future<GroupCreationDraft> joinRoom({required String code}) async {
-    final json = await _apiClient.postJson(
-      '/temporary-groups/join',
-      body: {'code': code, 'participant_token': _participantToken},
-    );
+    final inviteToken = code.trim();
+    final json = _isUuid(inviteToken)
+        ? await _apiClient.postJson(
+            '/temporary-groups/$inviteToken/participants',
+            body: {'participant_token': _participantToken},
+          )
+        : await _apiClient.postJson(
+            '/temporary-groups/join',
+            body: {
+              'code': inviteToken.toUpperCase(),
+              'participant_token': _participantToken,
+            },
+          );
     final roomId = json['id'] as String;
     final detail = await _apiClient.getJson('/temporary-groups/$roomId');
     return GroupCreationDraft.fromApi(
@@ -257,6 +266,12 @@ class ApiRoomRepository implements RoomRepository {
       ),
       isHost: false,
     );
+  }
+
+  bool _isUuid(String value) {
+    return RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    ).hasMatch(value);
   }
 
   @override

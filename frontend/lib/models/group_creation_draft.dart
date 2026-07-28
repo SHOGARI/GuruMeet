@@ -1,4 +1,5 @@
 import '../core/demo_config.dart';
+import '../core/invite_config.dart';
 
 class GroupCreationDraft {
   const GroupCreationDraft({
@@ -82,7 +83,8 @@ class GroupCreationDraft {
   final bool isHost;
   final String? roomId;
 
-  String get inviteUrl => 'https://gurumeet.app/join/${roomId ?? groupId}';
+  String get inviteToken => roomId ?? groupId;
+  String get inviteUrl => '${InviteConfig.baseUrl}/#/join/$inviteToken';
 }
 
 enum BudgetOption {

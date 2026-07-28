@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/group_creation_draft.dart';
 import '../theme/app_tokens.dart';
@@ -280,7 +281,7 @@ class _InvitationPanel extends StatelessWidget {
               final isWide =
                   constraints.maxWidth > AppBreakpoints.stackedActions;
               final codeBox = _CodeBox(draft: draft);
-              final qrCode = _MockQrCode(value: draft.groupId);
+              final qrCode = _InviteQrCode(value: draft.inviteUrl);
 
               if (isWide) {
                 return Row(
@@ -389,8 +390,8 @@ class _CodeBox extends StatelessWidget {
   }
 }
 
-class _MockQrCode extends StatelessWidget {
-  const _MockQrCode({required this.value});
+class _InviteQrCode extends StatelessWidget {
+  const _InviteQrCode({required this.value});
 
   final String value;
 
@@ -399,7 +400,7 @@ class _MockQrCode extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Semantics(
-      label: '$value のモックQRコード',
+      label: '$value の招待QRコード',
       child: Container(
         width: AppSizes.qrCodeSize,
         height: AppSizes.qrCodeSize,
@@ -408,32 +409,20 @@ class _MockQrCode extends StatelessWidget {
           color: colors.surface,
           borderRadius: BorderRadius.circular(AppRadius.small),
         ),
-        child: GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
+        child: QrImageView(
+          data: value,
+          version: QrVersions.auto,
+          gapless: false,
           padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
+          backgroundColor: colors.surface,
+          eyeStyle: QrEyeStyle(
+            eyeShape: QrEyeShape.square,
+            color: colors.onSurface,
           ),
-          itemCount: 49,
-          itemBuilder: (context, index) {
-            final seed = value.codeUnitAt(index % value.length);
-            final isFilled =
-                index < 8 ||
-                index > 40 ||
-                index % 7 == 0 ||
-                (seed + index).isEven;
-            return Padding(
-              padding: const EdgeInsets.all(1.6),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isFilled
-                      ? colors.onSurface
-                      : colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            );
-          },
+          dataModuleStyle: QrDataModuleStyle(
+            dataModuleShape: QrDataModuleShape.square,
+            color: colors.onSurface,
+          ),
         ),
       ),
     );

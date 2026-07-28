@@ -38,6 +38,7 @@ dependencies:
   geocoding: ^5.0.0
   http: ^1.2.2
   url_launcher: ^6.3.2
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
