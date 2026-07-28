@@ -3,11 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../core/demo_config.dart';
 import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../models/room_member.dart';
-import '../services/mock_room_service.dart';
+import '../services/room_repository.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/restaurant_image.dart';
@@ -25,24 +24,26 @@ class SwipePage extends StatefulWidget {
 }
 
 class _SwipePageState extends State<SwipePage> {
-  static const _roomService = MockRoomService();
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
 
   int _currentIndex = 0;
-  final Map<String, int> _likeCounts = {};
-  final Map<String, int> _rejectCounts = {};
+  final List<VoteChoice> _localChoices = [];
   _SwipeChoice? _lastChoice;
   RestaurantMatchResult? _matchResult;
+  List<RestaurantPreview> _restaurants = const [];
   List<RoomMember> _votingMembers = const [];
   int _restoredPhotoIndex = 0;
+  bool _isLoadingRestaurants = true;
   bool _isResolvingChoice = false;
   bool _isComplete = false;
   bool _isOpeningResult = false;
   bool _isOpeningMaps = false;
+  String? _restaurantLoadError;
   Timer? _completionTimer;
 
-  RestaurantPreview get _currentRestaurant => mockRestaurants[_currentIndex];
+  RestaurantPreview get _currentRestaurant => _restaurants[_currentIndex];
   int get _remainingCount =>
-      _isComplete ? 0 : mockRestaurants.length - _currentIndex;
+      _isComplete ? 0 : _restaurants.length - _currentIndex;
   int get _completedVotingCount =>
       _votingMembers.where((member) => member.hasCompletedVoting).length;
   bool get _isAllVotingComplete =>
@@ -50,32 +51,59 @@ class _SwipePageState extends State<SwipePage> {
       _completedVotingCount == _votingMembers.length;
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_loadRestaurants());
+  }
+
+  @override
   void dispose() {
     _completionTimer?.cancel();
     super.dispose();
   }
 
-  void _chooseRestaurant({required bool liked, required int photoIndex}) {
+  Future<void> _loadRestaurants() async {
+    setState(() {
+      _isLoadingRestaurants = true;
+      _restaurantLoadError = null;
+    });
+    try {
+      final restaurants = await _roomRepository.getRestaurantCandidates(
+        widget.draft,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _restaurants = restaurants;
+        _isLoadingRestaurants = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingRestaurants = false;
+        _restaurantLoadError = '店舗候補を取得できませんでした';
+      });
+    }
+  }
+
+  Future<void> _chooseRestaurant({
+    required bool liked,
+    required int photoIndex,
+  }) async {
     if (_isResolvingChoice ||
         _isComplete ||
-        _currentIndex >= mockRestaurants.length) {
+        _currentIndex >= _restaurants.length) {
       return;
     }
     setState(() => _isResolvingChoice = true);
     final currentRestaurant = _currentRestaurant;
-    if (liked) {
-      _likeCounts.update(
-        currentRestaurant.id,
-        (count) => count + 1,
-        ifAbsent: () => 1,
-      );
-    } else {
-      _rejectCounts.update(
-        currentRestaurant.id,
-        (count) => count + 1,
-        ifAbsent: () => 1,
-      );
-    }
+    final voteChoice = VoteChoice(
+      restaurantId: currentRestaurant.id,
+      liked: liked,
+    );
     final choice = _SwipeChoice(
       restaurantIndex: _currentIndex,
       restaurantId: currentRestaurant.id,
@@ -83,14 +111,35 @@ class _SwipePageState extends State<SwipePage> {
       photoIndex: photoIndex,
     );
 
-    if (_currentIndex == mockRestaurants.length - 1) {
-      final matchResult = _resolveMatch(fallback: currentRestaurant);
+    try {
+      await _roomRepository.submitVote(draft: widget.draft, choice: voteChoice);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isResolvingChoice = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('投票を送信できませんでした')));
+      return;
+    }
+
+    _localChoices.add(voteChoice);
+
+    if (_currentIndex == _restaurants.length - 1) {
+      final matchResult = await _roomRepository.getResult(
+        draft: widget.draft,
+        restaurants: _restaurants,
+        localChoices: _localChoices,
+      );
+      final votingStatus = await _roomRepository.getVotingStatus(widget.draft);
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _lastChoice = choice;
         _matchResult = matchResult;
-        _votingMembers = _roomService.initialVotingMembers(
-          peopleCount: widget.draft.peopleCount,
-        );
+        _votingMembers = votingStatus.members;
         _restoredPhotoIndex = 0;
         _isComplete = true;
         _isResolvingChoice = false;
@@ -127,13 +176,12 @@ class _SwipePageState extends State<SwipePage> {
   }
 
   void _removeLocalVote(_SwipeChoice choice) {
-    final targetMap = choice.liked ? _likeCounts : _rejectCounts;
-    final currentCount = targetMap[choice.restaurantId] ?? 0;
-    if (currentCount <= 1) {
-      targetMap.remove(choice.restaurantId);
-      return;
+    final lastIndex = _localChoices.lastIndexWhere(
+      (vote) => vote.restaurantId == choice.restaurantId,
+    );
+    if (lastIndex != -1) {
+      _localChoices.removeAt(lastIndex);
     }
-    targetMap[choice.restaurantId] = currentCount - 1;
   }
 
   void _openResult() {
@@ -163,13 +211,28 @@ class _SwipePageState extends State<SwipePage> {
         _completionTimer?.cancel();
         return;
       }
-      setState(() {
-        _votingMembers = _roomService.completeNextVotingMember(_votingMembers);
-      });
-      if (_isAllVotingComplete) {
+      unawaited(_loadVotingStatus());
+    });
+  }
+
+  Future<void> _loadVotingStatus() async {
+    try {
+      final status = await _roomRepository.getVotingStatus(widget.draft);
+      if (!mounted) {
+        return;
+      }
+      setState(() => _votingMembers = status.members);
+      if (status.isComplete) {
         _completionTimer?.cancel();
       }
-    });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('投票状況を取得できませんでした')));
+    }
   }
 
   Future<void> _showRestaurantDetails(RestaurantPreview restaurant) async {
@@ -212,83 +275,6 @@ class _SwipePageState extends State<SwipePage> {
     }
   }
 
-  RestaurantMatchResult _resolveMatch({required RestaurantPreview fallback}) {
-    if (DemoConfig.isDemoMode) {
-      return _resolveDemoMatch();
-    }
-
-    final simulatedLikes = _simulateGroupVotes();
-    final results = <RestaurantVoteResult>[];
-    RestaurantVoteResult? matchedResult;
-    var highestLikeCount = -1;
-
-    for (final restaurant in mockRestaurants) {
-      final yourLikeCount = _likeCounts[restaurant.id] ?? 0;
-      final otherLikeCount = simulatedLikes[restaurant.id] ?? 0;
-      final likeCount = yourLikeCount + otherLikeCount;
-      final rejectCount = widget.draft.peopleCount - likeCount;
-      final result = RestaurantVoteResult(
-        restaurant: restaurant,
-        likeCount: likeCount,
-        rejectCount: rejectCount,
-      );
-      results.add(result);
-
-      if (likeCount > highestLikeCount) {
-        highestLikeCount = likeCount;
-        matchedResult = result;
-      }
-    }
-
-    return RestaurantMatchResult(
-      restaurant: matchedResult?.restaurant ?? fallback,
-      results: results,
-      peopleCount: widget.draft.peopleCount,
-    );
-  }
-
-  RestaurantMatchResult _resolveDemoMatch() {
-    final results = <RestaurantVoteResult>[];
-    for (var index = 0; index < mockRestaurants.length; index++) {
-      final restaurant = mockRestaurants[index];
-      final likeCount = switch (index) {
-        0 => widget.draft.peopleCount,
-        1 => (widget.draft.peopleCount - 1).clamp(0, widget.draft.peopleCount),
-        2 => (widget.draft.peopleCount - 2).clamp(0, widget.draft.peopleCount),
-        _ => (widget.draft.peopleCount - 3).clamp(0, widget.draft.peopleCount),
-      };
-      results.add(
-        RestaurantVoteResult(
-          restaurant: restaurant,
-          likeCount: likeCount,
-          rejectCount: widget.draft.peopleCount - likeCount,
-        ),
-      );
-    }
-
-    return RestaurantMatchResult(
-      restaurant: mockRestaurants.first,
-      results: results,
-      peopleCount: widget.draft.peopleCount,
-    );
-  }
-
-  Map<String, int> _simulateGroupVotes() {
-    final otherPeopleCount = (widget.draft.peopleCount - 1).clamp(0, 99);
-    final votes = {for (final restaurant in mockRestaurants) restaurant.id: 0};
-    for (var person = 0; person < otherPeopleCount; person++) {
-      for (var index = 0; index < mockRestaurants.length; index++) {
-        final restaurant = mockRestaurants[index];
-        final likes =
-            (person + index + widget.draft.groupId.codeUnitAt(0)) % 3 != 0;
-        if (likes) {
-          votes.update(restaurant.id, (count) => count + 1);
-        }
-      }
-    }
-    return votes;
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -305,32 +291,30 @@ class _SwipePageState extends State<SwipePage> {
               Expanded(
                 child: Text('食べたい？', style: theme.textTheme.headlineMedium),
               ),
-              _RemainingBadge(
-                remainingCount: _remainingCount,
-                totalCount: mockRestaurants.length,
-              ),
+              if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
+                _RemainingBadge(
+                  remainingCount: _remainingCount,
+                  totalCount: _restaurants.length,
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.small),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            child: LinearProgressIndicator(
-              minHeight: AppSizes.progressIndicatorHeight,
-              value: _isComplete
-                  ? 1
-                  : (_currentIndex + 1) / mockRestaurants.length,
-              backgroundColor: colors.surfaceContainerHigh,
+          if (_isLoadingRestaurants)
+            const LinearProgressIndicator()
+          else if (_restaurants.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              child: LinearProgressIndicator(
+                minHeight: AppSizes.progressIndicatorHeight,
+                value: _isComplete
+                    ? 1
+                    : (_currentIndex + 1) / _restaurants.length,
+                backgroundColor: colors.surfaceContainerHigh,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.medium),
-          Text(
-            'あなたのスマホで選択中  ·  終わったら全員分を集計します',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.primary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xLarge),
+          const SizedBox(height: AppSpacing.regular),
+          const _SwipeHelpText(),
+          const SizedBox(height: AppSpacing.regular),
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(
@@ -340,7 +324,30 @@ class _SwipePageState extends State<SwipePage> {
                 duration: AppMotion.medium,
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeOutCubic,
-                child: _isComplete
+                child: _isLoadingRestaurants
+                    ? const _SwipeNoticeCard(
+                        key: ValueKey('restaurant-loading'),
+                        icon: Icons.restaurant_menu_rounded,
+                        title: '店舗候補を探しています',
+                        message: '条件に合うお店を読み込んでいます。',
+                      )
+                    : _restaurantLoadError != null
+                    ? _SwipeNoticeCard(
+                        key: const ValueKey('restaurant-error'),
+                        icon: Icons.error_outline_rounded,
+                        title: '読み込みに失敗しました',
+                        message: _restaurantLoadError!,
+                        actionLabel: '再読み込み',
+                        onAction: () => unawaited(_loadRestaurants()),
+                      )
+                    : _restaurants.isEmpty
+                    ? const _SwipeNoticeCard(
+                        key: ValueKey('restaurant-empty'),
+                        icon: Icons.search_off_rounded,
+                        title: '候補が見つかりませんでした',
+                        message: 'エリアや予算を変えてもう一度作成してください。',
+                      )
+                    : _isComplete
                     ? _CompletionCard(
                         key: const ValueKey('swipe-complete'),
                         members: _votingMembers,
@@ -363,7 +370,7 @@ class _SwipePageState extends State<SwipePage> {
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.large),
+          const SizedBox(height: AppSpacing.regular),
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(
@@ -444,12 +451,110 @@ class _SwipeFooterActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: OutlinedButton.icon(
-        onPressed: canUndo ? onUndo : null,
-        icon: const Icon(Icons.undo_rounded),
-        label: const Text('Undo'),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: canUndo ? onUndo : null,
+          icon: const Icon(Icons.undo_rounded),
+          label: const Text('ひとつ戻す'),
+        ),
+        const SizedBox(height: AppSpacing.micro),
+        Text(
+          canUndo ? '直前の選択を取り消せます' : '選ぶと、ここから1回だけ戻せます',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SwipeHelpText extends StatelessWidget {
+  const _SwipeHelpText();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        Icon(Icons.swipe_rounded, color: colors.primary, size: 18),
+        const SizedBox(width: AppSpacing.small),
+        Expanded(
+          child: Text(
+            '右で食べたい、左で見送り',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.primary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Text(
+          '写真は左右タップ',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SwipeNoticeCard extends StatelessWidget {
+  const _SwipeNoticeCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.large),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 40, color: colors.primary),
+          const SizedBox(height: AppSpacing.medium),
+          Text(title, style: theme.textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.small),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          if (actionLabel case final label?) ...[
+            const SizedBox(height: AppSpacing.medium),
+            FilledButton.tonal(onPressed: onAction, child: Text(label)),
+          ],
+        ],
       ),
     );
   }
@@ -1035,7 +1140,7 @@ class _CardSurface extends StatelessWidget {
           shadowColor: colors.shadow,
           clipBehavior: Clip.antiAlias,
           child: AspectRatio(
-            aspectRatio: 4 / 5,
+            aspectRatio: 9 / 12,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1103,7 +1208,7 @@ class _CardSurface extends StatelessWidget {
                 Positioned(
                   left: AppSpacing.xLarge,
                   right: AppSpacing.xLarge,
-                  bottom: 148,
+                  bottom: 118,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -1133,7 +1238,7 @@ class _CardSurface extends StatelessWidget {
                           _InfoPill(label: restaurant.budget),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.regular),
+                      const SizedBox(height: AppSpacing.small),
                       Text(
                         restaurant.description,
                         maxLines: 1,
@@ -1149,7 +1254,7 @@ class _CardSurface extends StatelessWidget {
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: 96,
+                  bottom: 72,
                   child: Center(
                     child: TextButton.icon(
                       onPressed: isResolvingChoice ? null : onShowDetails,
@@ -1169,7 +1274,7 @@ class _CardSurface extends StatelessWidget {
                 Positioned(
                   left: AppSpacing.xLarge,
                   right: AppSpacing.xLarge,
-                  bottom: AppSpacing.xLarge,
+                  bottom: AppSpacing.regular,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1325,7 +1430,7 @@ class _SwipeActionButton extends StatelessWidget {
           disabledForegroundColor: foregroundColor.withValues(alpha: 0.52),
           shape: const CircleBorder(),
         ),
-        iconSize: AppSizes.iconLarge,
+        iconSize: 28,
         icon: Icon(icon),
       ),
     );

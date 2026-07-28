@@ -3,6 +3,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/group_creation_draft.dart';
+import '../services/room_repository.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
@@ -17,6 +18,7 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
   final _formKey = GlobalKey<FormState>();
   final _areaController = TextEditingController();
   final _areaFocusNode = FocusNode();
@@ -60,22 +62,29 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
     setState(() => _isSubmitting = true);
     FocusManager.instance.primaryFocus?.unfocus();
-    await Future<void>.delayed(AppMotion.quick);
-    if (!mounted) {
-      return;
-    }
-
-    final draft = GroupCreationDraft.createMock(
-      peopleCount: _peopleCount,
-      area: _areaController.text.trim(),
-      budget: selectedBudget,
-    );
-
-    await Navigator.of(
-      context,
-    ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
-    if (mounted) {
-      setState(() => _isSubmitting = false);
+    try {
+      final draft = await _roomRepository.createRoom(
+        peopleCount: _peopleCount,
+        area: _areaController.text.trim(),
+        budget: selectedBudget,
+      );
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(
+        context,
+      ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('グループ作成に失敗しました')));
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -303,15 +312,15 @@ class _CreateGroupForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('今夜の集合を\nつくろう。', style: theme.textTheme.headlineLarge),
-          const SizedBox(height: AppSpacing.regular),
+          Text('集合をつくる', style: theme.textTheme.headlineLarge),
+          const SizedBox(height: AppSpacing.small),
           Text(
-            '人数、場所、予算。決まったらすぐ招待できます。',
+            '人数・場所・予算を決めたら、すぐ招待できます。',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '01',
             title: '何人で行く？',
@@ -321,7 +330,7 @@ class _CreateGroupForm extends StatelessWidget {
               onIncrease: onIncreasePeople,
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '02',
             title: 'どのあたり？',
@@ -358,7 +367,7 @@ class _CreateGroupForm extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '03',
             title: '予算はどれくらい？',

@@ -8,15 +8,15 @@ class HeroCardStack extends StatelessWidget {
   const HeroCardStack({super.key});
 
   static const double _stackHeight = 456;
-  static const double _compactStackHeight = 332;
+  static const double _compactStackHeight = 268;
   static const double _frontCardHeight = 408;
-  static const double _compactFrontCardHeight = 304;
-  static const double _cardWidthFactor = 0.92;
-  static const double _minimumCardWidth = 292;
+  static const double _compactFrontCardHeight = 252;
+  static const double _cardWidthFactor = 0.86;
+  static const double _minimumCardWidth = 268;
   static const double _maximumCardWidth = 486;
   static const double _middleCardScale = 0.94;
   static const double _backCardScale = 0.87;
-  static const double _sideOffsetFactor = 0.12;
+  static const double _sideOffsetFactor = 0.1;
   static const double _minimumSideOffset = 28;
   static const double _maximumSideOffset = 58;
   static const double _gentleRotation = 0.072;
@@ -64,7 +64,7 @@ class HeroCardStack extends StatelessWidget {
                 preview: mockRestaurants[3],
                 width: cardWidth * _backCardScale,
                 height: frontCardHeight * 0.9,
-                offset: Offset(-sideOffset, AppSpacing.xxLarge),
+                offset: Offset(-sideOffset, AppSpacing.large),
                 rotation: -_gentleRotation,
                 muted: true,
               ),
@@ -72,7 +72,7 @@ class HeroCardStack extends StatelessWidget {
                 preview: mockRestaurants[1],
                 width: cardWidth * _middleCardScale,
                 height: frontCardHeight * 0.96,
-                offset: Offset(sideOffset, AppSpacing.large),
+                offset: Offset(sideOffset, AppSpacing.regular),
                 rotation: _gentleRotation,
                 muted: true,
               ),
@@ -139,7 +139,7 @@ class _RestaurantCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: muted ? 1 : 8,
+                  flex: muted ? 1 : 7,
                   child: RestaurantImage(
                     imageUrl: preview.imageUrl,
                     semanticLabel: '${preview.name}の料理写真',
@@ -147,13 +147,13 @@ class _RestaurantCard extends StatelessWidget {
                 ),
                 if (!muted)
                   Expanded(
-                    flex: 4,
+                    flex: 3,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.large,
                         AppSpacing.medium,
-                        AppSpacing.large,
-                        AppSpacing.large,
+                        AppSpacing.small,
+                        AppSpacing.medium,
+                        AppSpacing.small,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,16 +163,17 @@ class _RestaurantCard extends StatelessWidget {
                             preview.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge?.copyWith(
+                            style: theme.textTheme.titleMedium?.copyWith(
                               letterSpacing: 0,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.small),
+                          const SizedBox(height: AppSpacing.micro),
                           Text(
                             '${preview.area}  ·  ${preview.budget}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: colors.onSurfaceVariant,
                               fontWeight: FontWeight.w700,
                             ),

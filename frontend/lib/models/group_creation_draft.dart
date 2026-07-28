@@ -6,6 +6,7 @@ class GroupCreationDraft {
     required this.area,
     required this.budget,
     required this.groupId,
+    this.roomId,
   });
 
   factory GroupCreationDraft.createMock({
@@ -19,14 +20,15 @@ class GroupCreationDraft {
         area: area,
         budget: budget,
         groupId: DemoConfig.roomCode,
+        roomId: null,
       );
     }
 
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     var value = DateTime.now().microsecondsSinceEpoch;
     final characters = <String>[];
 
-    for (var index = 0; index < 4; index++) {
+    for (var index = 0; index < 5; index++) {
       characters.add(alphabet[value % alphabet.length]);
       value ~/= alphabet.length;
     }
@@ -37,6 +39,7 @@ class GroupCreationDraft {
       area: area,
       budget: budget,
       groupId: groupCode,
+      roomId: null,
     );
   }
 
@@ -46,6 +49,23 @@ class GroupCreationDraft {
       area: '新宿',
       budget: BudgetOption.from2000To3000,
       groupId: groupId.toUpperCase(),
+      roomId: null,
+    );
+  }
+
+  factory GroupCreationDraft.fromApi({
+    required String roomId,
+    required String groupId,
+    required int peopleCount,
+    required String area,
+    required BudgetOption budget,
+  }) {
+    return GroupCreationDraft(
+      peopleCount: peopleCount,
+      area: area,
+      budget: budget,
+      groupId: groupId.toUpperCase(),
+      roomId: roomId,
     );
   }
 
@@ -53,18 +73,30 @@ class GroupCreationDraft {
   final String area;
   final BudgetOption budget;
   final String groupId;
+  final String? roomId;
 
-  String get inviteUrl => 'https://gurumeet.app/join/$groupId';
+  String get inviteUrl => 'https://gurumeet.app/join/${roomId ?? groupId}';
 }
 
 enum BudgetOption {
-  under1000('1,000円以下'),
-  from1000To2000('1,000〜2,000円'),
-  from2000To3000('2,000〜3,000円'),
-  from3000To5000('3,000〜5,000円'),
-  over5000('5,000円以上');
+  under1000('1,000円以下', null, 1000),
+  from1000To2000('1,000〜2,000円', 1000, 2000),
+  from2000To3000('2,000〜3,000円', 2000, 3000),
+  from3000To5000('3,000〜5,000円', 3000, 5000),
+  over5000('5,000円以上', 5000, null);
 
-  const BudgetOption(this.label);
+  const BudgetOption(this.label, this.minAmount, this.maxAmount);
+
+  factory BudgetOption.fromRange({int? minAmount, int? maxAmount}) {
+    for (final option in values) {
+      if (option.minAmount == minAmount && option.maxAmount == maxAmount) {
+        return option;
+      }
+    }
+    return BudgetOption.from2000To3000;
+  }
 
   final String label;
+  final int? minAmount;
+  final int? maxAmount;
 }

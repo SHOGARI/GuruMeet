@@ -46,8 +46,8 @@ class _HomePageState extends State<HomePage> {
     final screenWidth = screenSize.width;
     final isDesktop = screenWidth >= 900;
     final verticalGap = screenSize.height < 860
-        ? AppSpacing.section
-        : AppSpacing.hero;
+        ? AppSpacing.large
+        : AppSpacing.xxLarge;
     final headlineStyle = screenWidth < AppBreakpoints.compact
         ? theme.textTheme.headlineLarge
         : theme.textTheme.displaySmall;
@@ -79,7 +79,7 @@ class _HomePageState extends State<HomePage> {
                 letterSpacing: AppSizes.codeLabelLetterSpacing,
               ),
             ),
-            SizedBox(height: isDesktop ? AppSpacing.xxLarge : verticalGap),
+            SizedBox(height: isDesktop ? AppSpacing.xxLarge : AppSpacing.large),
             if (isDesktop)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -99,7 +99,7 @@ class _HomePageState extends State<HomePage> {
               _HomeIntroText(headlineStyle: headlineStyle),
               SizedBox(height: verticalGap),
               const HeroCardStack(),
-              SizedBox(height: verticalGap),
+              const SizedBox(height: AppSpacing.large),
               _HomeActions(
                 onCreateGroup: _isNavigating ? null : _openCreateGroup,
                 onJoinGroup: _isNavigating ? null : _openJoinGroup,
@@ -158,12 +158,12 @@ class _HomeIntroText extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('今日、どこ食べに行く？', style: headlineStyle?.copyWith(letterSpacing: 0)),
-        const SizedBox(height: AppSpacing.regular),
+        Text('今日どこ行く？', style: headlineStyle?.copyWith(letterSpacing: 0)),
+        const SizedBox(height: AppSpacing.small),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
+          constraints: const BoxConstraints(maxWidth: 340),
           child: Text(
-            'みんなでスワイプして、行きたい店を決めよう。',
+            '友だちと候補を見て、直感で選ぶ。',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colors.onSurfaceVariant,
             ),
@@ -210,7 +210,7 @@ class _HomeActions extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.medium),
             Text(
-              '招待された方は、共有されたURLまたはコードから参加できます',
+              '共有されたURLまたはコードから参加できます',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,

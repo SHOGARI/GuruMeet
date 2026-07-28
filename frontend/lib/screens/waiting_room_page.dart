@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/group_creation_draft.dart';
 import '../models/room_member.dart';
-import '../services/mock_room_service.dart';
+import '../services/room_repository.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'swipe_page.dart';
@@ -22,11 +22,13 @@ class WaitingRoomPage extends StatefulWidget {
 }
 
 class _WaitingRoomPageState extends State<WaitingRoomPage> {
-  static const _roomService = MockRoomService();
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
 
-  late List<RoomMember> _members;
+  List<RoomMember> _members = const [];
   Timer? _joinTimer;
   bool _isNavigating = false;
+  bool _isLoadingMembers = true;
+  String? _memberLoadError;
 
   bool get _isHost => _members.any((member) => member.isHost);
   bool get _isRoomReady =>
@@ -36,11 +38,9 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   @override
   void initState() {
     super.initState();
-    _members = _roomService.initialWaitingMembers(
-      peopleCount: widget.draft.peopleCount,
-    );
+    unawaited(_loadMembers());
     _joinTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      _addDemoMember();
+      unawaited(_loadMembers(showLoading: false));
     });
   }
 
@@ -50,19 +50,38 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     super.dispose();
   }
 
-  void _addDemoMember() {
+  Future<void> _loadMembers({bool showLoading = true}) async {
     if (!mounted) {
       return;
     }
-    final nextMember = _roomService.nextWaitingMember(
-      currentMembers: _members,
-      peopleCount: widget.draft.peopleCount,
-    );
-    if (nextMember == null) {
-      _joinTimer?.cancel();
-      return;
+    if (showLoading) {
+      setState(() {
+        _isLoadingMembers = true;
+        _memberLoadError = null;
+      });
     }
-    setState(() => _members = [..._members, nextMember]);
+    try {
+      final members = await _roomRepository.getMembers(widget.draft);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _members = members;
+        _isLoadingMembers = false;
+        _memberLoadError = null;
+      });
+      if (_isRoomReady) {
+        _joinTimer?.cancel();
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingMembers = false;
+        _memberLoadError = 'メンバー情報を取得できませんでした';
+      });
+    }
   }
 
   Future<void> _startSwipe() async {
@@ -70,11 +89,25 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       return;
     }
     setState(() => _isNavigating = true);
-    await Navigator.of(
-      context,
-    ).pushNamed(SwipePage.routeName, arguments: widget.draft);
-    if (mounted) {
-      setState(() => _isNavigating = false);
+    try {
+      await _roomRepository.startVoting(widget.draft);
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(
+        context,
+      ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('投票を開始できませんでした')));
+    } finally {
+      if (mounted) {
+        setState(() => _isNavigating = false);
+      }
     }
   }
 
@@ -101,9 +134,9 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             horizontalPadding,
-            AppSpacing.large,
+            AppSpacing.regular,
             horizontalPadding,
-            AppSpacing.large,
+            AppSpacing.regular,
           ),
           child: Center(
             child: ConstrainedBox(
@@ -124,14 +157,17 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                             joinedCount: _members.length,
                             onCopyRoomCode: _copyRoomCode,
                           ),
-                          const SizedBox(height: AppSpacing.section),
+                          const SizedBox(height: AppSpacing.large),
                           _MemberList(
                             members: _members,
                             peopleCount: widget.draft.peopleCount,
+                            isLoading: _isLoadingMembers,
+                            errorMessage: _memberLoadError,
+                            onRetry: () => unawaited(_loadMembers()),
                           ),
-                          const SizedBox(height: AppSpacing.large),
+                          const SizedBox(height: AppSpacing.medium),
                           _WaitingNote(isReady: _isRoomReady),
-                          const SizedBox(height: AppSpacing.section),
+                          const SizedBox(height: AppSpacing.large),
                         ],
                       ),
                     ),
@@ -178,7 +214,7 @@ class _RoomCodePanel extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xLarge),
+      padding: const EdgeInsets.all(AppSpacing.medium),
       decoration: BoxDecoration(
         color: colors.primary,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -194,23 +230,24 @@ class _RoomCodePanel extends StatelessWidget {
               letterSpacing: AppSizes.codeLabelLetterSpacing,
             ),
           ),
-          const SizedBox(height: AppSpacing.regular),
+          const SizedBox(height: AppSpacing.small),
           Text(
             'ルームコード',
             style: theme.textTheme.titleMedium?.copyWith(
               color: colors.onPrimary.withValues(alpha: 0.82),
             ),
           ),
-          const SizedBox(height: AppSpacing.small),
+          const SizedBox(height: AppSpacing.micro),
           SelectableText(
             draft.groupId,
             style: theme.textTheme.displaySmall?.copyWith(
               color: colors.onPrimary,
               letterSpacing: AppSizes.groupCodeLetterSpacing,
-              height: 1,
+              height: 0.95,
+              fontSize: 42,
             ),
           ),
-          const SizedBox(height: AppSpacing.large),
+          const SizedBox(height: AppSpacing.regular),
           LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 270;
@@ -226,7 +263,7 @@ class _RoomCodePanel extends StatelessWidget {
                 alignment: isNarrow ? Alignment.centerLeft : Alignment.center,
                 child: _QrPlaceholder(
                   code: draft.groupId,
-                  size: constraints.maxWidth < 360 ? 104 : AppSizes.qrCodeSize,
+                  size: constraints.maxWidth < 360 ? 92 : 108,
                 ),
               );
 
@@ -250,14 +287,14 @@ class _RoomCodePanel extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AppSpacing.medium),
+          const SizedBox(height: AppSpacing.small),
           Text(
             '$joinedCount / ${draft.peopleCount}人',
             style: theme.textTheme.titleMedium?.copyWith(
               color: colors.onPrimary.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: AppSpacing.regular),
+          const SizedBox(height: AppSpacing.micro),
           SelectableText(
             draft.inviteUrl,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -313,10 +350,19 @@ class _QrPlaceholder extends StatelessWidget {
 }
 
 class _MemberList extends StatelessWidget {
-  const _MemberList({required this.members, required this.peopleCount});
+  const _MemberList({
+    required this.members,
+    required this.peopleCount,
+    required this.isLoading,
+    required this.errorMessage,
+    required this.onRetry,
+  });
 
   final List<RoomMember> members;
   final int peopleCount;
+  final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -326,7 +372,26 @@ class _MemberList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('参加メンバー', style: theme.textTheme.titleLarge),
-        const SizedBox(height: AppSpacing.medium),
+        const SizedBox(height: AppSpacing.regular),
+        if (isLoading) ...[
+          const LinearProgressIndicator(),
+          const SizedBox(height: AppSpacing.regular),
+        ],
+        if (errorMessage case final message?) ...[
+          _InlineNotice(
+            icon: Icons.error_outline_rounded,
+            message: message,
+            actionLabel: '再読み込み',
+            onAction: onRetry,
+          ),
+          const SizedBox(height: AppSpacing.regular),
+        ] else if (!isLoading && members.isEmpty) ...[
+          const _InlineNotice(
+            icon: Icons.people_outline_rounded,
+            message: 'まだ参加者がいません',
+          ),
+          const SizedBox(height: AppSpacing.regular),
+        ],
         AnimatedListLikeColumn(
           children: List.generate(peopleCount, (index) {
             final member = index < members.length ? members[index] : null;
@@ -338,6 +403,54 @@ class _MemberList extends StatelessWidget {
           }),
         ),
       ],
+    );
+  }
+}
+
+class _InlineNotice extends StatelessWidget {
+  const _InlineNotice({
+    required this.icon,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.regular),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: colors.onSurfaceVariant),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          if (actionLabel case final label?) ...[
+            const SizedBox(width: AppSpacing.small),
+            TextButton(onPressed: onAction, child: Text(label)),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -354,7 +467,7 @@ class AnimatedListLikeColumn extends StatelessWidget {
         for (var index = 0; index < children.length; index++)
           Padding(
             padding: EdgeInsets.only(
-              bottom: index == children.length - 1 ? 0 : AppSpacing.regular,
+              bottom: index == children.length - 1 ? 0 : AppSpacing.small,
             ),
             child: AnimatedSwitcher(
               duration: AppMotion.medium,
@@ -393,7 +506,10 @@ class _MemberTile extends StatelessWidget {
     final isJoined = activeMember != null;
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.medium),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.medium,
+        vertical: AppSpacing.regular,
+      ),
       decoration: BoxDecoration(
         color: isJoined
             ? colors.surfaceContainerLowest

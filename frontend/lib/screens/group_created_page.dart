@@ -66,19 +66,19 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const _SuccessMark(),
-                            const SizedBox(height: AppSpacing.large),
+                            const SizedBox(height: AppSpacing.medium),
                             Text(
-                              'グループを作成しました。\n招待を送ろう。',
+                              '招待を送ろう',
                               style: theme.textTheme.headlineMedium,
                             ),
                             const SizedBox(height: AppSpacing.small),
                             Text(
-                              'このリンクを参加者へ送ってください。',
+                              'ルームコードかURLを共有して、参加者を待ちます。',
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: colors.onSurfaceVariant,
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.section),
+                            const SizedBox(height: AppSpacing.xLarge),
                             _InvitationPanel(
                               draft: widget.draft,
                               onCopyUrl: () => _copyUrl(context),
@@ -107,7 +107,7 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                                       message: _copyFeedback!,
                                     ),
                             ),
-                            const SizedBox(height: AppSpacing.xxLarge),
+                            const SizedBox(height: AppSpacing.xLarge),
                             _GroupSummary(draft: widget.draft),
                           ],
                         ),

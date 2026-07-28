@@ -4,5 +4,5 @@ abstract final class DemoConfig {
     defaultValue: true,
   );
 
-  static const String roomCode = 'DEMO';
+  static const String roomCode = 'G7M24';
 }

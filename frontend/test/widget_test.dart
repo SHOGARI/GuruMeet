@@ -6,15 +6,15 @@ import 'package:gurumeet/models/restaurant_preview.dart';
 import 'package:gurumeet/screens/match_page.dart';
 
 void main() {
-  test('mock group code uses four uppercase letters', () {
+  test('mock group code uses five uppercase alphanumeric characters', () {
     final draft = GroupCreationDraft.createMock(
       peopleCount: 4,
       area: '渋谷',
       budget: BudgetOption.from2000To3000,
     );
 
-    expect(draft.groupId, matches(RegExp(r'^[A-Z]{4}$')));
-    expect(draft.groupId, 'DEMO');
+    expect(draft.groupId, matches(RegExp(r'^[A-Z0-9]{5}$')));
+    expect(draft.groupId, 'G7M24');
     expect(draft.inviteUrl, 'https://gurumeet.app/join/${draft.groupId}');
   });
 
@@ -80,15 +80,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('招待'), findsOneWidget);
-    expect(find.text('グループを作成しました。\n招待を送ろう。'), findsOneWidget);
+    expect(find.text('招待を送ろう'), findsOneWidget);
     expect(find.text('GROUP CODE  |  招待コード'), findsOneWidget);
     expect(find.text('渋谷'), findsOneWidget);
     expect(find.text('3,000〜5,000円'), findsOneWidget);
     expect(find.textContaining('https://gurumeet.app/join/'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('グループを作成しました。\n招待を送ろう。')).dy,
-      greaterThan(0),
-    );
+    expect(tester.getTopLeft(find.text('招待を送ろう')).dy, greaterThan(0));
 
     await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
     await tester.pumpAndSettle();
@@ -123,10 +120,10 @@ void main() {
 
     expect(find.text('食べたい？'), findsOneWidget);
     expect(find.text('残り 5 / 5'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Undo'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsOneWidget);
     expect(
       tester
-          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Undo'))
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'ひとつ戻す'))
           .onPressed,
       isNull,
     );
@@ -145,12 +142,12 @@ void main() {
         expect(
           tester
               .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Undo'),
+                find.widgetWithText(OutlinedButton, 'ひとつ戻す'),
               )
               .onPressed,
           isNotNull,
         );
-        await tester.tap(find.widgetWithText(OutlinedButton, 'Undo'));
+        await tester.tap(find.widgetWithText(OutlinedButton, 'ひとつ戻す'));
         await tester.pumpAndSettle();
         expect(find.text('残り 5 / 5'), findsOneWidget);
         await tester.tap(
@@ -171,7 +168,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '結果を見る'));
     await tester.pumpAndSettle();
 
-    expect(find.text('今日のお店は\nここに決まり。'), findsOneWidget);
+    expect(find.text('今日のお店が決定。'), findsOneWidget);
     expect(find.text('GINZA SORA'), findsAtLeastNWidgets(1));
     expect(find.text('全員一致'), findsAtLeastNWidgets(1));
     expect(find.text('ランキング'), findsOneWidget);
@@ -230,7 +227,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('同率1位。\n決選投票へ。'), findsOneWidget);
+    expect(find.text('同率1位。決選投票へ。'), findsOneWidget);
     expect(find.text('決選投票をする'), findsOneWidget);
   });
 
@@ -294,7 +291,7 @@ void main() {
     await tester.pump();
     expect(
       tester.widget<TextFormField>(find.byType(TextFormField)).controller?.text,
-      'ABCD',
+      'AB12C',
     );
     expect(
       tester
@@ -309,7 +306,7 @@ void main() {
     expect(find.text('メンバー待機'), findsOneWidget);
     expect(find.text('1 / 4人'), findsOneWidget);
     expect(
-      find.textContaining('https://gurumeet.app/join/ABCD'),
+      find.textContaining('https://gurumeet.app/join/AB12C'),
       findsOneWidget,
     );
   });
@@ -332,7 +329,7 @@ void main() {
       await tester.pumpWidget(const GuruMeetApp());
       await tester.pump();
 
-      expect(find.text('今日、どこ食べに行く？'), findsOneWidget);
+      expect(find.text('今日どこ行く？'), findsOneWidget);
       expect(find.text('グループを作る'), findsOneWidget);
       expect(find.text('コードで参加する'), findsOneWidget);
       expect(tester.takeException(), isNull);

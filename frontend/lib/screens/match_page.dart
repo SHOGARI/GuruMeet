@@ -143,7 +143,7 @@ class _MatchPageState extends State<MatchPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _ResultHeader(summary: _summary),
-              const SizedBox(height: AppSpacing.xLarge),
+              const SizedBox(height: AppSpacing.large),
               ScaleTransition(
                 scale: Tween<double>(begin: 0.96, end: 1).animate(
                   CurvedAnimation(
@@ -153,7 +153,7 @@ class _MatchPageState extends State<MatchPage>
                 ),
                 child: _WinnerCard(summary: _summary),
               ),
-              const SizedBox(height: AppSpacing.section),
+              const SizedBox(height: AppSpacing.large),
               _ResultActions(
                 hasTie: _summary.hasTie,
                 onOpenMaps: _isOpeningMaps || _isNavigating ? null : _openMaps,
@@ -171,7 +171,7 @@ class _MatchPageState extends State<MatchPage>
                 onOpenDetail: _openDetail,
                 onGoHome: _goHome,
               ),
-              const SizedBox(height: AppSpacing.section),
+              const SizedBox(height: AppSpacing.xLarge),
               Text('ランキング', style: theme.textTheme.headlineSmall),
               const SizedBox(height: AppSpacing.medium),
               ..._summary.podiumResults.map(
@@ -239,12 +239,12 @@ class _ResultHeader extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.xLarge),
+        const SizedBox(height: AppSpacing.medium),
         Text(
-          summary.hasTie ? '同率1位。\n決選投票へ。' : '今日のお店は\nここに決まり。',
+          summary.hasTie ? '同率1位。決選投票へ。' : '今日のお店が決定。',
           style: theme.textTheme.headlineLarge,
         ),
-        const SizedBox(height: AppSpacing.regular),
+        const SizedBox(height: AppSpacing.small),
         Text(
           summary.hasTie
               ? '${summary.topResults.length}店舗が同じ支持数で並びました。'
@@ -284,15 +284,15 @@ class _WinnerCard extends StatelessWidget {
           Stack(
             children: [
               AspectRatio(
-                aspectRatio: 16 / 10,
+                aspectRatio: 1.9,
                 child: RestaurantImage(
                   imageUrl: restaurant.imageUrl,
                   semanticLabel: '${restaurant.name}の料理写真',
                 ),
               ),
               Positioned(
-                left: AppSpacing.large,
-                top: AppSpacing.large,
+                left: AppSpacing.medium,
+                top: AppSpacing.medium,
                 child: _RankBadge(
                   label: summary.hasTie ? '同率1位' : '1位',
                   icon: Icons.workspace_premium_rounded,
@@ -300,14 +300,14 @@ class _WinnerCard extends StatelessWidget {
               ),
               if (winner.isUnanimous)
                 const Positioned(
-                  right: AppSpacing.large,
-                  top: AppSpacing.large,
+                  right: AppSpacing.medium,
+                  top: AppSpacing.medium,
                   child: _UnanimousBadge(),
                 ),
             ],
           ),
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.large),
+            padding: const EdgeInsets.all(AppSpacing.medium),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -329,7 +329,7 @@ class _WinnerCard extends StatelessWidget {
                     _MetricPill(label: restaurant.distance),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.large),
+                const SizedBox(height: AppSpacing.medium),
                 Row(
                   children: [
                     Expanded(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/group_creation_draft.dart';
+import '../services/room_repository.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/primary_action_button.dart';
@@ -17,6 +17,7 @@ class JoinGroupPage extends StatefulWidget {
 }
 
 class _JoinGroupPageState extends State<JoinGroupPage> {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
   final _formKey = GlobalKey<FormState>();
   final _codeController = TextEditingController();
   final _codeFocusNode = FocusNode();
@@ -24,7 +25,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
   bool _hasTriedSubmit = false;
   bool _isNavigating = false;
 
-  bool get _hasValidLength => _codeController.text.trim().length == 4;
+  bool get _hasValidLength => _codeController.text.trim().length == 5;
 
   @override
   void dispose() {
@@ -47,19 +48,27 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
 
     setState(() => _isNavigating = true);
     FocusManager.instance.primaryFocus?.unfocus();
-    await Future<void>.delayed(AppMotion.quick);
-    if (!mounted) {
-      return;
-    }
-
-    final draft = GroupCreationDraft.joinMock(
-      groupId: _codeController.text.trim(),
-    );
-    await Navigator.of(
-      context,
-    ).pushNamed(WaitingRoomPage.routeName, arguments: draft);
-    if (mounted) {
-      setState(() => _isNavigating = false);
+    try {
+      final draft = await _roomRepository.joinRoom(
+        code: _codeController.text.trim(),
+      );
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(
+        context,
+      ).pushNamed(WaitingRoomPage.routeName, arguments: draft);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('ルームに参加できませんでした')));
+    } finally {
+      if (mounted) {
+        setState(() => _isNavigating = false);
+      }
     }
   }
 
@@ -68,8 +77,8 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
     if (code.isEmpty) {
       return '招待コードを入力してください';
     }
-    if (!RegExp(r'^[A-Z]{4}$').hasMatch(code)) {
-      return '4文字の英字コードを入力してください';
+    if (!RegExp(r'^[A-Z0-9]{5}$').hasMatch(code)) {
+      return '5桁の英数字コードを入力してください';
     }
     return null;
   }
@@ -92,7 +101,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
             Text('招待コードで\n参加する。', style: theme.textTheme.headlineLarge),
             const SizedBox(height: AppSpacing.regular),
             Text(
-              '共有された4文字のコードを入力してください。',
+              '共有された5桁のコードを入力してください。',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
@@ -102,7 +111,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               controller: _codeController,
               focusNode: _codeFocusNode,
               autofocus: true,
-              maxLength: 4,
+              maxLength: 5,
               textCapitalization: TextCapitalization.characters,
               textInputAction: TextInputAction.done,
               textAlign: TextAlign.center,
@@ -111,11 +120,11 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               ),
               decoration: const InputDecoration(
                 counterText: '',
-                hintText: 'ABCD',
+                hintText: 'G7M24',
               ),
               inputFormatters: [
                 const _UppercaseTextFormatter(),
-                LengthLimitingTextInputFormatter(4),
+                LengthLimitingTextInputFormatter(5),
               ],
               validator: _validateCode,
               onChanged: (_) => setState(() {}),
@@ -123,7 +132,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
             ),
             const SizedBox(height: AppSpacing.medium),
             Text(
-              'デモ版のため、入力したコードでモックのグループに参加します。',
+              '見つからない場合はコードを確認してください。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
@@ -154,7 +163,7 @@ class _UppercaseTextFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     final filtered = newValue.text
-        .replaceAll(RegExp('[^a-zA-Z]'), '')
+        .replaceAll(RegExp('[^a-zA-Z0-9]'), '')
         .toUpperCase();
     return TextEditingValue(
       text: filtered,

@@ -24,13 +24,16 @@ class AppShell extends StatelessWidget {
       < 900 => AppSpacing.xLarge,
       _ => AppSpacing.xxLarge,
     };
+    final topPadding = screenWidth < AppBreakpoints.compact
+        ? AppSpacing.regular
+        : AppSpacing.large;
     final body = SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
-        AppSpacing.large,
+        topPadding,
         horizontalPadding,
-        bottomBar == null ? AppSpacing.section : AppSizes.bottomBarClearance,
+        bottomBar == null ? AppSpacing.xLarge : AppSizes.bottomBarClearance,
       ),
       child: Align(
         alignment: Alignment.topCenter,

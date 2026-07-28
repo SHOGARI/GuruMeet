@@ -14,8 +14,8 @@ abstract final class AppSpacing {
   static const double xLarge = 24;
   static const double xxLarge = 32;
   static const double section = 40;
-  static const double hero = 52;
-  static const double display = 64;
+  static const double hero = 44;
+  static const double display = 56;
 }
 
 abstract final class AppRadius {
@@ -29,11 +29,11 @@ abstract final class AppSizes {
   static const double homeMaxWidth = 760;
   static const double actionMaxWidth = 480;
   static const double restaurantCardMaxWidth = 560;
-  static const double toolbarHeight = 64;
-  static const double primaryButtonHeight = 64;
-  static const double secondaryButtonHeight = 56;
-  static const double bottomBarClearance = 180;
-  static const double touchTarget = 48;
+  static const double toolbarHeight = 56;
+  static const double primaryButtonHeight = 58;
+  static const double secondaryButtonHeight = 52;
+  static const double bottomBarClearance = 144;
+  static const double touchTarget = 44;
   static const double successIndicator = 52;
   static const double iconMedium = 20;
   static const double iconLarge = 28;
