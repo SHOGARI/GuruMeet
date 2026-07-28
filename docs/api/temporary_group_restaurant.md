@@ -2,11 +2,11 @@
 
 ## 概要
 
-TemporaryGroupに保存されている条件を利用してHotPepper APIから店舗候補を取得し、
-取得した店舗情報をDBへ保存すると同時にフロントへ返却する機能を実装した。
+TemporaryGroup作成時の条件を利用してHotPepper APIから店舗候補を取得し、
+取得した店舗情報をDBへ保存する機能を実装した。
 
 フロントは検索条件を毎回送信するのではなく、
-グループIDのみを指定して店舗検索を実行する。
+TemporaryGroup作成APIに希望条件を送信する。店舗検索専用APIは持たない。
 
 ---
 
@@ -25,8 +25,7 @@ TemporaryGroupに保存されている条件を利用してHotPepper APIから�
 
 そこで、
 
-TemporaryGroupに保存されている条件を利用して店舗検索を行い、
-取得した店舗情報をTemporaryGroupへ保存する設計へ変更した。
+TemporaryGroup作成時に店舗検索を行い、取得した店舗情報をTemporaryGroupへ保存する設計へ変更した。
 
 ---
 
@@ -49,41 +48,33 @@ POST /temporary-groups
 
 ↓
 
-② 店舗検索
-
-```
-POST /temporary-groups/{group_id}/restaurants/search
-```
-
-↓
-
-③ group_idからTemporaryGroup取得
-
-↓
-
-④ DBに保存されている
+② リクエストの
 
 - location
 - budget_min
 - budget_max
 
-を取得
+を利用
 
 ↓
 
-⑤ HotPepper API検索
+③ HotPepper API検索
 
 ↓
 
-⑥ 必要な項目のみ整形
+④ 必要な項目のみ整形
 
 ↓
 
-⑦ restaurant(JSONB)へ保存
+⑤ restaurant(JSONB)へ保存
 
 ↓
 
-⑧ 同じデータをフロントへ返却
+⑥ restaurant_search_statusへ検索状態を保存
+
+↓
+
+⑦ フロントは必要な表示データをGET /temporary-groups/{group_id}で取得
 
 ---
 
@@ -97,21 +88,7 @@ POST /temporary-groups
 
 役割
 
-TemporaryGroupを作成する。
-
----
-
-## 店舗検索
-
-```
-POST /temporary-groups/{group_id}/restaurants/search
-```
-
-役割
-
-TemporaryGroupの条件を利用して店舗検索を行う。
-
-フロントから検索条件を送信する必要はない。
+TemporaryGroupを作成し、希望場所があれば店舗候補も検索して保存する。
 
 ---
 
@@ -132,6 +109,14 @@ TemporaryGroup情報と保存済み店舗情報を取得する。
 restaurantはフロントから送信されるデータではない。
 
 バックエンドがHotPepper APIから取得した店舗情報を保存するためのJSONBカラムである。
+
+restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラムである。
+
+| value | meaning |
+| --- | --- |
+| `not_requested` | locationが空で検索していない。 |
+| `succeeded` | Hot Pepperから1件以上の店舗候補を取得した。 |
+| `no_results` | Hot Pepper検索は成功したが候補が0件だった。 |
 
 保存例
 
@@ -196,9 +181,9 @@ B002
 
 ---
 
-# 返却する店舗情報
+# 保存・詳細取得で扱う店舗情報
 
-以下の項目のみ返却する。
+以下の項目のみ保存し、詳細取得APIで返却する。
 
 - id
 - name
@@ -209,7 +194,7 @@ B002
 - image_url
 - shop_url
 
-不要なHotPepperレスポンスは返却しない。
+不要なHotPepperレスポンスは保存・返却しない。
 
 ---
 
@@ -218,8 +203,8 @@ B002
 - 最大10件取得
 - 店舗IDで重複除外
 - searched_at保存
-- restaurant全体を上書き
-- 再検索時は追加しない
+- restaurantに検索結果を保存
+- restaurant_search_statusに検索状態を保存
 
 ---
 
@@ -227,14 +212,8 @@ B002
 
 400
 
-- location不足
 - 予算範囲不正
 - 対応外予算
-
-404
-
-- グループが存在しない
-- 有効期限切れ
 
 502
 
@@ -247,11 +226,12 @@ B002
 DB保存失敗時
 
 - rollback
-- 既存restaurantを保持
+- グループ作成を完了しない
 
 店舗0件
 
 - restaurantsを空配列で保存
+- restaurant_search_statusはno_results
 - 正常終了
 
 ---
@@ -259,7 +239,7 @@ DB保存失敗時
 # 実装して確認済み
 
 - TemporaryGroup作成
-- 店舗検索
+- 作成時の店舗検索
 - HotPepper API通信
 - JSON整形
 - restaurant保存
@@ -269,7 +249,6 @@ DB保存失敗時
 - 実環境確認
 - Docker確認
 - PostgreSQL確認
-- 再検索時の上書き確認
 
 ---
 
@@ -291,7 +270,7 @@ restaurantに保存された店舗情報を利用して、
 ## 概要
 
 TemporaryGroupの店舗検索では、Hot Pepper APIの取得順をそのまま返すのではなく、
-グループ条件に応じて独自のスコアリングを行い、最適と思われる店舗を最大10件返却する。
+グループ条件に応じて独自のスコアリングを行い、最適と思われる店舗を最大10件保存する。
 
 ---
 
@@ -319,7 +298,7 @@ Hot Pepper APIから30件取得
 ジャンル重複を調整
         │
         ▼
-最大10件を返却・保存
+最大10件を保存
 ```
 
 ---
@@ -401,7 +380,7 @@ total_score = budget_score + capacity_score
 これにより、
 
 - できるだけジャンルを分散
-- 候補が少ない場合でも10店舗返却
+- 候補が少ない場合でも取得できた店舗を保存
 
 を両立している。
 
@@ -412,7 +391,7 @@ total_score = budget_score + capacity_score
 | 内容 | 件数 |
 |---|---:|
 | Hot Pepper API取得候補 | 30 |
-| 最終返却件数 | 10 |
+| 最終保存件数 | 10 |
 
 30件から最適な10件を選び直すことで、推薦精度を向上させている。
 

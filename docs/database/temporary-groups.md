@@ -12,6 +12,7 @@
 | `budget_min` | `INT` | yes | 予算下限。 |
 | `budget_max` | `INT` | yes | 予算上限。 |
 | `restaurant` | `JSONB` | yes | 選択済み、または候補の店舗情報。 |
+| `restaurant_search_status` | `VARCHAR(32)` | no | Hot Pepper店舗検索の状態。`not_requested`, `succeeded`, `no_results` のいずれか。 |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | no | DB側の `now()` で作成日時を保存する。 |
 | `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から24時間後。 |
 
@@ -21,6 +22,7 @@
 | --- | --- | --- |
 | primary key | `id` | UUIDで一意に取得する。 |
 | `uq_temporary_groups_code` | `code` | 手入力コードの重複を防ぐ。 |
+| `ck_temporary_groups_restaurant_search_status` | `restaurant_search_status` | Hot Pepper店舗検索状態を許可値に限定する。 |
 | `ix_temporary_groups_code` | `code` | コード参加APIの検索用。 |
 | `ix_temporary_groups_expires_at` | `expires_at` | 期限切れ判定と削除処理用。 |
 
@@ -66,6 +68,7 @@ TemporaryGroup.expires_at <= datetime.now(UTC)
 ```text
 backend/alembic/versions/202607150001_create_temporary_groups.py
 backend/alembic/versions/202607230001_add_temporary_group_details.py
+backend/alembic/versions/202607290001_add_restaurant_search_status.py
 ```
 
 既存DB構成は `feature/setup-db-etc` の方針に合わせ、`POSTGRES_*` 環境変数からDB URLを組み立てる。

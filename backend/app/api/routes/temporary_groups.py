@@ -2,8 +2,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.rate_limit import limit_join_by_ip
+from app.db.database import SessionLocal
 from app.db.session import get_db
 from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
@@ -11,7 +13,6 @@ from app.schemas.temporary_group import (
     TemporaryGroupDetail,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
-    TemporaryGroupRestaurantSearchResult,
     TemporaryGroupResponse,
 )
 from app.services.hotpepper_service import (
@@ -21,7 +22,6 @@ from app.services.hotpepper_service import (
 from app.services.temporary_group_service import (
     TemporaryGroupCodeCollisionError,
     TemporaryGroupFullError,
-    TemporaryGroupNotFoundError,
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
 )
@@ -43,6 +43,7 @@ router = APIRouter(
     summary="一時グループを作成する",
     description=(
         "一時グループを作成し、UUIDと手入力参加用の5桁コードを発行します。"
+        "希望場所がある場合は、同時に店舗候補を検索して保存します。"
         "共有URLはbackendでは作らず、返却されたUUIDを使ってfrontend側で組み立てます。"
     ),
     responses={
@@ -63,15 +64,28 @@ router = APIRouter(
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "参加コード生成がリトライ上限を超えました。"
         },
+        status.HTTP_502_BAD_GATEWAY: {
+            "description": "Hot Pepper APIとの通信に失敗しました。"
+        },
+        status.HTTP_504_GATEWAY_TIMEOUT: {
+            "description": "Hot Pepper APIのリクエストがタイムアウトしました。"
+        },
     },
 )
-def create_temporary_group(
+async def create_temporary_group(
     request_body: TemporaryGroupCreate | None = None,
-    db: Session = Depends(get_db),
 ) -> TemporaryGroupResponse:
-    service = TemporaryGroupService(db)
+    data = request_body or TemporaryGroupCreate()
     try:
-        group = service.create_group(request_body or TemporaryGroupCreate())
+        restaurant, restaurant_search_status = (
+            await TemporaryGroupService.search_restaurants_for_create(data)
+        )
+        return await run_in_threadpool(
+            _create_temporary_group_response,
+            data,
+            restaurant,
+            restaurant_search_status,
+        )
     except TemporaryGroupCodeCollisionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -79,8 +93,21 @@ def create_temporary_group(
         ) from exc
     except TemporaryGroupFullError as exc:
         raise _full() from exc
-
-    return _to_response(group, service)
+    except TemporaryGroupSearchCriteriaError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except HotPepperAPITimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Hot Pepper API request timed out",
+        ) from None
+    except HotPepperAPIError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to communicate with Hot Pepper API",
+        ) from None
 
 
 @router.get(
@@ -108,6 +135,7 @@ def create_temporary_group(
                         "location": "渋谷",
                         "budget_min": 2000,
                         "budget_max": 3000,
+                        "restaurant_search_status": "succeeded",
                         "restaurant": {
                             "id": "restaurant_123",
                             "name": "渋谷ビストロ",
@@ -131,39 +159,8 @@ def get_temporary_group(
 
 
 @router.post(
-    "/{group_id}/restaurants/search",
-    response_model=TemporaryGroupRestaurantSearchResult,
-    summary="一時グループの条件で店舗候補を検索して保存する",
-)
-async def search_temporary_group_restaurants(
-    group_id: UUID,
-    db: Session = Depends(get_db),
-) -> dict[str, object]:
-    service = TemporaryGroupService(db)
-    try:
-        return await service.search_and_save_restaurants(group_id)
-    except TemporaryGroupNotFoundError:
-        raise _not_found() from None
-    except TemporaryGroupSearchCriteriaError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except HotPepperAPITimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Hot Pepper API request timed out",
-        ) from None
-    except HotPepperAPIError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to communicate with Hot Pepper API",
-        ) from None
-
-
-@router.post(
     "/{group_id}/participants",
-    response_model=TemporaryGroupDetail,
+    response_model=TemporaryGroupResponse,
     dependencies=[Depends(limit_join_by_ip)],
     summary="UUIDから一時グループに参加する",
     description=(
@@ -173,6 +170,17 @@ async def search_temporary_group_restaurants(
     responses={
         status.HTTP_200_OK: {
             "description": "一時グループへ参加しました。",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                        "code": "A7K2F",
+                        "expires_at": "2026-07-16T12:00:00Z",
+                        "joined_participant_count": 2,
+                        "is_full": False,
+                    }
+                }
+            },
         },
         status.HTTP_409_CONFLICT: {
             "description": "一時グループの参加人数が上限に達しています。"
@@ -186,7 +194,7 @@ def join_temporary_group_by_id(
     group_id: UUID,
     request_body: TemporaryGroupParticipantJoinRequest,
     db: Session = Depends(get_db),
-) -> TemporaryGroupDetail:
+) -> TemporaryGroupResponse:
     service = TemporaryGroupService(db)
     try:
         group = service.join_active_by_id(group_id, request_body.participant_token)
@@ -196,12 +204,12 @@ def join_temporary_group_by_id(
     if group is None:
         raise _not_found()
 
-    return _to_detail(group, service)
+    return _to_response(group, service)
 
 
 @router.post(
     "/join",
-    response_model=TemporaryGroupDetail,
+    response_model=TemporaryGroupResponse,
     dependencies=[Depends(limit_join_by_ip)],
     summary="コードから一時グループに参加する",
     description=(
@@ -220,16 +228,6 @@ def join_temporary_group_by_id(
                         "expires_at": "2026-07-16T12:00:00Z",
                         "joined_participant_count": 2,
                         "is_full": False,
-                        "created_at": "2026-07-15T12:00:00Z",
-                        "creator_id": "user_123",
-                        "participant_count": 4,
-                        "location": "渋谷",
-                        "budget_min": 2000,
-                        "budget_max": 3000,
-                        "restaurant": {
-                            "id": "restaurant_123",
-                            "name": "渋谷ビストロ",
-                        },
                     }
                 }
             },
@@ -245,7 +243,7 @@ def join_temporary_group_by_id(
 def join_temporary_group(
     request_body: TemporaryGroupJoinRequest,
     db: Session = Depends(get_db),
-) -> TemporaryGroupDetail:
+) -> TemporaryGroupResponse:
     service = TemporaryGroupService(db)
     try:
         group = service.join_active_by_code(
@@ -258,21 +256,7 @@ def join_temporary_group(
     if group is None:
         raise _not_found()
 
-    return _to_detail(group, service)
-
-
-def _to_response(
-    group: TemporaryGroup,
-    service: TemporaryGroupService,
-) -> TemporaryGroupResponse:
-    joined_participant_count = service.count_participants(group.id)
-    return TemporaryGroupResponse(
-        id=group.id,
-        code=group.code,
-        expires_at=group.expires_at,
-        joined_participant_count=joined_participant_count,
-        is_full=service.is_full(group, joined_participant_count),
-    )
+    return _to_response(group, service)
 
 
 def _to_detail(
@@ -292,8 +276,38 @@ def _to_detail(
         location=group.location,
         budget_min=group.budget_min,
         budget_max=group.budget_max,
+        restaurant_search_status=group.restaurant_search_status,
         restaurant=group.restaurant,
     )
+
+
+def _to_response(
+    group: TemporaryGroup,
+    service: TemporaryGroupService,
+) -> TemporaryGroupResponse:
+    joined_participant_count = service.count_participants(group.id)
+    return TemporaryGroupResponse(
+        id=group.id,
+        code=group.code,
+        expires_at=group.expires_at,
+        joined_participant_count=joined_participant_count,
+        is_full=service.is_full(group, joined_participant_count),
+    )
+
+
+def _create_temporary_group_response(
+    data: TemporaryGroupCreate,
+    restaurant: dict[str, object] | None,
+    restaurant_search_status: str,
+) -> TemporaryGroupResponse:
+    with SessionLocal() as db:
+        service = TemporaryGroupService(db)
+        group = service.create_group(
+            data,
+            restaurant=restaurant,
+            restaurant_search_status=restaurant_search_status,
+        )
+        return _to_response(group, service)
 
 
 def _not_found() -> HTTPException:
