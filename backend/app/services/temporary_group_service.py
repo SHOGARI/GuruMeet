@@ -136,6 +136,7 @@ class TemporaryGroupService:
                 location=location,
                 budget_min=group.budget_min,
                 budget_max=group.budget_max,
+                participant_count=group.participant_count,
             )
         except HotPepperBudgetRangeError as exc:
             raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
