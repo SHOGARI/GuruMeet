@@ -4,6 +4,8 @@ import { env as workerEnv } from "cloudflare:workers";
 const INSTANCE_COUNT = 1;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY: string;
+  PARTICIPANT_TOKEN_HASH_SECRET: string;
   ENVIRONMENT?: string;
 };
 
@@ -12,6 +14,8 @@ export class BackendContainer extends Container {
   sleepAfter = "5m";
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
+    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY,
+    PARTICIPANT_TOKEN_HASH_SECRET: runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
   };
 }
@@ -21,6 +25,8 @@ interface Env {
   BACKEND_CONTAINER: DurableObjectNamespace<BackendContainer>;
   ASSETS_BUCKET: R2Bucket;
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY: string;
+  PARTICIPANT_TOKEN_HASH_SECRET: string;
   ENVIRONMENT?: string;
 }
 
