@@ -1,4 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/group_creation_draft.dart';
 import '../theme/app_tokens.dart';
@@ -23,6 +29,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   BudgetOption? _selectedBudget = BudgetOption.from2000To3000;
   bool _hasTriedSubmit = false;
   bool _isSubmitting = false;
+  bool _isReadingLocation = false;
 
   @override
   void dispose() {
@@ -80,6 +87,180 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     setState(() => _selectedBudget = budget);
   }
 
+  Future<void> _readAreaFromLocation() async {
+    if (_isReadingLocation) {
+      return;
+    }
+
+    setState(() => _isReadingLocation = true);
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showLocationSnackBar('位置情報サービスをオンにしてください');
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        _showLocationSnackBar('位置情報の許可が必要です');
+        return;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showLocationSnackBar('設定から位置情報の許可をオンにしてください');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      final area = await _readAreaName(position);
+
+      if (area == null) {
+        _showLocationSnackBar('現在地の地名を読み取れませんでした');
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _areaController.text = area;
+        _hasTriedSubmit = false;
+      });
+      _showLocationSnackBar('$area を入力しました');
+    } on LocationServiceDisabledException {
+      _showLocationSnackBar('位置情報サービスをオンにしてください');
+    } on PermissionDeniedException {
+      _showLocationSnackBar('位置情報の許可が必要です');
+    } on TimeoutException {
+      _showLocationSnackBar('位置情報の取得に時間がかかっています');
+    } catch (_) {
+      _showLocationSnackBar('位置情報を読み取れませんでした');
+    } finally {
+      if (mounted) {
+        setState(() => _isReadingLocation = false);
+      }
+    }
+  }
+
+  Future<String?> _readAreaName(Position position) async {
+    try {
+      final placemarks = await Geocoding(
+        locale: const Locale('ja', 'JP'),
+      ).placemarkFromCoordinates(position.latitude, position.longitude);
+      final area = _formatAreaFromPlacemark(
+        placemarks.isEmpty ? null : placemarks.first,
+      );
+      if (area != null) {
+        return area;
+      }
+    } catch (_) {
+      // Flutter WebではOSの逆ジオコーディングが使えない環境があるため、
+      // 公開APIで地名だけ補完する。
+    }
+
+    return _readAreaNameFromOpenStreetMap(position);
+  }
+
+  Future<String?> _readAreaNameFromOpenStreetMap(Position position) async {
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': position.latitude.toString(),
+        'lon': position.longitude.toString(),
+        'zoom': '16',
+        'addressdetails': '1',
+        'accept-language': 'ja',
+      });
+      final response = await http
+          .get(uri, headers: const {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map<String, Object?>) {
+        return null;
+      }
+      final address = decoded['address'];
+      if (address is! Map<String, Object?>) {
+        return null;
+      }
+
+      return _firstFilled([
+        address['city'] as String?,
+        address['ward'] as String?,
+        address['town'] as String?,
+        address['suburb'] as String?,
+        address['village'] as String?,
+        address['municipality'] as String?,
+        address['state'] as String?,
+      ]);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _formatAreaFromPlacemark(Placemark? placemark) {
+    if (placemark == null) {
+      return null;
+    }
+
+    final locality = placemark.locality?.trim();
+    final subLocality = placemark.subLocality?.trim();
+    final administrativeArea = placemark.administrativeArea?.trim();
+    final thoroughfare = placemark.thoroughfare?.trim();
+
+    final primary = _firstFilled([locality, subLocality, administrativeArea]);
+    if (primary == null) {
+      return _firstFilled([thoroughfare, placemark.name?.trim()]);
+    }
+
+    if (subLocality != null &&
+        subLocality.isNotEmpty &&
+        subLocality != primary) {
+      return '$primary $subLocality';
+    }
+
+    if (thoroughfare != null &&
+        thoroughfare.isNotEmpty &&
+        !primary.contains(thoroughfare)) {
+      return '$primary $thoroughfare';
+    }
+
+    return primary;
+  }
+
+  String? _firstFilled(Iterable<String?> values) {
+    for (final value in values) {
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  void _showLocationSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -123,6 +304,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                             ? () => setState(() => _peopleCount++)
                             : null,
                         onBudgetSelected: _selectBudget,
+                        onReadAreaFromLocation: _readAreaFromLocation,
+                        isReadingLocation: _isReadingLocation,
                       ),
                     ),
                   ),
@@ -156,6 +339,8 @@ class _CreateGroupForm extends StatelessWidget {
     required this.onDecreasePeople,
     required this.onIncreasePeople,
     required this.onBudgetSelected,
+    required this.onReadAreaFromLocation,
+    required this.isReadingLocation,
   });
 
   final GlobalKey<FormState> formKey;
@@ -168,6 +353,8 @@ class _CreateGroupForm extends StatelessWidget {
   final VoidCallback? onDecreasePeople;
   final VoidCallback? onIncreasePeople;
   final ValueChanged<BudgetOption> onBudgetSelected;
+  final VoidCallback onReadAreaFromLocation;
+  final bool isReadingLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -204,21 +391,37 @@ class _CreateGroupForm extends StatelessWidget {
           _FormSection(
             step: '02',
             title: 'どのあたり？',
-            child: TextFormField(
-              controller: areaController,
-              focusNode: areaFocusNode,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => onAreaSubmitted(),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.location_on_outlined),
-                hintText: '新宿・渋谷・池袋',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '行きたいエリアを入力してください';
-                }
-                return null;
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: areaController,
+                  focusNode: areaFocusNode,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => onAreaSubmitted(),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    hintText: '新宿・渋谷・池袋',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '行きたいエリアを入力してください';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.medium),
+                OutlinedButton.icon(
+                  onPressed: isReadingLocation ? null : onReadAreaFromLocation,
+                  icon: isReadingLocation
+                      ? const SizedBox.square(
+                          dimension: AppSizes.iconMedium,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location_rounded),
+                  label: Text(isReadingLocation ? '現在地を取得中' : '現在地から入力'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.section),
