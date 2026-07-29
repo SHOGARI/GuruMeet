@@ -4,7 +4,10 @@ import { env as workerEnv } from "cloudflare:workers";
 const INSTANCE_COUNT = 1;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY: string;
+  PARTICIPANT_TOKEN_HASH_SECRET: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 };
 
 export class BackendContainer extends Container {
@@ -12,7 +15,10 @@ export class BackendContainer extends Container {
   sleepAfter = "5m";
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
+    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY,
+    PARTICIPANT_TOKEN_HASH_SECRET: runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
+    GURUMEET_API_ROOT_PATH: runtimeEnv.GURUMEET_API_ROOT_PATH ?? "",
   };
 }
 
@@ -21,7 +27,10 @@ interface Env {
   BACKEND_CONTAINER: DurableObjectNamespace<BackendContainer>;
   ASSETS_BUCKET: R2Bucket;
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY: string;
+  PARTICIPANT_TOKEN_HASH_SECRET: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 }
 
 export default {
@@ -34,6 +43,14 @@ export default {
 
     if (url.pathname.startsWith("/files/")) {
       return handleFileRequest(request, env);
+    }
+
+    if (isProduction(env) && isApiPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (isApiRootPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
     }
 
     if (url.pathname.startsWith("/api/")) {
@@ -89,6 +106,18 @@ function stripApiPrefix(request: Request): Request {
   const url = new URL(request.url);
   url.pathname = url.pathname.replace(/^\/api/, "") || "/";
   return new Request(url, request);
+}
+
+function isProduction(env: Env): boolean {
+  return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
+}
+
+function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+function isApiRootPath(pathname: string): boolean {
+  return pathname === "/api" || pathname === "/api/";
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {

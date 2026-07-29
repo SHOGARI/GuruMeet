@@ -69,13 +69,30 @@ cp .env.example .env
 実際の `backend/.env` に書く値:
 
 ```env
+HOTPEPPER_API_KEY=取得したAPIキー
 API_PORT=8000
 
 POSTGRES_DB=gurumeet
 POSTGRES_USER=gurumeet
 POSTGRES_PASSWORD=change_me
 POSTGRES_PORT=5432
+
+TEMPORARY_GROUP_TTL_MINUTES=1440
+TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
+JOIN_RATE_LIMIT_REQUESTS=10
+JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 ```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` は匿名参加者トークンをDB保存用にhash化するときのサーバー秘密値。
+
+生成例:
+
+```sh
+openssl rand -hex 32
+```
+
+この値はfrontendには渡さない。本番ではGitに置かず、GitHub Environment secrets に登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
 
 通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
 
@@ -94,12 +111,23 @@ FastAPI を Compose の外で直接起動する場合だけ、必要に応じて
 DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
 ```
 
-staging / production の `DATABASE_URL` は `backend/.env` には書かない。Cloudflare Wrangler secret に登録する。
+staging / production の `DATABASE_URL` は `backend/.env` には書かない。
+GitHub Environment secrets に登録し、deploy workflow から Cloudflare Worker / Container に渡す。
 
-```sh
-cd ../infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env staging
-npx wrangler secret put DATABASE_URL --env production
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+```
+
+登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
 ```
 
 `backend` フォルダ内で実行:
@@ -120,8 +148,28 @@ API:
 - `http://localhost:8000/health`
 - `http://localhost:8000/docs`
 
+店舗候補は一時グループ作成時に希望場所が指定されていれば同時に検索・保存されます。
+
+```text
+POST /temporary-groups
+```
+
 停止:
 
 ```sh
 docker compose down
 ```
+
+## DB 認証エラーが出る場合
+
+`password authentication failed for user "gurumeet"` が出る場合は、既存の Docker volume に保存されている PostgreSQL のパスワードと、現在の `backend/.env` の `POSTGRES_PASSWORD` がずれている。
+
+PostgreSQL の公式 image は、初回に volume を作ったときだけ `POSTGRES_PASSWORD` を反映する。あとから `.env` を変えても、既存 DB ユーザーのパスワードは自動では変わらない。
+
+ローカル開発 DB を消してよい場合だけ、`backend` フォルダで実行する。
+
+```sh
+make reset-db
+```
+
+これは `postgres_data` volume を削除するため、ローカル DB のデータは消える。残したいデータがある場合は、`.env` の `POSTGRES_PASSWORD` を既存 DB 作成時の値に戻す。

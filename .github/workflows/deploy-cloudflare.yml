@@ -67,18 +67,77 @@ jobs:
       - name: Docker を確認
         run: docker info
 
-      - name: Cloudflare secrets を検証
+      - name: GitHub secrets を検証
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+          PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
         run: |
+          required_secrets=(
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+            DATABASE_URL
+            HOTPEPPER_API_KEY
+            PARTICIPANT_TOKEN_HASH_SECRET
+          )
+
+          missing=()
+          for name in "${required_secrets[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            printf "::error::GitHub Environment '%s' is missing required secrets: %s\n" \
+              "$DEPLOY_ENV" \
+              "${missing[*]}"
+            exit 1
+          fi
+
           if [[ ! "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; then
             echo "::error::CLOUDFLARE_ACCOUNT_ID must be exactly 32 lowercase hex characters. Check for leading/trailing spaces in the GitHub secret."
             exit 1
           fi
 
-          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
-            echo "::error::CLOUDFLARE_API_TOKEN is empty."
+          if [[ ! "$DATABASE_URL" =~ ^postgresql(\+psycopg)?:// ]]; then
+            echo "::error::DATABASE_URL must start with postgresql:// or postgresql+psycopg://."
             exit 1
           fi
 
+          case "$PARTICIPANT_TOKEN_HASH_SECRET" in
+            gurumeet-dev-participant-token-secret|change_me*)
+              echo "::error::PARTICIPANT_TOKEN_HASH_SECRET must not use the local development placeholder."
+              exit 1
+              ;;
+          esac
+
       - name: Worker を deploy
         working-directory: infra/cloudflare/app-worker
-        run: npx wrangler deploy --env "$DEPLOY_ENV"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+          PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
+          CLOUDFLARE_SECRETS_FILE: ${{ runner.temp }}/cloudflare-worker-secrets.json
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+
+          const secretNames = [
+            "DATABASE_URL",
+            "HOTPEPPER_API_KEY",
+            "PARTICIPANT_TOKEN_HASH_SECRET",
+          ];
+
+          const secrets = Object.fromEntries(
+            secretNames.map((name) => [name, process.env[name] ?? ""]),
+          );
+
+          writeFileSync(
+            process.env.CLOUDFLARE_SECRETS_FILE,
+            `${JSON.stringify(secrets)}\n`,
+            { mode: 0o600 },
+          );
+          NODE
+
+          npx wrangler deploy --env "$DEPLOY_ENV" --secrets-file "$CLOUDFLARE_SECRETS_FILE"

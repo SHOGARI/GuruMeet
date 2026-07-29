@@ -7,7 +7,14 @@
     "directory": "../../../frontend/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/files/*", "/edge/*"],
+    "run_worker_first": ["/api", "/api/*", "/files/*", "/edge/*"],
+  },
+  "secrets": {
+    "required": [
+      "DATABASE_URL",
+      "HOTPEPPER_API_KEY",
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+    ],
   },
   "containers": [
     {
@@ -37,6 +44,14 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
+        "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+        ],
       },
       "containers": [
         {
@@ -78,6 +93,14 @@
       "workers_dev": false,
       "vars": {
         "ENVIRONMENT": "production",
+        "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+        ],
       },
       "containers": [
         {
