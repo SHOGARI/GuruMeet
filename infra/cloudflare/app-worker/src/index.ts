@@ -39,6 +39,10 @@ export default {
       return handleFileRequest(request, env);
     }
 
+    if (isApiRootPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
+    }
+
     if (isProduction(env) && isApiDocsPath(url.pathname)) {
       return new Response("Not found", { status: 404 });
     }
@@ -100,6 +104,10 @@ function stripApiPrefix(request: Request): Request {
 
 function isProduction(env: Env): boolean {
   return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
+}
+
+function isApiRootPath(pathname: string): boolean {
+  return pathname === "/api" || pathname === "/api/";
 }
 
 function isApiDocsPath(pathname: string): boolean {
