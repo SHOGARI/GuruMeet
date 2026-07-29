@@ -16,12 +16,23 @@ export class BackendContainer extends Container {
   defaultPort = 8000;
   sleepAfter = "5m";
   envVars = {
-    DATABASE_URL: runtimeEnv.DATABASE_URL,
-    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY ?? "",
-    CORS_ALLOW_ORIGINS: runtimeEnv.CORS_ALLOW_ORIGINS ?? "",
-    PARTICIPANT_TOKEN_HASH_SECRET:
-      runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET ?? "",
-    INTERNAL_TASK_SECRET: runtimeEnv.INTERNAL_TASK_SECRET ?? "",
+    DATABASE_URL: requiredRuntimeEnv(runtimeEnv.DATABASE_URL, "DATABASE_URL"),
+    HOTPEPPER_API_KEY: requiredRuntimeEnv(
+      runtimeEnv.HOTPEPPER_API_KEY,
+      "HOTPEPPER_API_KEY",
+    ),
+    CORS_ALLOW_ORIGINS: requiredRuntimeEnv(
+      runtimeEnv.CORS_ALLOW_ORIGINS,
+      "CORS_ALLOW_ORIGINS",
+    ),
+    PARTICIPANT_TOKEN_HASH_SECRET: requiredRuntimeEnv(
+      runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+    ),
+    INTERNAL_TASK_SECRET: requiredRuntimeEnv(
+      runtimeEnv.INTERNAL_TASK_SECRET,
+      "INTERNAL_TASK_SECRET",
+    ),
     GURUMEET_ENABLE_MOCK_RESTAURANTS:
       runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
@@ -85,6 +96,13 @@ export default {
     }
   },
 };
+
+function requiredRuntimeEnv(value: string | undefined, name: string): string {
+  if (!value?.trim()) {
+    throw new Error(`${name} must be configured and non-empty.`);
+  }
+  return value;
+}
 
 async function edgeHealth(env: Env): Promise<Response> {
   const checks = {

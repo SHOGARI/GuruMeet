@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gurumeet/app.dart';
 import 'package:gurumeet/models/group_creation_draft.dart';
 import 'package:gurumeet/models/restaurant_preview.dart';
+import 'package:gurumeet/screens/group_created_page.dart';
 import 'package:gurumeet/screens/match_page.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -231,6 +232,33 @@ void main() {
     );
   });
 
+  testWidgets('unknown route shows not found fallback', (tester) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/missing-page');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ページが見つかりません'), findsOneWidget);
+    expect(find.text('404'), findsOneWidget);
+    expect(find.text('/missing-page'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'ホームへ戻る'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'コードで参加する'), findsOneWidget);
+  });
+
+  testWidgets('invalid direct route arguments show not found fallback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed(GroupCreatedPage.routeName);
+    await tester.pumpAndSettle();
+
+    expect(find.text('ページが見つかりません'), findsOneWidget);
+    expect(find.text(GroupCreatedPage.routeName), findsOneWidget);
+  });
+
   testWidgets('tie result shows tie notice and restart action', (tester) async {
     final draft = GroupCreationDraft.createMock(
       peopleCount: 3,
@@ -269,6 +297,37 @@ void main() {
     expect(find.text('同率1位。候補から選べます。'), findsOneWidget);
     expect(find.text('選び直す'), findsOneWidget);
     expect(find.text('決選投票をする'), findsNothing);
+  });
+
+  testWidgets('api room result hides restart action', (tester) async {
+    const draft = GroupCreationDraft(
+      peopleCount: 3,
+      area: '渋谷',
+      budget: BudgetOption.from2000To3000,
+      groupId: 'AB12C',
+      isHost: true,
+      roomId: '123e4567-e89b-12d3-a456-426614174000',
+    );
+    final result = RestaurantMatchResult(
+      restaurant: mockRestaurants.first,
+      peopleCount: 3,
+      results: [
+        RestaurantVoteResult(
+          restaurant: mockRestaurants[0],
+          likeCount: 2,
+          rejectCount: 1,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchPage(draft: draft, result: result),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('もう一度選ぶ'), findsNothing);
   });
 
   testWidgets('create group always shows condition inputs', (tester) async {

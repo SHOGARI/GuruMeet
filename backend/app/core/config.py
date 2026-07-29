@@ -55,6 +55,13 @@ class Settings(BaseSettings):
             ]
         return value
 
+    @field_validator("participant_token_hash_secret")
+    @classmethod
+    def require_participant_token_hash_secret(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("PARTICIPANT_TOKEN_HASH_SECRET must not be empty")
+        return value
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

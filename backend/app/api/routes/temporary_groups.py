@@ -33,6 +33,7 @@ from app.services.temporary_group_service import (
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
+    TemporaryGroupVotingNotReadyError,
     TemporaryGroupVotingNotStartedError,
 )
 
@@ -185,6 +186,11 @@ def start_temporary_group_voting(
         raise _not_found() from None
     except TemporaryGroupParticipantNotFoundError:
         raise _participant_not_found() from None
+    except TemporaryGroupVotingNotReadyError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="参加予定人数がそろうまで投票を開始できません。",
+        ) from None
     except TemporaryGroupVotingCandidatesError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

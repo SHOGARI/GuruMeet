@@ -29,6 +29,10 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+      PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
+      INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
       DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'production' || 'staging') }}
 
     steps:
@@ -88,6 +92,21 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN is empty."
             exit 1
           fi
+
+          for secret_name in DATABASE_URL HOTPEPPER_API_KEY PARTICIPANT_TOKEN_HASH_SECRET INTERNAL_TASK_SECRET; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error::${secret_name} is empty. Configure it as a GitHub environment secret for ${DEPLOY_ENV}."
+              exit 1
+            fi
+          done
+
+      - name: Runtime secrets を Cloudflare に登録
+        working-directory: infra/cloudflare/app-worker
+        run: |
+          printf "%s" "$DATABASE_URL" | npx wrangler secret put DATABASE_URL --env "$DEPLOY_ENV"
+          printf "%s" "$HOTPEPPER_API_KEY" | npx wrangler secret put HOTPEPPER_API_KEY --env "$DEPLOY_ENV"
+          printf "%s" "$PARTICIPANT_TOKEN_HASH_SECRET" | npx wrangler secret put PARTICIPANT_TOKEN_HASH_SECRET --env "$DEPLOY_ENV"
+          printf "%s" "$INTERNAL_TASK_SECRET" | npx wrangler secret put INTERNAL_TASK_SECRET --env "$DEPLOY_ENV"
 
       - name: Worker を deploy
         working-directory: infra/cloudflare/app-worker

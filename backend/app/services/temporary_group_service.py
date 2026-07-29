@@ -57,6 +57,10 @@ class TemporaryGroupVotingNotStartedError(RuntimeError):
     pass
 
 
+class TemporaryGroupVotingNotReadyError(RuntimeError):
+    pass
+
+
 class TemporaryGroupParticipantNotFoundError(RuntimeError):
     pass
 
@@ -197,6 +201,13 @@ class TemporaryGroupService:
             raise TemporaryGroupNotFoundError
 
         self._require_participant(group.id, participant_token)
+        joined_participant_count = self.repository.count_participants(group.id)
+        if (
+            group.participant_count is not None
+            and joined_participant_count < group.participant_count
+        ):
+            raise TemporaryGroupVotingNotReadyError
+
         self.repository.start_voting(group, self._now())
         self.db.commit()
         self.db.refresh(group)
