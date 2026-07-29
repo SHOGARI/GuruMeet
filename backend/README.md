@@ -132,7 +132,7 @@ CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
-登録場所:
+Environment secrets の登録場所:
 
 ```text
 GitHub repository
@@ -140,6 +140,28 @@ GitHub repository
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
+```
+
+Environment vars の登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+追加値の作り方:
+
+```text
+INTERNAL_TASK_SECRET: openssl rand -hex 32 の出力
+CORS_ALLOW_ORIGINS:
+  staging: https://stg.gurumeet.net
+  production: https://gurumeet.net
+GURUMEET_ENABLE_MOCK_RESTAURANTS: false
 ```
 
 `backend` フォルダ内で実行:

@@ -622,6 +622,7 @@ Settings
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
 ```
 
 staging / production それぞれに登録する値:
@@ -646,8 +647,29 @@ CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
+GitHub Environment vars の登録場所:
+
+```text
+Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
 `PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は上のような長いランダム値を使う。
 `DATABASE_URL` は各環境の Neon PostgreSQL connection string を使う。
+`CORS_ALLOW_ORIGINS` と `GURUMEET_ENABLE_MOCK_RESTAURANTS` は以下を使う。
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 deploy workflow が GitHub Environment secrets を `wrangler deploy --secrets-file` で、
 GitHub Environment vars を `wrangler deploy --var` で Cloudflare に渡す。Git には残らない。
@@ -886,6 +908,7 @@ Settings
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
 ```
 
 staging / production それぞれに登録する値:
@@ -905,6 +928,26 @@ GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
 `DATABASE_URL` は各環境の Neon connection string を使う。
+`INTERNAL_TASK_SECRET` は `openssl rand -hex 32` で生成する。
+GitHub Environment vars は以下に登録する。
+
+```text
+Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 ### 7. Cloudflare Access を staging に設定
 

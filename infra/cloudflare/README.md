@@ -293,6 +293,17 @@ openssl rand -hex 32
 ```
 
 `staging` と `production` の `DATABASE_URL` は別DBを指す値にする。
+`CORS_ALLOW_ORIGINS` と `GURUMEET_ENABLE_MOCK_RESTAURANTS` は以下を使う。
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 ### Cloudflare API Token の作成
 
@@ -425,8 +436,13 @@ GURUMEET_ENABLE_MOCK_RESTAURANTS
 公開時のCORSは `CORS_ALLOW_ORIGINS` で制限する。
 
 ```text
-staging:    https://stg.gurumeet.net
-production: https://gurumeet.net
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
 ```
 
 ## Cloudflare Access
