@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/group_creation_draft.dart';
 import '../theme/app_tokens.dart';
@@ -84,7 +85,7 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                               draft: widget.draft,
                               onCopyUrl: () => _copyUrl(context),
                               onCopyCode: () => _copyCode(context),
-                              onShare: () => _showShareFeedback(context),
+                              onShare: () => _shareInvite(context),
                             ),
                             const SizedBox(height: AppSpacing.large),
                             AnimatedSwitcher(
@@ -158,9 +159,6 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
       return;
     }
     _showCopySuccess('招待URLをコピーしました');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('招待URLをコピーしました')));
   }
 
   Future<void> _copyCode(BuildContext context) async {
@@ -169,15 +167,28 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
       return;
     }
     _showCopySuccess('グループコードをコピーしました');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('グループコードをコピーしました')));
   }
 
-  void _showShareFeedback(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('共有機能は現在準備中です。URLをコピーして共有できます。')),
-    );
+  Future<void> _shareInvite(BuildContext context) async {
+    final text =
+        'GuruMeetのルームに参加してください。\n'
+        'コード: ${widget.draft.groupId}\n'
+        '${widget.draft.inviteUrl}';
+    try {
+      await SharePlus.instance.share(
+        ShareParams(title: 'GuruMeetの招待', subject: 'GuruMeetの招待', text: text),
+      );
+      if (!context.mounted) {
+        return;
+      }
+      _showCopySuccess('招待を共有しました');
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: widget.draft.inviteUrl));
+      if (!context.mounted) {
+        return;
+      }
+      _showCopySuccess('共有できなかったためURLをコピーしました');
+    }
   }
 }
 

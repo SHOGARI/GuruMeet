@@ -7,6 +7,7 @@ import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../models/room_member.dart';
 import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/restaurant_image.dart';
@@ -77,13 +78,13 @@ class _SwipePageState extends State<SwipePage> {
         _restaurants = restaurants;
         _isLoadingRestaurants = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _isLoadingRestaurants = false;
-        _restaurantLoadError = '店舗候補を取得できませんでした';
+        _restaurantLoadError = votingErrorMessage(error);
       });
     }
   }
@@ -112,14 +113,14 @@ class _SwipePageState extends State<SwipePage> {
 
     try {
       await _roomRepository.submitVote(draft: widget.draft, choice: voteChoice);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() => _isResolvingChoice = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('投票を送信できませんでした')));
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
       return;
     }
 
@@ -195,14 +196,14 @@ class _SwipePageState extends State<SwipePage> {
         MatchPage.routeName,
         arguments: (draft: widget.draft, result: latestResult),
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() => _isOpeningResult = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('結果を取得できませんでした')));
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
     }
   }
 
@@ -231,13 +232,13 @@ class _SwipePageState extends State<SwipePage> {
       if (status.isComplete) {
         _completionTimer?.cancel();
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('投票状況を取得できませんでした')));
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
     }
   }
 
@@ -347,11 +348,13 @@ class _SwipePageState extends State<SwipePage> {
                         onAction: () => unawaited(_loadRestaurants()),
                       )
                     : _restaurants.isEmpty
-                    ? const _SwipeNoticeCard(
+                    ? _SwipeNoticeCard(
                         key: ValueKey('restaurant-empty'),
                         icon: Icons.search_off_rounded,
                         title: '候補が見つかりませんでした',
                         message: 'エリアや予算を変えてもう一度作成してください。',
+                        actionLabel: '戻る',
+                        onAction: () => Navigator.of(context).maybePop(),
                       )
                     : _isComplete
                     ? _CompletionCard(

@@ -88,18 +88,11 @@ class _MatchPageState extends State<MatchPage>
     ).showSnackBar(SnackBar(content: Text('${restaurant.name} に決定しました')));
   }
 
-  void _restartVoting({required bool runoff}) {
+  void _restartVoting() {
     if (_isNavigating) {
       return;
     }
     setState(() => _isNavigating = true);
-    if (runoff) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_summary.topResults.length}店舗で決選投票を開始します（デモ）'),
-        ),
-      );
-    }
     Navigator.of(
       context,
     ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
@@ -160,14 +153,7 @@ class _MatchPageState extends State<MatchPage>
                 onConfirm: _hasConfirmed || _isNavigating
                     ? null
                     : _confirmRestaurant,
-                onRestart: _isNavigating
-                    ? null
-                    : () => _restartVoting(runoff: false),
-                onRunoff: _summary.hasTie
-                    ? (_isNavigating
-                          ? null
-                          : () => _restartVoting(runoff: true))
-                    : null,
+                onRestart: _isNavigating ? null : _restartVoting,
                 onOpenDetail: _openDetail,
                 onGoHome: _goHome,
               ),
@@ -241,7 +227,7 @@ class _ResultHeader extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.medium),
         Text(
-          summary.hasTie ? '同率1位。決選投票へ。' : '今日のお店が決定。',
+          summary.hasTie ? '同率1位。候補から選べます。' : '今日のお店が決定。',
           style: theme.textTheme.headlineLarge,
         ),
         const SizedBox(height: AppSpacing.small),
@@ -369,7 +355,6 @@ class _ResultActions extends StatelessWidget {
     required this.onOpenMaps,
     required this.onConfirm,
     required this.onRestart,
-    required this.onRunoff,
     required this.onOpenDetail,
     required this.onGoHome,
   });
@@ -378,7 +363,6 @@ class _ResultActions extends StatelessWidget {
   final VoidCallback? onOpenMaps;
   final VoidCallback? onConfirm;
   final VoidCallback? onRestart;
-  final VoidCallback? onRunoff;
   final VoidCallback onOpenDetail;
   final VoidCallback onGoHome;
 
@@ -397,12 +381,6 @@ class _ResultActions extends StatelessWidget {
             icon: const Icon(Icons.check_circle_rounded),
             label: const Text('この店に決定'),
           ),
-          if (hasTie)
-            FilledButton.tonalIcon(
-              onPressed: onRunoff,
-              icon: const Icon(Icons.how_to_vote_rounded),
-              label: const Text('決選投票をする'),
-            ),
           OutlinedButton.icon(
             onPressed: onRestart,
             icon: const Icon(Icons.refresh_rounded),
@@ -412,8 +390,9 @@ class _ResultActions extends StatelessWidget {
           TextButton(onPressed: onGoHome, child: const Text('ホームへ戻る')),
         ];
 
+        Widget actions;
         if (constraints.maxWidth < 620) {
-          return Column(
+          actions = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var index = 0; index < buttons.length; index++) ...[
@@ -422,19 +401,65 @@ class _ResultActions extends StatelessWidget {
               ],
             ],
           );
+        } else {
+          actions = Wrap(
+            spacing: AppSpacing.small,
+            runSpacing: AppSpacing.small,
+            children: buttons.map((button) {
+              return SizedBox(
+                width: (constraints.maxWidth - AppSpacing.small) / 2,
+                child: button,
+              );
+            }).toList(),
+          );
         }
 
-        return Wrap(
-          spacing: AppSpacing.small,
-          runSpacing: AppSpacing.small,
-          children: buttons.map((button) {
-            return SizedBox(
-              width: (constraints.maxWidth - AppSpacing.small) / 2,
-              child: button,
-            );
-          }).toList(),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (hasTie) ...[
+              _TieNotice(onRestart: onRestart),
+              const SizedBox(height: AppSpacing.small),
+            ],
+            actions,
+          ],
         );
       },
+    );
+  }
+}
+
+class _TieNotice extends StatelessWidget {
+  const _TieNotice({required this.onRestart});
+
+  final VoidCallback? onRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.regular),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.how_to_vote_rounded, color: colors.primary),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              '同率候補があります。ランキングから候補を確認し、必要なら最初から選び直せます。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onRestart, child: const Text('選び直す')),
+        ],
+      ),
     );
   }
 }

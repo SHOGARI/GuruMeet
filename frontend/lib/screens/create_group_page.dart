@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/group_creation_draft.dart';
 import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
@@ -74,13 +75,13 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       await Navigator.of(
         context,
       ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('グループ作成に失敗しました')));
+        ..showSnackBar(SnackBar(content: Text(roomCreateErrorMessage(error))));
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

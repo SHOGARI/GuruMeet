@@ -27,6 +27,26 @@ class VotingStatus {
   bool get isComplete => members.isNotEmpty && completedCount == members.length;
 }
 
+class RoomInvitePreview {
+  const RoomInvitePreview({
+    required this.roomId,
+    required this.code,
+    required this.peopleCount,
+    required this.joinedCount,
+    required this.area,
+    required this.budget,
+    required this.isFull,
+  });
+
+  final String roomId;
+  final String code;
+  final int peopleCount;
+  final int joinedCount;
+  final String area;
+  final BudgetOption budget;
+  final bool isFull;
+}
+
 abstract class RoomRepository {
   Future<GroupCreationDraft> createRoom({
     required int peopleCount,
@@ -35,6 +55,8 @@ abstract class RoomRepository {
   });
 
   Future<GroupCreationDraft> joinRoom({required String code});
+
+  Future<RoomInvitePreview> getInvitePreview({required String inviteToken});
 
   Future<List<RoomMember>> getMembers(GroupCreationDraft draft);
 
@@ -93,6 +115,22 @@ class MockRoomRepository implements RoomRepository {
   Future<GroupCreationDraft> joinRoom({required String code}) async {
     await Future<void>.delayed(const Duration(milliseconds: 180));
     return GroupCreationDraft.joinMock(groupId: code);
+  }
+
+  @override
+  Future<RoomInvitePreview> getInvitePreview({
+    required String inviteToken,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    return RoomInvitePreview(
+      roomId: inviteToken,
+      code: inviteToken.length == 5 ? inviteToken.toUpperCase() : 'G7M24',
+      peopleCount: 4,
+      joinedCount: 1,
+      area: '新宿',
+      budget: BudgetOption.from2000To3000,
+      isFull: false,
+    );
   }
 
   @override
@@ -276,6 +314,18 @@ class ApiRoomRepository implements RoomRepository {
     return RegExp(
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
     ).hasMatch(value);
+  }
+
+  @override
+  Future<RoomInvitePreview> getInvitePreview({
+    required String inviteToken,
+  }) async {
+    final token = inviteToken.trim();
+    if (!_isUuid(token)) {
+      throw const ApiException('招待リンクの形式が不正です');
+    }
+    final detail = await _apiClient.getJson('/temporary-groups/$token');
+    return _previewFromDetail(detail);
   }
 
   @override
@@ -463,6 +513,23 @@ class ApiRoomRepository implements RoomRepository {
 
   Future<String> _participantToken() {
     return _participantTokenFuture ??= _loadOrCreateParticipantToken();
+  }
+
+  RoomInvitePreview _previewFromDetail(Map<String, dynamic> json) {
+    final peopleCount = json['participant_count'] as int? ?? 4;
+    final joinedCount = json['joined_participant_count'] as int? ?? 0;
+    return RoomInvitePreview(
+      roomId: json['id'] as String? ?? '',
+      code: (json['code'] as String? ?? '').toUpperCase(),
+      peopleCount: peopleCount,
+      joinedCount: joinedCount,
+      area: json['location'] as String? ?? 'エリア未設定',
+      budget: BudgetOption.fromRange(
+        minAmount: json['budget_min'] as int?,
+        maxAmount: json['budget_max'] as int?,
+      ),
+      isFull: joinedCount >= peopleCount,
+    );
   }
 
   Future<String> _loadOrCreateParticipantToken() async {

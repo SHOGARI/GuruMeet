@@ -213,7 +213,25 @@ void main() {
     );
   });
 
-  testWidgets('tie result shows runoff action', (tester) async {
+  testWidgets('legacy code invite route can still join', (tester) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/join/AB12C');
+    await tester.pumpAndSettle();
+
+    expect(find.text('グループに参加'), findsOneWidget);
+    expect(find.text('AB12C'), findsOneWidget);
+    expect(find.text('ルーム情報'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '参加する'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('tie result shows tie notice and restart action', (tester) async {
     final draft = GroupCreationDraft.createMock(
       peopleCount: 3,
       area: '渋谷',
@@ -248,8 +266,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('同率1位。決選投票へ。'), findsOneWidget);
-    expect(find.text('決選投票をする'), findsOneWidget);
+    expect(find.text('同率1位。候補から選べます。'), findsOneWidget);
+    expect(find.text('選び直す'), findsOneWidget);
+    expect(find.text('決選投票をする'), findsNothing);
   });
 
   testWidgets('create group always shows condition inputs', (tester) async {

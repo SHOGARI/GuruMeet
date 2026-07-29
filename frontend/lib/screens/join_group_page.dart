@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/primary_action_button.dart';
@@ -26,6 +27,9 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
 
   bool _hasTriedSubmit = false;
   bool _isNavigating = false;
+  bool _isLoadingPreview = false;
+  RoomInvitePreview? _preview;
+  String? _previewError;
 
   String? get _inviteToken {
     final token = widget.initialInviteToken?.trim();
@@ -34,6 +38,19 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
 
   bool get _hasValidLength => _codeController.text.trim().length == 5;
   bool get _hasInviteToken => _inviteToken != null;
+  bool get _canPreviewInviteToken {
+    final token = _inviteToken;
+    return token != null &&
+        RegExp(
+          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+        ).hasMatch(token);
+  }
+
+  bool get _canSubmitInvite =>
+      !_canPreviewInviteToken ||
+      (!_isLoadingPreview &&
+          _previewError == null &&
+          !(_preview?.isFull ?? false));
 
   @override
   void initState() {
@@ -41,6 +58,9 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
     final token = _inviteToken;
     if (token != null && RegExp(r'^[A-Za-z0-9]{5}$').hasMatch(token)) {
       _codeController.text = token.toUpperCase();
+    }
+    if (token != null && _canPreviewInviteToken) {
+      _loadInvitePreview(token);
     }
   }
 
@@ -75,17 +95,44 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
       await Navigator.of(
         context,
       ).pushNamed(WaitingRoomPage.routeName, arguments: draft);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('ルームに参加できませんでした')));
+        ..showSnackBar(SnackBar(content: Text(roomJoinErrorMessage(error))));
     } finally {
       if (mounted) {
         setState(() => _isNavigating = false);
       }
+    }
+  }
+
+  Future<void> _loadInvitePreview(String token) async {
+    setState(() {
+      _isLoadingPreview = true;
+      _previewError = null;
+    });
+    try {
+      final preview = await _roomRepository.getInvitePreview(
+        inviteToken: token,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _preview = preview;
+        _isLoadingPreview = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingPreview = false;
+        _previewError = roomJoinErrorMessage(error);
+      });
     }
   }
 
@@ -156,6 +203,20 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
                 onFieldSubmitted: (_) => _joinGroup(),
               ),
             const SizedBox(height: AppSpacing.medium),
+            if (_canPreviewInviteToken) ...[
+              _InvitePreviewPanel(
+                isLoading: _isLoadingPreview,
+                preview: _preview,
+                errorMessage: _previewError,
+                onRetry: () {
+                  final token = _inviteToken;
+                  if (token != null) {
+                    _loadInvitePreview(token);
+                  }
+                },
+              ),
+              const SizedBox(height: AppSpacing.medium),
+            ],
             Text(
               _hasInviteToken
                   ? '参加できない場合は、招待リンクが正しいか確認してください。'
@@ -170,13 +231,134 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               child: PrimaryActionButton(
                 label: '参加する',
                 onPressed:
-                    _isNavigating || (!_hasInviteToken && !_hasValidLength)
+                    _isNavigating ||
+                        (_hasInviteToken && !_canSubmitInvite) ||
+                        (!_hasInviteToken && !_hasValidLength)
                     ? null
                     : _joinGroup,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InvitePreviewPanel extends StatelessWidget {
+  const _InvitePreviewPanel({
+    required this.isLoading,
+    required this.preview,
+    required this.errorMessage,
+    required this.onRetry,
+  });
+
+  final bool isLoading;
+  final RoomInvitePreview? preview;
+  final String? errorMessage;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final preview = this.preview;
+
+    if (isLoading) {
+      return const LinearProgressIndicator();
+    }
+
+    if (errorMessage != null) {
+      return _InlineNotice(
+        icon: Icons.error_outline_rounded,
+        message: errorMessage!,
+        actionLabel: '再試行',
+        onAction: onRetry,
+      );
+    }
+
+    if (preview == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.medium),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ルーム情報', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.small),
+          Text('${preview.area} / ${preview.budget.label}'),
+          const SizedBox(height: AppSpacing.micro),
+          Text(
+            '${preview.joinedCount} / ${preview.peopleCount}人が参加中',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: preview.isFull ? colors.error : colors.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (preview.isFull) ...[
+            const SizedBox(height: AppSpacing.small),
+            Text(
+              'このルームは満員のため参加できません。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineNotice extends StatelessWidget {
+  const _InlineNotice({
+    required this.icon,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final IconData icon;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.medium),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: colors.onErrorContainer),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onErrorContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onAction, child: Text(actionLabel)),
+        ],
       ),
     );
   }

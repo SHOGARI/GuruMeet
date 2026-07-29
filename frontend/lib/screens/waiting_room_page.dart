@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/group_creation_draft.dart';
 import '../models/room_member.dart';
 import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'swipe_page.dart';
@@ -31,6 +32,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   bool _isLoadingMembers = true;
   bool _isVotingStarted = false;
   String? _memberLoadError;
+  DateTime? _lastMemberLoadedAt;
 
   bool get _isHost => widget.draft.isHost;
   bool get _isRoomReady =>
@@ -75,17 +77,18 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         _isVotingStarted = votingStarted;
         _isLoadingMembers = false;
         _memberLoadError = null;
+        _lastMemberLoadedAt = DateTime.now();
       });
       if ((_isHost && _isRoomReady) || (!_isHost && votingStarted)) {
         _joinTimer?.cancel();
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _isLoadingMembers = false;
-        _memberLoadError = 'メンバー情報を取得できませんでした';
+        _memberLoadError = votingErrorMessage(error);
       });
     }
   }
@@ -103,13 +106,13 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       await Navigator.of(
         context,
       ).pushNamed(SwipePage.routeName, arguments: widget.draft);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('投票を開始できませんでした')));
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
     } finally {
       if (mounted) {
         setState(() => _isNavigating = false);
@@ -182,10 +185,11 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                             peopleCount: widget.draft.peopleCount,
                             isLoading: _isLoadingMembers,
                             errorMessage: _memberLoadError,
+                            lastUpdatedAt: _lastMemberLoadedAt,
                             onRetry: () => unawaited(_loadMembers()),
                           ),
                           const SizedBox(height: AppSpacing.medium),
-                          _WaitingNote(isReady: _isRoomReady),
+                          _WaitingNote(isReady: _isRoomReady, isHost: _isHost),
                           const SizedBox(height: AppSpacing.large),
                         ],
                       ),
@@ -379,6 +383,7 @@ class _MemberList extends StatelessWidget {
     required this.peopleCount,
     required this.isLoading,
     required this.errorMessage,
+    required this.lastUpdatedAt,
     required this.onRetry,
   });
 
@@ -386,6 +391,7 @@ class _MemberList extends StatelessWidget {
   final int peopleCount;
   final bool isLoading;
   final String? errorMessage;
+  final DateTime? lastUpdatedAt;
   final VoidCallback onRetry;
 
   @override
@@ -395,7 +401,18 @@ class _MemberList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('参加メンバー', style: theme.textTheme.titleLarge),
+        Row(
+          children: [
+            Expanded(child: Text('参加メンバー', style: theme.textTheme.titleLarge)),
+            if (lastUpdatedAt != null)
+              Text(
+                '更新 ${_formatTime(lastUpdatedAt!)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.regular),
         if (isLoading) ...[
           const LinearProgressIndicator(),
@@ -428,6 +445,13 @@ class _MemberList extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatTime(DateTime value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    final second = value.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
   }
 }
 
@@ -653,9 +677,10 @@ class _MemberBadge extends StatelessWidget {
 }
 
 class _WaitingNote extends StatelessWidget {
-  const _WaitingNote({required this.isReady});
+  const _WaitingNote({required this.isReady, required this.isHost});
 
   final bool isReady;
+  final bool isHost;
 
   @override
   Widget build(BuildContext context) {
@@ -670,7 +695,9 @@ class _WaitingNote extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.control),
       ),
       child: Text(
-        isReady ? '全員の準備が完了しました。ホストが投票を開始できます。' : 'デモでは数秒ごとに疑似メンバーが参加します。',
+        isReady
+            ? (isHost ? '全員そろいました。投票を開始できます。' : '全員そろいました。ホストの開始を待っています。')
+            : '招待URLやQRコードから参加すると、ここにメンバーが表示されます。',
         style: theme.textTheme.bodyMedium?.copyWith(
           color: isReady ? colors.onPrimaryContainer : colors.onSurfaceVariant,
           fontWeight: FontWeight.w700,
