@@ -195,6 +195,7 @@ develop -> main の pull request
   -> backend 構文確認
   -> frontend analyze / test
   -> Worker 型チェック
+  -> staging / production の GitHub Environment secrets 有無確認
 ```
 
 GitHub Actions に必要な repository secrets:
@@ -203,6 +204,17 @@ GitHub Actions に必要な repository secrets:
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
 ```
+
+Cloudflare Worker / Container に渡す runtime secrets は、GitHub Environment の `staging` / `production` に登録する。
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+```
+
+deploy workflow は GitHub Environment secrets から `wrangler deploy --secrets-file` へ渡す。
+Cloudflare Dashboard や手元の `.env` を本番値の source of truth にしない。
 
 ### Cloudflare API Token の作成
 
@@ -307,7 +319,8 @@ Secret value: Cloudflare account ID
 <Cloudflare account ID>
 ```
 
-`DATABASE_URL` は GitHub Secrets ではなく Cloudflare Wrangler secret に登録する。
+`DATABASE_URL` / `HOTPEPPER_API_KEY` / `PARTICIPANT_TOKEN_HASH_SECRET` は GitHub Environment secrets に登録する。
+手動で Cloudflare Wrangler secret を更新する運用にはしない。
 
 ## Cloudflare Access
 

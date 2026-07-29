@@ -111,12 +111,13 @@ FastAPI を Compose の外で直接起動する場合だけ、必要に応じて
 DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
 ```
 
-staging / production の `DATABASE_URL` は `backend/.env` には書かない。Cloudflare Wrangler secret に登録する。
+staging / production の `DATABASE_URL` は `backend/.env` には書かない。
+GitHub Environment secrets に登録し、deploy workflow から Cloudflare Worker / Container に渡す。
 
-```sh
-cd ../infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env staging
-npx wrangler secret put DATABASE_URL --env production
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
 ```
 
 `backend` フォルダ内で実行:
