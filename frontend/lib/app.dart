@@ -7,11 +7,11 @@ import 'screens/group_created_page.dart';
 import 'screens/home_page.dart';
 import 'screens/join_group_page.dart';
 import 'screens/match_page.dart';
+import 'screens/not_found_page.dart';
 import 'screens/restaurant_detail_page.dart';
 import 'screens/swipe_page.dart';
 import 'screens/waiting_room_page.dart';
 import 'theme/app_theme.dart';
-import 'theme/app_tokens.dart';
 
 class GuruMeetApp extends StatelessWidget {
   const GuruMeetApp({super.key});
@@ -49,6 +49,8 @@ class GuruMeetApp extends StatelessWidget {
               builder: (_) => const JoinGroupPage(),
               settings: settings,
             );
+          case NotFoundPage.routeName:
+            return _notFoundRoute(settings: settings);
           case GroupCreatedPage.routeName:
             final draft = settings.arguments;
             if (draft case final GroupCreationDraft value) {
@@ -57,7 +59,7 @@ class GuruMeetApp extends StatelessWidget {
                 settings: settings,
               );
             }
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
           case WaitingRoomPage.routeName:
             final draft = settings.arguments;
             if (draft case final GroupCreationDraft value) {
@@ -66,7 +68,7 @@ class GuruMeetApp extends StatelessWidget {
                 settings: settings,
               );
             }
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
           case SwipePage.routeName:
             final draft = settings.arguments;
             if (draft case final GroupCreationDraft value) {
@@ -75,7 +77,7 @@ class GuruMeetApp extends StatelessWidget {
                 settings: settings,
               );
             }
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
           case MatchPage.routeName:
             final arguments = settings.arguments;
             if (arguments case (
@@ -107,7 +109,7 @@ class GuruMeetApp extends StatelessWidget {
                 settings: settings,
               );
             }
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
           case RestaurantDetailPage.routeName:
             final arguments = settings.arguments;
             if (arguments case (
@@ -120,26 +122,19 @@ class GuruMeetApp extends StatelessWidget {
                 settings: settings,
               );
             }
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
           default:
-            return _errorRoute();
+            return _notFoundRoute(settings: settings);
         }
       },
+      onUnknownRoute: (settings) => _notFoundRoute(settings: settings),
     );
   }
 
-  MaterialPageRoute<void> _errorRoute() {
+  MaterialPageRoute<void> _notFoundRoute({required RouteSettings settings}) {
     return MaterialPageRoute<void>(
-      builder: (_) => const Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(AppSpacing.xLarge),
-              child: Text('ページの読み込みに失敗しました。'),
-            ),
-          ),
-        ),
-      ),
+      builder: (_) => NotFoundPage(requestedRoute: settings.name),
+      settings: settings,
     );
   }
 

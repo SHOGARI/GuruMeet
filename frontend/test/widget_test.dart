@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gurumeet/app.dart';
 import 'package:gurumeet/models/group_creation_draft.dart';
 import 'package:gurumeet/models/restaurant_preview.dart';
+import 'package:gurumeet/screens/group_created_page.dart';
 import 'package:gurumeet/screens/match_page.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -229,6 +230,33 @@ void main() {
           .onPressed,
       isNotNull,
     );
+  });
+
+  testWidgets('unknown route shows not found fallback', (tester) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/missing-page');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ページが見つかりません'), findsOneWidget);
+    expect(find.text('404'), findsOneWidget);
+    expect(find.text('/missing-page'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'ホームへ戻る'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'コードで参加する'), findsOneWidget);
+  });
+
+  testWidgets('invalid direct route arguments show not found fallback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GuruMeetApp());
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed(GroupCreatedPage.routeName);
+    await tester.pumpAndSettle();
+
+    expect(find.text('ページが見つかりません'), findsOneWidget);
+    expect(find.text(GroupCreatedPage.routeName), findsOneWidget);
   });
 
   testWidgets('tie result shows tie notice and restart action', (tester) async {
