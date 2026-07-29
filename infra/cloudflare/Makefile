@@ -40,6 +40,7 @@ whoami:
 .PHONY: build-frontend-staging
 build-frontend-staging:
 	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=DEMO_MODE=false \
 		--dart-define=GURUMEET_ENABLE_MOCKS=false \
 		--dart-define=GURUMEET_API_BASE_URL=https://stg.gurumeet.net/api \
 		--dart-define=GURUMEET_INVITE_BASE_URL=https://stg.gurumeet.net
@@ -47,6 +48,7 @@ build-frontend-staging:
 .PHONY: build-frontend-production
 build-frontend-production:
 	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=DEMO_MODE=false \
 		--dart-define=GURUMEET_ENABLE_MOCKS=false \
 		--dart-define=GURUMEET_API_BASE_URL=https://gurumeet.net/api \
 		--dart-define=GURUMEET_INVITE_BASE_URL=https://gurumeet.net

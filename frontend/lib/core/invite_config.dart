@@ -1,7 +1,6 @@
 abstract final class InviteConfig {
   static const String _configuredBaseUrl = String.fromEnvironment(
     'GURUMEET_INVITE_BASE_URL',
-    defaultValue: '',
   );
 
   static String get baseUrl {
@@ -14,7 +13,7 @@ abstract final class InviteConfig {
       return _withoutTrailingSlash(Uri.base.origin);
     }
 
-    return 'https://gurumeet.app';
+    throw StateError('GURUMEET_INVITE_BASE_URL must be configured.');
   }
 
   static String _withoutTrailingSlash(String value) {

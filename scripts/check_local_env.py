@@ -48,17 +48,23 @@ def check_backend_env() -> bool:
     has_error = False
     has_error |= report_file(ROOT / "backend" / ".env")
 
-    enable_mock_restaurants = value(env, "GURUMEET_ENABLE_MOCK_RESTAURANTS", "false")
     required = [
+        "API_PORT",
         "POSTGRES_DB",
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",
         "POSTGRES_PORT",
+        "TEMPORARY_GROUP_TTL_MINUTES",
+        "TEMPORARY_GROUP_CODE_MAX_ATTEMPTS",
+        "JOIN_RATE_LIMIT_REQUESTS",
+        "JOIN_RATE_LIMIT_WINDOW_SECONDS",
         "CORS_ALLOW_ORIGINS",
+        "GURUMEET_ENABLE_MOCK_RESTAURANTS",
         "PARTICIPANT_TOKEN_HASH_SECRET",
         "INTERNAL_TASK_SECRET",
         "REQUEST_BODY_MAX_BYTES",
     ]
+    enable_mock_restaurants = value(env, "GURUMEET_ENABLE_MOCK_RESTAURANTS")
     if enable_mock_restaurants.lower() != "true":
         required.append("HOTPEPPER_API_KEY")
 
@@ -79,20 +85,28 @@ def check_frontend_env() -> bool:
     has_error = False
     has_error |= report_file(ROOT / "frontend" / ".env")
 
-    frontend_defaults = {
-        "FRONTEND_PORT": "3000",
-        "GURUMEET_API_BASE_URL": "http://localhost:8000",
-        "GURUMEET_INVITE_BASE_URL": "http://localhost:3000",
-        "GURUMEET_ENABLE_MOCKS": "true",
-    }
-    for key, default in frontend_defaults.items():
-        has_error |= report_key(env, key, default=default)
+    required = [
+        "FRONTEND_PORT",
+        "GURUMEET_API_BASE_URL",
+        "GURUMEET_INVITE_BASE_URL",
+        "GURUMEET_ENABLE_MOCKS",
+        "DEMO_MODE",
+    ]
+    for key in required:
+        has_error |= report_key(env, key)
 
     enable_mocks = value(env, "GURUMEET_ENABLE_MOCKS")
     if enable_mocks.lower() == "true":
         print("  WARN GURUMEET_ENABLE_MOCKS=true のため実APIは叩きません")
     elif enable_mocks.lower() != "false":
         print("  ERROR GURUMEET_ENABLE_MOCKS must be true or false")
+        has_error = True
+
+    demo_mode = value(env, "DEMO_MODE")
+    if demo_mode.lower() == "true":
+        has_error |= report_key(env, "DEMO_ROOM_CODE")
+    elif demo_mode.lower() != "false":
+        print("  ERROR DEMO_MODE must be true or false")
         has_error = True
 
     api_base_url = value(env, "GURUMEET_API_BASE_URL")

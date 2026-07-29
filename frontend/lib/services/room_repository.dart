@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api_config.dart';
+import '../core/demo_config.dart';
 import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../models/room_member.dart';
@@ -124,7 +125,9 @@ class MockRoomRepository implements RoomRepository {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     return RoomInvitePreview(
       roomId: inviteToken,
-      code: inviteToken.length == 5 ? inviteToken.toUpperCase() : 'G7M24',
+      code: inviteToken.length == 5
+          ? inviteToken.toUpperCase()
+          : DemoConfig.roomCode,
       peopleCount: 4,
       joinedCount: 1,
       area: '新宿',

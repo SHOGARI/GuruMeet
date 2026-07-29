@@ -1,8 +1,9 @@
 import json
+from typing import Annotated
 
 from pydantic import Field, SecretStr
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -19,14 +20,17 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="GURUMEET_ENABLE_MOCK_RESTAURANTS",
     )
-    cors_allow_origins: list[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-        "http://localhost:5000",
-        "http://127.0.0.1:5000",
-    ]
+    cors_allow_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+        ],
+        validation_alias="CORS_ALLOW_ORIGINS",
+    )
     participant_token_hash_secret: str = (
         "gurumeet-dev-participant-token-secret"
     )

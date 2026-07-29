@@ -39,6 +39,12 @@ cd frontend
 flutter pub get
 ```
 
+初回は local 用 `.env` を作ります。
+
+```sh
+cp .env.example .env
+```
+
 Webで起動する場合：
 
 ```
@@ -51,23 +57,27 @@ Chromeが利用可能な場合：
 make dev-chrome
 ```
 
-ローカル起動ポートは `frontend/.env` の `FRONTEND_PORT` で固定します。
+ローカル起動に使う値は `frontend/.env` にまとめます。
 
 ```env
 FRONTEND_PORT=3000
+GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=true
+DEMO_MODE=true
+DEMO_ROOM_CODE=G7M24
 ```
 
-実APIへ接続する場合は、Flutter起動またはbuild時に以下を渡します。
+実APIへ接続する場合は、`frontend/.env` を以下のように変更します。
 
-```sh
-flutter run -d chrome \
-  --dart-define=GURUMEET_ENABLE_MOCKS=false \
-  --dart-define=GURUMEET_API_BASE_URL=http://localhost:8000 \
-  --dart-define=GURUMEET_INVITE_BASE_URL=http://localhost:3000
+```env
+GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=false
+DEMO_MODE=false
 ```
 
-本番デプロイ時は `GURUMEET_API_BASE_URL` を公開APIのURL、
-`GURUMEET_INVITE_BASE_URL` を公開フロントエンドURLにしてください。
+staging / production build では deploy workflow が `--dart-define` で公開URLを渡します。
 招待URLとQRコードは `GURUMEET_INVITE_BASE_URL/#/join/{roomId}` 形式で生成されます。
 
 `make dev` は内部で以下を実行します。
@@ -94,7 +104,7 @@ flutter run -d <device-id>
 ```
 flutter format .
 flutter analyze
-flutter test
+make test
 ```
 
 現在の実装範囲
@@ -110,4 +120,6 @@ flutter test
 モック切り替え
 
 `GURUMEET_ENABLE_MOCKS=true` の場合はUI確認用のモックデータを使います。
+公開環境では必ず `false` にしてください。
+`DEMO_MODE=true` の場合は `DEMO_ROOM_CODE` の固定コードを使います。
 公開環境では必ず `false` にしてください。

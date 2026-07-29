@@ -17,7 +17,7 @@ void main() {
 
     expect(draft.groupId, matches(RegExp(r'^[A-Z0-9]{5}$')));
     expect(draft.groupId, 'G7M24');
-    expect(draft.inviteUrl, 'https://gurumeet.app/#/join/${draft.groupId}');
+    expect(draft.inviteUrl, 'http://localhost:3000/#/join/${draft.groupId}');
   });
 
   testWidgets('home to create group flow renders', (tester) async {
@@ -86,7 +86,10 @@ void main() {
     expect(find.text('GROUP CODE  |  招待コード'), findsOneWidget);
     expect(find.text('渋谷'), findsOneWidget);
     expect(find.text('3,000〜5,000円'), findsOneWidget);
-    expect(find.textContaining('https://gurumeet.app/#/join/'), findsOneWidget);
+    expect(
+      find.textContaining('http://localhost:3000/#/join/'),
+      findsOneWidget,
+    );
     expect(find.byType(QrImageView), findsOneWidget);
     expect(tester.getTopLeft(find.text('招待を送ろう')).dy, greaterThan(0));
 
@@ -405,7 +408,7 @@ void main() {
     expect(find.text('メンバー待機'), findsOneWidget);
     expect(find.text('1 / 4人'), findsOneWidget);
     expect(
-      find.textContaining('https://gurumeet.app/#/join/AB12C'),
+      find.textContaining('http://localhost:3000/#/join/AB12C'),
       findsOneWidget,
     );
   });

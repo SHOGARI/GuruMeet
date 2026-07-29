@@ -3,14 +3,12 @@ SHELL := /bin/bash
 -include .env
 export
 
-FRONTEND_PORT ?= 3000
-GURUMEET_API_BASE_URL ?= http://localhost:8000
-GURUMEET_INVITE_BASE_URL ?= http://localhost:3000
-GURUMEET_ENABLE_MOCKS ?= true
 DART_DEFINES = \
 	--dart-define=GURUMEET_ENABLE_MOCKS=$(GURUMEET_ENABLE_MOCKS) \
 	--dart-define=GURUMEET_API_BASE_URL=$(GURUMEET_API_BASE_URL) \
-	--dart-define=GURUMEET_INVITE_BASE_URL=$(GURUMEET_INVITE_BASE_URL)
+	--dart-define=GURUMEET_INVITE_BASE_URL=$(GURUMEET_INVITE_BASE_URL) \
+	--dart-define=DEMO_MODE=$(DEMO_MODE) \
+	--dart-define=DEMO_ROOM_CODE=$(DEMO_ROOM_CODE)
 
 .PHONY: help
 help:
@@ -54,5 +52,5 @@ analyze:
 	flutter analyze
 
 .PHONY: test
-test:
-	flutter test
+test: check-env
+	flutter test $(DART_DEFINES)

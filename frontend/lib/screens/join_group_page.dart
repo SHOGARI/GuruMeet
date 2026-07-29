@@ -192,7 +192,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
                 ),
                 decoration: const InputDecoration(
                   counterText: '',
-                  hintText: 'G7M24',
+                  hintText: '招待コード',
                 ),
                 inputFormatters: [
                   const _UppercaseTextFormatter(),

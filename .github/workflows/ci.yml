@@ -82,7 +82,9 @@ jobs:
 
       - name: frontend test を実行
         working-directory: frontend
-        run: flutter test
+        run: |
+          cp .env.example .env
+          make test
 
   worker:
     name: worker
@@ -108,8 +110,8 @@ jobs:
         working-directory: infra/cloudflare/app-worker
         run: npm run check
 
-  cloudflare-env:
-    name: cloudflare env (${{ matrix.deploy_env }})
+  github-environment:
+    name: github environment (${{ matrix.deploy_env }})
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     environment:
@@ -124,7 +126,7 @@ jobs:
           - staging
           - production
     steps:
-      - name: GitHub secrets / vars を検証
+      - name: GitHub Environment secrets / vars を検証
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

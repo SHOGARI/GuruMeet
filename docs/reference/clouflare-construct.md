@@ -1302,6 +1302,10 @@ infra/cloudflare/app-worker/.dev.vars
 ```env
 FRONTEND_PORT=3000
 GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=true
+DEMO_MODE=true
+DEMO_ROOM_CODE=G7M24
 ```
 
 frontend は `frontend/` で `make dev` を実行すると、`FRONTEND_PORT` のポートで起動する。

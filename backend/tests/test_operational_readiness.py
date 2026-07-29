@@ -91,3 +91,19 @@ class OperationalReadinessTests(unittest.TestCase):
             comma_settings.cors_allow_origins,
             ["https://gurumeet.net", "https://stg.gurumeet.net"],
         )
+
+    def test_cors_origins_accept_single_environment_value(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "CORS_ALLOW_ORIGINS": "https://gurumeet.net",
+                "PARTICIPANT_TOKEN_HASH_SECRET": "test-secret",
+            },
+            clear=True,
+        ):
+            loaded_settings = Settings(_env_file=None)
+
+        self.assertEqual(
+            loaded_settings.cors_allow_origins,
+            ["https://gurumeet.net"],
+        )

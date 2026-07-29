@@ -62,6 +62,7 @@ jobs:
           fi
 
           flutter build web --release \
+            --dart-define=DEMO_MODE=false \
             --dart-define=GURUMEET_ENABLE_MOCKS=false \
             --dart-define=GURUMEET_API_BASE_URL="${FRONTEND_URL}/api" \
             --dart-define=GURUMEET_INVITE_BASE_URL="${FRONTEND_URL}"
@@ -77,7 +78,7 @@ jobs:
       - name: Docker を確認
         run: docker info
 
-      - name: GitHub secrets を検証
+      - name: GitHub Environment secrets / vars を検証
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
