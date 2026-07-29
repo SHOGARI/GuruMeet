@@ -9,6 +9,13 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api", "/api/*", "/files/*", "/edge/*"],
   },
+  "secrets": {
+    "required": [
+      "DATABASE_URL",
+      "HOTPEPPER_API_KEY",
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+    ],
+  },
   "containers": [
     {
       "class_name": "BackendContainer",
@@ -38,6 +45,13 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+        ],
       },
       "containers": [
         {
@@ -80,6 +94,13 @@
       "vars": {
         "ENVIRONMENT": "production",
         "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+        ],
       },
       "containers": [
         {
