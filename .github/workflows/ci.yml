@@ -16,6 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gurumeet_ci
+          POSTGRES_USER: gurumeet
+          POSTGRES_PASSWORD: change_me
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gurumeet -d gurumeet_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: リポジトリを取得
         uses: actions/checkout@v4
@@ -32,6 +46,16 @@ jobs:
       - name: backend の Python 構文を確認
         working-directory: backend
         run: python -m compileall app alembic
+
+      - name: Alembic revision chain を確認
+        working-directory: backend
+        run: alembic heads --resolve-dependencies
+
+      - name: Alembic migration を実行
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://gurumeet:change_me@localhost:5432/gurumeet_ci
+        run: alembic upgrade head
 
   frontend:
     name: frontend
