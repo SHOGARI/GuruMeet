@@ -479,8 +479,8 @@ class ApiRoomRepository implements RoomRepository {
   }
 
   RestaurantPreview _restaurantFromJson(Map<String, dynamic> json) {
-    final imageUrl = json['image_url'] as String? ?? '';
     final access = json['access'] as String? ?? '';
+    final imageUrls = _imageUrlsFromJson(json);
     return RestaurantPreview(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '名称未設定',
@@ -488,9 +488,80 @@ class ApiRoomRepository implements RoomRepository {
       budget: json['budget'] as String? ?? '予算未設定',
       cuisine: json['genre'] as String? ?? 'ジャンル未設定',
       description: access.isEmpty ? '店舗詳細を確認してください。' : access,
-      imageUrls: imageUrl.isEmpty ? const [] : [imageUrl],
+      imageUrls: imageUrls,
       address: json['address'] as String? ?? '住所未設定',
     );
+  }
+
+  List<String> _imageUrlsFromJson(Map<String, dynamic> json) {
+    final values = <Object?>[
+      json['image_url'],
+      json['imageUrl'],
+      json['image'],
+      json['photo_url'],
+      json['photoUrl'],
+      json['thumbnail_url'],
+      json['thumbnailUrl'],
+    ];
+
+    final collection =
+        json['image_urls'] ?? json['imageUrls'] ?? json['images'];
+    if (collection is List) {
+      values.addAll(collection);
+    }
+
+    final photo = json['photo'];
+    if (photo is Map<String, dynamic>) {
+      values.add(_nestedImageValue(photo, const ['pc', 'l']));
+      values.add(_nestedImageValue(photo, const ['pc', 'm']));
+      values.add(_nestedImageValue(photo, const ['mobile', 'l']));
+    }
+
+    final seen = <String>{};
+    final urls = <String>[];
+    for (final value in values) {
+      final normalized = _normalizeImageUrl(value);
+      if (normalized == null || seen.contains(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      urls.add(normalized);
+    }
+    return urls;
+  }
+
+  Object? _nestedImageValue(Map<String, dynamic> json, List<String> path) {
+    Object? current = json;
+    for (final key in path) {
+      if (current is! Map<String, dynamic>) {
+        return null;
+      }
+      current = current[key];
+    }
+    return current;
+  }
+
+  String? _normalizeImageUrl(Object? value) {
+    if (value is! String) {
+      return null;
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    final withScheme = trimmed.startsWith('//') ? 'https:$trimmed' : trimmed;
+    final uri = Uri.tryParse(withScheme);
+    if (uri == null || !uri.hasScheme) {
+      return null;
+    }
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      return null;
+    }
+    if (uri.scheme == 'http') {
+      return uri.replace(scheme: 'https').toString();
+    }
+    return uri.toString();
   }
 
   List<RoomMember> _membersFromCount({
