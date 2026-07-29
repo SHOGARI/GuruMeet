@@ -504,7 +504,7 @@ ENVIRONMENT=development
 DATABASE_URL=postgresql://gurumeet:change_me@host.docker.internal:5432/gurumeet
 ```
 
-staging / production の secret は `.dev.vars` ではなく Wrangler secret に入れる。
+staging / production の secret は `.dev.vars` ではなく GitHub Environment secrets に入れる。
 
 ## Cloudflare 側で作るもの
 
@@ -609,37 +609,48 @@ staging / production:
 Neon PostgreSQL
 ```
 
-本番用の `DATABASE_URL` は repo の `.env` に書かない。Cloudflare secret に入れる。
+本番用の `DATABASE_URL` は repo の `.env` に書かない。GitHub Environment secrets に入れる。
 
-### 5. Wrangler secret
+### 5. GitHub Environment secrets
 
-CLI で登録する。
+GitHub repository settings で登録する。
 
-実行場所:
-
-```text
-infra/cloudflare/app-worker/
-```
-
-staging:
-
-```sh
-npx wrangler secret put DATABASE_URL --env staging
-```
-
-production:
-
-```sh
-npx wrangler secret put DATABASE_URL --env production
-```
-
-入力する値:
+登録場所:
 
 ```text
-各環境の Neon PostgreSQL connection string
+Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
 ```
 
-この secret は Worker / Container deploy 時に Cloudflare 側へ保存される。Git には残らない。
+staging / production それぞれに登録する値:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+値の作り方:
+
+```sh
+openssl rand -hex 32
+```
+
+GitHub Environment vars に登録する値:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は上のような長いランダム値を使う。
+`DATABASE_URL` は各環境の Neon PostgreSQL connection string を使う。
+
+deploy workflow が GitHub Environment secrets を `wrangler deploy --secrets-file` で、
+GitHub Environment vars を `wrangler deploy --var` で Cloudflare に渡す。Git には残らない。
 
 ### 6. Cloudflare Access
 
@@ -745,7 +756,7 @@ DB migration
 ```text
 1. repo に必要ファイルを作る
 2. Cloudflare / Neon 側の resource を作る
-3. Wrangler secret を登録する
+3. GitHub Environment secrets を登録する
 4. frontend build を作る
 5. Worker の型チェックを通す
 6. DB migration を必要なら実行する
@@ -864,48 +875,36 @@ Auto-delete: Never / No auto-delete
 
 staging は共有確認用なので、auto-delete は使わない。
 
-### 6. Wrangler secret を登録
+### 6. GitHub Environment secrets を登録
 
 Neon の connection string は Git / `.env` / `wrangler.jsonc` に書かない。
 
-staging:
-
-```sh
-cd infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env staging
-```
-
-入力値:
+登録場所:
 
 ```text
-Neon staging ブランチの connection string
+Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
 ```
 
-production:
-
-```sh
-cd infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env production
-```
-
-入力値:
+staging / production それぞれに登録する値:
 
 ```text
-Neon production ブランチの connection string
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
 ```
 
-初回登録時に以下を聞かれた場合は `Y` でよい。
+GitHub Environment vars に登録する値:
 
 ```text
-There doesn't seem to be a Worker called "gurumeet-staging".
-Do you want to create a new Worker with that name and add secrets to it?
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
-理由:
-
-```text
-まだ staging Worker を deploy していないため、Cloudflare 側に Worker が存在しないのは自然
-```
+`DATABASE_URL` は各環境の Neon connection string を使う。
 
 ### 7. Cloudflare Access を staging に設定
 
@@ -979,13 +978,18 @@ vars
 Wrangler の environment では top-level containers / durable_objects が期待通り継承されないため
 ```
 
-Container には Worker secret の `DATABASE_URL` を環境変数として渡す。
+Container には GitHub Environment secrets / vars から deploy 時に渡された実行時設定を環境変数として渡す。
 
 ```ts
 import { env as workerEnv } from "cloudflare:workers";
 
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
 };
 
@@ -994,6 +998,12 @@ export class BackendContainer extends Container {
   sleepAfter = "5m";
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
+    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY,
+    CORS_ALLOW_ORIGINS: runtimeEnv.CORS_ALLOW_ORIGINS,
+    PARTICIPANT_TOKEN_HASH_SECRET: runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
+    INTERNAL_TASK_SECRET: runtimeEnv.INTERNAL_TASK_SECRET,
+    GURUMEET_ENABLE_MOCK_RESTAURANTS:
+      runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
   };
 }
@@ -1090,7 +1100,14 @@ https://stg.gurumeet.net/api/health
 Cloudflare zone: gurumeet.net
 R2 bucket:       gurumeet-staging-assets
 Neon DB:         staging
-Wrangler secret: DATABASE_URL --env staging
+GitHub Environment secrets: staging
+  DATABASE_URL
+  HOTPEPPER_API_KEY
+  PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+GitHub Environment vars: staging
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
 Access:          stg.gurumeet.net
 ```
 
@@ -1154,7 +1171,14 @@ production は staging の確認が終わってから進める。
 branch:          main
 R2 bucket:       gurumeet-assets
 Neon DB:         production
-Wrangler secret: DATABASE_URL --env production
+GitHub Environment secrets: production
+  DATABASE_URL
+  HOTPEPPER_API_KEY
+  PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+GitHub Environment vars: production
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
 Access:          初期公開前は gurumeet.net にもかけてよい。一般公開時に外す
 ```
 

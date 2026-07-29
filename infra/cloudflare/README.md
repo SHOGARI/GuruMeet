@@ -195,6 +195,7 @@ develop -> main の pull request
   -> backend 構文確認
   -> frontend analyze / test
   -> Worker 型チェック
+  -> staging / production の GitHub Environment secrets / vars 有無確認
 ```
 
 GitHub Actions に必要な repository secrets:
@@ -203,6 +204,95 @@ GitHub Actions に必要な repository secrets:
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
 ```
+
+Cloudflare Worker / Container に渡す runtime secrets は、GitHub Environment の `staging` / `production` に登録する。
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+GitHub Environment vars には、secretではない実行時設定を登録する。
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+deploy workflow は GitHub Environment secrets を `wrangler deploy --secrets-file` へ渡し、
+GitHub Environment vars を `wrangler deploy --var` へ渡す。
+Cloudflare Dashboard や手元の `.env` を本番値の source of truth にしない。
+
+### GitHub secrets の登録
+
+Repository secrets は repo 全体で共通に使う。
+
+```text
+GitHub repository
+  -> Settings
+  -> Secrets and variables
+  -> Actions
+  -> Repository secrets
+  -> New repository secret
+```
+
+登録する値:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+Environment secrets は `staging` / `production` ごとに登録する。
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> New environment
+  -> staging
+  -> Environment secrets
+  -> Add secret
+```
+
+`production` も同じ手順で作る。
+
+各 environment に登録する値:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+Environment vars は `staging` / `production` ごとに登録する。
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+各 environment に登録する値:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は環境ごとに別の長いランダム値を使う。
+
+```sh
+openssl rand -hex 32
+```
+
+`staging` と `production` の `DATABASE_URL` は別DBを指す値にする。
 
 ### Cloudflare API Token の作成
 
@@ -307,9 +397,10 @@ Secret value: Cloudflare account ID
 <Cloudflare account ID>
 ```
 
-アプリ用の実行時 secret は GitHub Secrets ではなく Cloudflare Wrangler secret に登録する。
+アプリ用の実行時 secret は GitHub Environment secrets に登録する。
+deploy workflow が secrets を `wrangler deploy --secrets-file` で、vars を `wrangler deploy --var` で Cloudflare に渡すため、手動で Cloudflare Wrangler secret を更新する運用にはしない。
 
-staging / production それぞれで必要:
+staging / production それぞれの Environment secrets に登録する値:
 
 ```text
 DATABASE_URL
@@ -324,15 +415,14 @@ INTERNAL_TASK_SECRET
 openssl rand -hex 32
 ```
 
-登録コマンド:
+staging / production それぞれの Environment vars に登録する値:
 
-```sh
-cd infra/cloudflare
-make secret-staging
-make secret-production
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
-公開時のCORSは `wrangler.jsonc` の環境別 `CORS_ALLOW_ORIGINS` で制限する。
+公開時のCORSは `CORS_ALLOW_ORIGINS` で制限する。
 
 ```text
 staging:    https://stg.gurumeet.net
@@ -442,10 +532,10 @@ DATABASE:
   / の後から ? まで
 ```
 
-例:
+例。実値は書かない:
 
 ```text
-postgresql://gurumeet_owner:abc123xyz@ep-example.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+postgresql://<USER>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
 ```
 
 TablePlus に入れる値:

@@ -17,16 +17,13 @@ help:
 	@printf "%s\n" "  make check                Worker の型チェック"
 	@printf "%s\n" ""
 	@printf "%s\n" "デプロイ:"
-	@printf "%s\n" "  make deploy-staging       develop / staging の状態を stg.gurumeet.net へ deploy"
-	@printf "%s\n" "  make deploy-production    main / production の状態を gurumeet.net へ deploy"
+	@printf "%s\n" "  GitHub Actions の Cloudflare デプロイ workflow から実行"
 	@printf "%s\n" ""
 	@printf "%s\n" "ローカル開発:"
 	@printf "%s\n" "  make dev-staging          staging 設定で wrangler dev を起動"
 	@printf "%s\n" ""
 	@printf "%s\n" "リソース:"
 	@printf "%s\n" "  make r2-list              R2 bucket 一覧を表示"
-	@printf "%s\n" "  make secret-staging       staging 用 DATABASE_URL を登録"
-	@printf "%s\n" "  make secret-production    production 用 DATABASE_URL を登録"
 	@printf "%s\n" ""
 	@printf "%s\n" "ログ:"
 	@printf "%s\n" "  make tail-staging         staging Worker のログを追う"
@@ -59,12 +56,14 @@ check:
 	cd $(APP_WORKER_DIR) && npm run check
 
 .PHONY: deploy-staging
-deploy-staging: build-frontend-staging check
-	cd $(APP_WORKER_DIR) && npm run deploy:staging
+deploy-staging:
+	@printf "%s\n" "GitHub Environment secrets / vars を使うため、deploy は GitHub Actions から実行する。"
+	@exit 1
 
 .PHONY: deploy-production
-deploy-production: build-frontend-production check
-	cd $(APP_WORKER_DIR) && npm run deploy:production
+deploy-production:
+	@printf "%s\n" "GitHub Environment secrets / vars を使うため、deploy は GitHub Actions から実行する。"
+	@exit 1
 
 .PHONY: dev-staging
 dev-staging:
@@ -76,17 +75,15 @@ r2-list:
 
 .PHONY: secret-staging
 secret-staging:
-	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env staging
-	cd $(APP_WORKER_DIR) && npx wrangler secret put HOTPEPPER_API_KEY --env staging
-	cd $(APP_WORKER_DIR) && npx wrangler secret put PARTICIPANT_TOKEN_HASH_SECRET --env staging
-	cd $(APP_WORKER_DIR) && npx wrangler secret put INTERNAL_TASK_SECRET --env staging
+	@printf "%s\n" "Cloudflare secret の手動登録は通常運用では使わない。"
+	@printf "%s\n" "GitHub Environment secrets / vars に登録し、deploy workflow から渡す。"
+	@exit 1
 
 .PHONY: secret-production
 secret-production:
-	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env production
-	cd $(APP_WORKER_DIR) && npx wrangler secret put HOTPEPPER_API_KEY --env production
-	cd $(APP_WORKER_DIR) && npx wrangler secret put PARTICIPANT_TOKEN_HASH_SECRET --env production
-	cd $(APP_WORKER_DIR) && npx wrangler secret put INTERNAL_TASK_SECRET --env production
+	@printf "%s\n" "Cloudflare secret の手動登録は通常運用では使わない。"
+	@printf "%s\n" "GitHub Environment secrets / vars に登録し、deploy workflow から渡す。"
+	@exit 1
 
 .PHONY: tail-staging
 tail-staging:

@@ -23,6 +23,7 @@ frontendは初回アクセス時にランダムな `participant_token` を生成
 backendは生の `participant_token` を保存しない。`PARTICIPANT_TOKEN_HASH_SECRET` と組み合わせてSHA-256 hashにして保存する。
 
 `PARTICIPANT_TOKEN_HASH_SECRET` は本番では長いランダム値を使う。
+staging / production では GitHub Environment secrets に登録し、Git や `.env` には本番値を書かない。
 
 生成例:
 

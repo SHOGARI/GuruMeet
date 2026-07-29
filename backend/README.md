@@ -94,7 +94,7 @@ PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 openssl rand -hex 32
 ```
 
-この値はfrontendには渡さない。本番ではGitに置かず、Cloudflare Wrangler secretなどのsecret storeに登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
+この値はfrontendには渡さない。本番ではGitに置かず、GitHub Environment secrets に登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
 
 通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
 
@@ -113,12 +113,33 @@ FastAPI を Compose の外で直接起動する場合だけ、必要に応じて
 DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
 ```
 
-staging / production の `DATABASE_URL` は `backend/.env` には書かない。Cloudflare Wrangler secret に登録する。
+staging / production の `DATABASE_URL` は `backend/.env` には書かない。
+GitHub Environment secrets に登録し、deploy workflow から Cloudflare Worker / Container に渡す。
 
-```sh
-cd ../infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env staging
-npx wrangler secret put DATABASE_URL --env production
+Environment secrets:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+Environment vars:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
 ```
 
 `backend` フォルダ内で実行:

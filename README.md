@@ -15,3 +15,44 @@ make check-env
 
 Frontend の `make dev` / `make dev-chrome` は `frontend/.env` の値を
 Flutter の `--dart-define` に渡して起動する。
+
+## GitHub Actions secrets
+
+Cloudflare deploy と Worker / Container の runtime secrets は GitHub Actions から渡す。
+
+Repository secrets:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+GitHub Environment secrets:
+
+```text
+staging:
+  DATABASE_URL
+  HOTPEPPER_API_KEY
+  PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+
+production:
+  DATABASE_URL
+  HOTPEPPER_API_KEY
+  PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+```
+
+GitHub Environment vars:
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
+
+production:
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+登録手順は `infra/cloudflare/README.md` を参照する。

@@ -9,6 +9,14 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/files/*", "/edge/*"],
   },
+  "secrets": {
+    "required": [
+      "DATABASE_URL",
+      "HOTPEPPER_API_KEY",
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+      "INTERNAL_TASK_SECRET",
+    ],
+  },
   "containers": [
     {
       "class_name": "BackendContainer",
@@ -40,8 +48,14 @@
       "workers_dev": true,
       "vars": {
         "ENVIRONMENT": "staging",
-        "CORS_ALLOW_ORIGINS": "https://stg.gurumeet.net",
-        "GURUMEET_ENABLE_MOCK_RESTAURANTS": "false",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+          "INTERNAL_TASK_SECRET",
+        ],
       },
       "containers": [
         {
@@ -86,8 +100,14 @@
       "workers_dev": false,
       "vars": {
         "ENVIRONMENT": "production",
-        "CORS_ALLOW_ORIGINS": "https://gurumeet.net",
-        "GURUMEET_ENABLE_MOCK_RESTAURANTS": "false",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+          "INTERNAL_TASK_SECRET",
+        ],
       },
       "containers": [
         {
