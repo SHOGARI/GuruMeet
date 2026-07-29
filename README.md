@@ -7,6 +7,10 @@
 ローカルで動作確認する前に、必ず以下を実行する。
 
 ```sh
+cd backend
+make check-env
+
+cd ../frontend
 make check-env
 ```
 

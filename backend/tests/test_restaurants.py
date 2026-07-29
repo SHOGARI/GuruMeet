@@ -18,29 +18,42 @@ from app.services.hotpepper_service import (
 
 
 class SettingsTests(unittest.TestCase):
-    def test_settings_allow_missing_hotpepper_api_key(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
-            loaded_settings = Settings(_env_file=None)
-
-        self.assertIsNone(loaded_settings.hotpepper_api_key)
-
-    def test_settings_allow_empty_hotpepper_api_key(self) -> None:
+    def test_settings_allow_missing_hotpepper_api_key_when_mocks_enabled(
+        self,
+    ) -> None:
         with patch.dict(
             os.environ,
-            {"HOTPEPPER_API_KEY": ""},
+            {
+                "GURUMEET_ENABLE_MOCK_RESTAURANTS": "true",
+                "INTERNAL_TASK_SECRET": "test-internal-secret",
+            },
             clear=True,
         ):
             loaded_settings = Settings(_env_file=None)
 
-        self.assertEqual(
-            loaded_settings.hotpepper_api_key.get_secret_value(),
-            "",
-        )
+        self.assertIsNone(loaded_settings.hotpepper_api_key)
+
+    def test_settings_reject_empty_hotpepper_api_key_when_mocks_disabled(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "HOTPEPPER_API_KEY": "",
+                "GURUMEET_ENABLE_MOCK_RESTAURANTS": "false",
+                "INTERNAL_TASK_SECRET": "test-internal-secret",
+            },
+            clear=True,
+        ):
+            with self.assertRaises(ValueError):
+                Settings(_env_file=None)
 
     def test_health_starts_without_hotpepper_api_key(self) -> None:
         backend_root = Path(__file__).resolve().parents[1]
         environment = os.environ.copy()
         environment.pop("HOTPEPPER_API_KEY", None)
+        environment["GURUMEET_ENABLE_MOCK_RESTAURANTS"] = "true"
+        environment["INTERNAL_TASK_SECRET"] = "test-internal-secret"
         environment["PYTHONPATH"] = os.pathsep.join(
             filter(
                 None,

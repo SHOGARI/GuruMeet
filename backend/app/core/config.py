@@ -3,6 +3,7 @@ from typing import Annotated
 
 from pydantic import Field, SecretStr
 from pydantic import field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -31,8 +32,8 @@ class Settings(BaseSettings):
         ],
         validation_alias="CORS_ALLOW_ORIGINS",
     )
-    participant_token_hash_secret: str = (
-        "gurumeet-dev-participant-token-secret"
+    participant_token_hash_secret: str = Field(
+        validation_alias="PARTICIPANT_TOKEN_HASH_SECRET",
     )
     internal_task_secret: SecretStr | None = Field(
         default=None,
@@ -65,6 +66,27 @@ class Settings(BaseSettings):
         if not value.strip():
             raise ValueError("PARTICIPANT_TOKEN_HASH_SECRET must not be empty")
         return value
+
+    @model_validator(mode="after")
+    def require_runtime_configuration(self) -> "Settings":
+        if not self.cors_allow_origins:
+            raise ValueError("CORS_ALLOW_ORIGINS must not be empty")
+        if self.internal_task_secret is None:
+            raise ValueError("INTERNAL_TASK_SECRET must be configured")
+        if not self.internal_task_secret.get_secret_value().strip():
+            raise ValueError("INTERNAL_TASK_SECRET must not be empty")
+        if not self.enable_mock_restaurants:
+            if self.hotpepper_api_key is None:
+                raise ValueError(
+                    "HOTPEPPER_API_KEY must be configured when "
+                    "GURUMEET_ENABLE_MOCK_RESTAURANTS=false"
+                )
+            if not self.hotpepper_api_key.get_secret_value().strip():
+                raise ValueError(
+                    "HOTPEPPER_API_KEY must not be empty when "
+                    "GURUMEET_ENABLE_MOCK_RESTAURANTS=false"
+                )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

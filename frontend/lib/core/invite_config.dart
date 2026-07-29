@@ -9,10 +9,6 @@ abstract final class InviteConfig {
       return _withoutTrailingSlash(configured);
     }
 
-    if (Uri.base.scheme == 'http' || Uri.base.scheme == 'https') {
-      return _withoutTrailingSlash(Uri.base.origin);
-    }
-
     throw StateError('GURUMEET_INVITE_BASE_URL must be configured.');
   }
 

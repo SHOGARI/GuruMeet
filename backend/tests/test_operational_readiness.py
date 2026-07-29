@@ -97,6 +97,8 @@ class OperationalReadinessTests(unittest.TestCase):
             "os.environ",
             {
                 "CORS_ALLOW_ORIGINS": "https://gurumeet.net",
+                "GURUMEET_ENABLE_MOCK_RESTAURANTS": "true",
+                "INTERNAL_TASK_SECRET": "test-internal-secret",
                 "PARTICIPANT_TOKEN_HASH_SECRET": "test-secret",
             },
             clear=True,
