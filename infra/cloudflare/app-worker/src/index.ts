@@ -45,11 +45,11 @@ export default {
       return handleFileRequest(request, env);
     }
 
-    if (isApiRootPath(url.pathname)) {
+    if (isProduction(env) && isApiPath(url.pathname)) {
       return new Response("Not found", { status: 404 });
     }
 
-    if (isProduction(env) && isApiDocsPath(url.pathname)) {
+    if (isApiRootPath(url.pathname)) {
       return new Response("Not found", { status: 404 });
     }
 
@@ -112,18 +112,12 @@ function isProduction(env: Env): boolean {
   return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
 }
 
-function isApiRootPath(pathname: string): boolean {
-  return pathname === "/api" || pathname === "/api/";
+function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
 }
 
-function isApiDocsPath(pathname: string): boolean {
-  return (
-    pathname === "/api/openapi.json" ||
-    pathname === "/api/redoc" ||
-    pathname.startsWith("/api/redoc/") ||
-    pathname === "/api/docs" ||
-    pathname.startsWith("/api/docs/")
-  );
+function isApiRootPath(pathname: string): boolean {
+  return pathname === "/api" || pathname === "/api/";
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
