@@ -216,6 +216,56 @@ PARTICIPANT_TOKEN_HASH_SECRET
 deploy workflow は GitHub Environment secrets から `wrangler deploy --secrets-file` へ渡す。
 Cloudflare Dashboard や手元の `.env` を本番値の source of truth にしない。
 
+### GitHub secrets の登録
+
+Repository secrets は repo 全体で共通に使う。
+
+```text
+GitHub repository
+  -> Settings
+  -> Secrets and variables
+  -> Actions
+  -> Repository secrets
+  -> New repository secret
+```
+
+登録する値:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+Environment secrets は `staging` / `production` ごとに登録する。
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> New environment
+  -> staging
+  -> Environment secrets
+  -> Add secret
+```
+
+`production` も同じ手順で作る。
+
+各 environment に登録する値:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` は環境ごとに別の長いランダム値を使う。
+
+```sh
+openssl rand -hex 32
+```
+
+`staging` と `production` の `DATABASE_URL` は別DBを指す値にする。
+
 ### Cloudflare API Token の作成
 
 Cloudflare Dashboard で作る。
@@ -320,7 +370,7 @@ Secret value: Cloudflare account ID
 ```
 
 `DATABASE_URL` / `HOTPEPPER_API_KEY` / `PARTICIPANT_TOKEN_HASH_SECRET` は GitHub Environment secrets に登録する。
-手動で Cloudflare Wrangler secret を更新する運用にはしない。
+deploy workflow が `wrangler deploy --secrets-file` で Cloudflare に渡すため、手動で Cloudflare Wrangler secret を更新する運用にはしない。
 
 ## Cloudflare Access
 
@@ -425,10 +475,10 @@ DATABASE:
   / の後から ? まで
 ```
 
-例:
+例。実値は書かない:
 
 ```text
-postgresql://gurumeet_owner:abc123xyz@ep-example.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+postgresql://<USER>:<PASSWORD>@<HOST>/<DATABASE>?sslmode=require
 ```
 
 TablePlus に入れる値:

@@ -385,4 +385,7 @@ PARTICIPANT_TOKEN_HASH_SECRET=change_me_to_a_long_random_value
 openssl rand -hex 32
 ```
 
+staging / production では GitHub Environment secrets に登録する。
+Git や `.env` には本番値を書かない。
+
 この値はfrontendへ渡さず、Gitにもコミットしない。途中で変更すると既存の匿名参加者token hashと照合できなくなるため、既存匿名ユーザーを捨てるか移行処理が必要になる。

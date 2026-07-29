@@ -92,7 +92,7 @@ PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 openssl rand -hex 32
 ```
 
-この値はfrontendには渡さない。本番ではGitに置かず、Cloudflare Wrangler secretなどのsecret storeに登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
+この値はfrontendには渡さない。本番ではGitに置かず、GitHub Environment secrets に登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
 
 通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
 
@@ -118,6 +118,16 @@ GitHub Environment secrets に登録し、deploy workflow から Cloudflare Work
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+```
+
+登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
 ```
 
 `backend` フォルダ内で実行:
