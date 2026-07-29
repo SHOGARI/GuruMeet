@@ -6,6 +6,7 @@ backendはFlutter frontendに対してJSON APIを提供する。
 
 | API | purpose | detail |
 | --- | --- | --- |
+| `GET /locations/search` | 市区町村と駅を統合検索する | [Location API](./locations.md) |
 | `POST /temporary-groups` | 一時グループを作成する | [Temporary Group API](./temporary-group.md) |
 | `GET /temporary-groups/{group_id}` | UUIDから一時グループを取得する | [Temporary Group API](./temporary-group.md) |
 | `POST /temporary-groups/join` | 5桁コードから一時グループを取得する | [Temporary Group API](./temporary-group.md) |
@@ -51,4 +52,3 @@ http://localhost:8000/docs
 ```
 
 API説明は日本語で記述する。
-

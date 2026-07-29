@@ -143,6 +143,32 @@ API:
 POST /temporary-groups
 ```
 
+## 地点マスタの投入
+
+地点検索は市区町村と駅を別テーブルに保持し、検索用の `location_search` を再構築する。
+
+使用データ:
+
+- 市区町村: Geolonia 住所データ `latest.csv`
+  - https://geolonia.github.io/japanese-addresses/
+  - MIT License
+- 駅: 駅データ.jp の駅CSV
+  - https://www.ekidata.jp/
+  - 利用条件は駅データ.jpの案内に従う。駅コード、駅グループコード、駅名、住所、緯度経度を使用する。
+
+CSVはGitに含めず、ローカルまたは運用環境で取得して指定する。
+
+```sh
+python scripts/import_locations.py \
+  --municipalities-csv /path/to/geolonia/latest.csv \
+  --stations-csv /path/to/ekidata/station.csv \
+  --station-lines-csv /path/to/ekidata/line.csv
+```
+
+`--station-lines-csv` は任意。指定すると候補表示に路線名を含める。
+
+import は再実行可能。同じコードの行は更新し、検索用テーブルは毎回再構築する。不正行はログに出して処理を継続する。
+
 停止:
 
 ```sh

@@ -4,12 +4,14 @@ class GroupCreationDraft {
     required this.area,
     required this.budget,
     required this.groupId,
+    this.locationId,
   });
 
   factory GroupCreationDraft.createMock({
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    String? locationId,
   }) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     var value = DateTime.now().microsecondsSinceEpoch;
@@ -26,6 +28,7 @@ class GroupCreationDraft {
       area: area,
       budget: budget,
       groupId: groupCode,
+      locationId: locationId,
     );
   }
 
@@ -35,6 +38,7 @@ class GroupCreationDraft {
       area: '新宿',
       budget: BudgetOption.from2000To3000,
       groupId: groupId.toUpperCase(),
+      locationId: null,
     );
   }
 
@@ -42,6 +46,7 @@ class GroupCreationDraft {
   final String area;
   final BudgetOption budget;
   final String groupId;
+  final String? locationId;
 
   String get inviteUrl => 'https://gurumeet.app/join/$groupId';
 }

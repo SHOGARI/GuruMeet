@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/group_creation_draft.dart';
+import '../models/location_suggestion.dart';
+import '../services/location_repository.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
@@ -19,6 +23,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   final _areaController = TextEditingController();
   final _areaFocusNode = FocusNode();
 
+  LocationSuggestion? _selectedLocation;
   int _peopleCount = 4;
   BudgetOption? _selectedBudget = BudgetOption.from2000To3000;
   bool _hasTriedSubmit = false;
@@ -43,7 +48,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       _areaFocusNode.requestFocus();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('エリアを入力するとグループを作成できます')));
+        ..showSnackBar(
+          const SnackBar(content: Text('エリアを入力するとグループを作成できます')),
+        );
       return;
     }
 
@@ -64,8 +71,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
     final draft = GroupCreationDraft.createMock(
       peopleCount: _peopleCount,
-      area: _areaController.text.trim(),
+      area: _selectedLocation?.displayName ?? _areaController.text.trim(),
       budget: selectedBudget,
+      locationId: _selectedLocation?.id,
     );
 
     await Navigator.of(
@@ -78,6 +86,10 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
   void _selectBudget(BudgetOption budget) {
     setState(() => _selectedBudget = budget);
+  }
+
+  void _selectLocation(LocationSuggestion? location) {
+    setState(() => _selectedLocation = location);
   }
 
   @override
@@ -114,8 +126,10 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                         areaFocusNode: _areaFocusNode,
                         hasTriedSubmit: _hasTriedSubmit,
                         peopleCount: _peopleCount,
+                        selectedLocation: _selectedLocation,
                         selectedBudget: _selectedBudget,
                         onAreaSubmitted: _createGroup,
+                        onLocationSelected: _selectLocation,
                         onDecreasePeople: _peopleCount > 2
                             ? () => setState(() => _peopleCount--)
                             : null,
@@ -151,8 +165,10 @@ class _CreateGroupForm extends StatelessWidget {
     required this.areaFocusNode,
     required this.hasTriedSubmit,
     required this.peopleCount,
+    required this.selectedLocation,
     required this.selectedBudget,
     required this.onAreaSubmitted,
+    required this.onLocationSelected,
     required this.onDecreasePeople,
     required this.onIncreasePeople,
     required this.onBudgetSelected,
@@ -163,8 +179,10 @@ class _CreateGroupForm extends StatelessWidget {
   final FocusNode areaFocusNode;
   final bool hasTriedSubmit;
   final int peopleCount;
+  final LocationSuggestion? selectedLocation;
   final BudgetOption? selectedBudget;
   final VoidCallback onAreaSubmitted;
+  final ValueChanged<LocationSuggestion?> onLocationSelected;
   final VoidCallback? onDecreasePeople;
   final VoidCallback? onIncreasePeople;
   final ValueChanged<BudgetOption> onBudgetSelected;
@@ -204,21 +222,12 @@ class _CreateGroupForm extends StatelessWidget {
           _FormSection(
             step: '02',
             title: 'どのあたり？',
-            child: TextFormField(
+            child: _LocationSearchField(
               controller: areaController,
               focusNode: areaFocusNode,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => onAreaSubmitted(),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.location_on_outlined),
-                hintText: '新宿・渋谷・池袋',
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '行きたいエリアを入力してください';
-                }
-                return null;
-              },
+              selectedLocation: selectedLocation,
+              onSubmitted: onAreaSubmitted,
+              onSelected: onLocationSelected,
             ),
           ),
           const SizedBox(height: AppSpacing.section),
@@ -247,6 +256,225 @@ class _CreateGroupForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.section),
         ],
       ),
+    );
+  }
+}
+
+class _LocationSearchField extends StatefulWidget {
+  const _LocationSearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.selectedLocation,
+    required this.onSubmitted,
+    required this.onSelected,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final LocationSuggestion? selectedLocation;
+  final VoidCallback onSubmitted;
+  final ValueChanged<LocationSuggestion?> onSelected;
+
+  @override
+  State<_LocationSearchField> createState() => _LocationSearchFieldState();
+}
+
+class _LocationSearchFieldState extends State<_LocationSearchField> {
+  final _repository = LocationRepositoryProvider.instance;
+
+  Timer? _debounceTimer;
+  List<LocationSuggestion> _suggestions = const [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  int _requestSerial = 0;
+  bool _isApplyingSelection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleTextChanged);
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleTextChanged() {
+    if (_isApplyingSelection) {
+      return;
+    }
+
+    if (widget.selectedLocation != null) {
+      widget.onSelected(null);
+    }
+
+    final query = widget.controller.text.trim();
+    _debounceTimer?.cancel();
+
+    if (query.isEmpty) {
+      setState(() {
+        _suggestions = const [];
+        _isLoading = false;
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _search(query);
+    });
+  }
+
+  Future<void> _search(String query) async {
+    final requestSerial = ++_requestSerial;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final suggestions = await _repository.searchLocations(query);
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _suggestions = suggestions;
+        _isLoading = false;
+      });
+    } on LocationSearchException catch (error) {
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _suggestions = const [];
+        _isLoading = false;
+        _errorMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _suggestions = const [];
+        _isLoading = false;
+        _errorMessage = '地点候補を取得できませんでした';
+      });
+    }
+  }
+
+  void _selectSuggestion(LocationSuggestion suggestion) {
+    _debounceTimer?.cancel();
+    _isApplyingSelection = true;
+    widget.controller.text = suggestion.displayName;
+    widget.controller.selection = TextSelection.collapsed(
+      offset: widget.controller.text.length,
+    );
+    _isApplyingSelection = false;
+    widget.onSelected(suggestion);
+    setState(() {
+      _suggestions = const [];
+      _isLoading = false;
+      _errorMessage = null;
+    });
+    widget.focusNode.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hasPanel =
+        _isLoading || _errorMessage != null || _suggestions.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => widget.onSubmitted(),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.location_on_outlined),
+            hintText: '北千住・足立区・新宿',
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '行きたい地点を入力してください';
+            }
+            if (widget.selectedLocation == null) {
+              return '候補から地点を選んでください';
+            }
+            return null;
+          },
+        ),
+        AnimatedSwitcher(
+          duration: AppMotion.medium,
+          child: hasPanel
+              ? Padding(
+                  key: const ValueKey('location-suggestion-panel'),
+                  padding: const EdgeInsets.only(top: AppSpacing.small),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      border: Border.all(color: colors.outlineVariant),
+                    ),
+                    child: _buildPanel(context),
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey('empty-location-panel')),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPanel(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.medium),
+        child: LinearProgressIndicator(),
+      );
+    }
+
+    final errorMessage = _errorMessage;
+    if (errorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Text(
+          errorMessage,
+          style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _suggestions.length,
+      separatorBuilder: (_, _) => Divider(
+        height: 1,
+        color: colors.outlineVariant,
+      ),
+      itemBuilder: (context, index) {
+        final suggestion = _suggestions[index];
+        return ListTile(
+          leading: Icon(
+            suggestion.type == LocationSuggestionType.station
+                ? Icons.train_rounded
+                : Icons.place_outlined,
+          ),
+          title: Text(suggestion.name),
+          subtitle: Text(suggestion.supportingText),
+          onTap: () => _selectSuggestion(suggestion),
+        );
+      },
     );
   }
 }
