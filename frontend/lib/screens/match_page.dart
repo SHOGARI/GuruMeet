@@ -149,6 +149,7 @@ class _MatchPageState extends State<MatchPage>
               const SizedBox(height: AppSpacing.large),
               _ResultActions(
                 hasTie: _summary.hasTie,
+                canRestart: widget.draft.roomId == null,
                 onOpenMaps: _isOpeningMaps || _isNavigating ? null : _openMaps,
                 onConfirm: _hasConfirmed || _isNavigating
                     ? null
@@ -352,6 +353,7 @@ class _WinnerCard extends StatelessWidget {
 class _ResultActions extends StatelessWidget {
   const _ResultActions({
     required this.hasTie,
+    required this.canRestart,
     required this.onOpenMaps,
     required this.onConfirm,
     required this.onRestart,
@@ -360,6 +362,7 @@ class _ResultActions extends StatelessWidget {
   });
 
   final bool hasTie;
+  final bool canRestart;
   final VoidCallback? onOpenMaps;
   final VoidCallback? onConfirm;
   final VoidCallback? onRestart;
@@ -381,11 +384,12 @@ class _ResultActions extends StatelessWidget {
             icon: const Icon(Icons.check_circle_rounded),
             label: const Text('この店に決定'),
           ),
-          OutlinedButton.icon(
-            onPressed: onRestart,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('もう一度選ぶ'),
-          ),
+          if (canRestart)
+            OutlinedButton.icon(
+              onPressed: onRestart,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('もう一度選ぶ'),
+            ),
           OutlinedButton(onPressed: onOpenDetail, child: const Text('店舗詳細を見る')),
           TextButton(onPressed: onGoHome, child: const Text('ホームへ戻る')),
         ];
@@ -418,7 +422,7 @@ class _ResultActions extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (hasTie) ...[
-              _TieNotice(onRestart: onRestart),
+              _TieNotice(onRestart: canRestart ? onRestart : null),
               const SizedBox(height: AppSpacing.small),
             ],
             actions,
@@ -450,14 +454,17 @@ class _TieNotice extends StatelessWidget {
           const SizedBox(width: AppSpacing.small),
           Expanded(
             child: Text(
-              '同率候補があります。ランキングから候補を確認し、必要なら最初から選び直せます。',
+              onRestart == null
+                  ? '同率候補があります。ランキングから候補を確認してください。'
+                  : '同率候補があります。ランキングから候補を確認し、必要なら最初から選び直せます。',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colors.onPrimaryContainer,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          TextButton(onPressed: onRestart, child: const Text('選び直す')),
+          if (onRestart != null)
+            TextButton(onPressed: onRestart, child: const Text('選び直す')),
         ],
       ),
     );

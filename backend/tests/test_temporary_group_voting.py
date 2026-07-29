@@ -16,6 +16,7 @@ from app.services.temporary_group_service import (
     TemporaryGroupRestaurantNotFoundError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
+    TemporaryGroupVotingNotReadyError,
     TemporaryGroupVotingNotStartedError,
 )
 
@@ -52,6 +53,9 @@ class FakeTemporaryGroupRepository:
 
     def list_participants(self, group_id):
         return [self.participant] if group_id == self.group.id else []
+
+    def count_participants(self, group_id):
+        return len(self.list_participants(group_id))
 
     def start_voting(self, group, started_at):
         group.voting_started_at = group.voting_started_at or started_at
@@ -136,6 +140,14 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
 
         self.assertEqual(progress.candidate_count, 0)
         self.assertIsNotNone(group.voting_started_at)
+
+    def test_start_voting_requires_full_room_when_count_is_set(self) -> None:
+        group = make_group()
+        group.participant_count = 2
+        service, _ = self.make_service(group)
+
+        with self.assertRaises(TemporaryGroupVotingNotReadyError):
+            service.start_voting(group.id, TOKEN)
 
     def test_submit_vote_requires_started_voting(self) -> None:
         group = make_group()

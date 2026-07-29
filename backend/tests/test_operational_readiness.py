@@ -39,6 +39,19 @@ class OperationalReadinessTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_internal_cleanup_rejects_empty_configured_secret(self) -> None:
+        original_secret = settings.internal_task_secret
+        settings.internal_task_secret = SecretStr("")
+        try:
+            response = self.client.post(
+                "/internal/cleanup-expired-temporary-groups",
+                headers={"X-Internal-Task-Secret": ""},
+            )
+        finally:
+            settings.internal_task_secret = original_secret
+
+        self.assertEqual(response.status_code, 401)
+
     def test_internal_cleanup_deletes_expired_groups_when_authorized(self) -> None:
         original_secret = settings.internal_task_secret
         settings.internal_task_secret = SecretStr("test-secret")

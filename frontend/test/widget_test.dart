@@ -271,6 +271,37 @@ void main() {
     expect(find.text('決選投票をする'), findsNothing);
   });
 
+  testWidgets('api room result hides restart action', (tester) async {
+    const draft = GroupCreationDraft(
+      peopleCount: 3,
+      area: '渋谷',
+      budget: BudgetOption.from2000To3000,
+      groupId: 'AB12C',
+      isHost: true,
+      roomId: '123e4567-e89b-12d3-a456-426614174000',
+    );
+    final result = RestaurantMatchResult(
+      restaurant: mockRestaurants.first,
+      peopleCount: 3,
+      results: [
+        RestaurantVoteResult(
+          restaurant: mockRestaurants[0],
+          likeCount: 2,
+          rejectCount: 1,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchPage(draft: draft, result: result),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('もう一度選ぶ'), findsNothing);
+  });
+
   testWidgets('create group always shows condition inputs', (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
