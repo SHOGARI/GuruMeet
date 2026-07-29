@@ -37,6 +37,32 @@ class SettingsTests(unittest.TestCase):
             "",
         )
 
+    def test_api_docs_are_disabled_in_production(self) -> None:
+        for environment in ("production", "product"):
+            with self.subTest(environment=environment):
+                with patch.dict(
+                    os.environ,
+                    {"ENVIRONMENT": environment},
+                    clear=True,
+                ):
+                    loaded_settings = Settings(_env_file=None)
+
+                self.assertFalse(loaded_settings.api_docs_enabled)
+
+    def test_staging_uses_configured_api_root_path(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "staging",
+                "GURUMEET_API_ROOT_PATH": "/api",
+            },
+            clear=True,
+        ):
+            loaded_settings = Settings(_env_file=None)
+
+        self.assertTrue(loaded_settings.api_docs_enabled)
+        self.assertEqual(loaded_settings.api_root_path, "/api")
+
     def test_health_starts_without_hotpepper_api_key(self) -> None:
         backend_root = Path(__file__).resolve().parents[1]
         environment = os.environ.copy()
