@@ -12,21 +12,18 @@ help:
 	@printf "%s\n" "  make whoami               現在の Wrangler login / account を表示"
 	@printf "%s\n" ""
 	@printf "%s\n" "事前確認:"
-	@printf "%s\n" "  make build-frontend       Flutter Web assets を build"
+	@printf "%s\n" "  make build-frontend-staging       staging 用 Flutter Web assets を build"
+	@printf "%s\n" "  make build-frontend-production    production 用 Flutter Web assets を build"
 	@printf "%s\n" "  make check                Worker の型チェック"
-	@printf "%s\n" "  make predeploy            frontend build と Worker 型チェック"
 	@printf "%s\n" ""
 	@printf "%s\n" "デプロイ:"
-	@printf "%s\n" "  make deploy-staging       develop / staging の状態を stg.gurumeet.net へ deploy"
-	@printf "%s\n" "  make deploy-production    main / production の状態を gurumeet.net へ deploy"
+	@printf "%s\n" "  GitHub Actions の Cloudflare デプロイ workflow から実行"
 	@printf "%s\n" ""
 	@printf "%s\n" "ローカル開発:"
 	@printf "%s\n" "  make dev-staging          staging 設定で wrangler dev を起動"
 	@printf "%s\n" ""
 	@printf "%s\n" "リソース:"
 	@printf "%s\n" "  make r2-list              R2 bucket 一覧を表示"
-	@printf "%s\n" "  make secret-staging       staging 用 DATABASE_URL を登録"
-	@printf "%s\n" "  make secret-production    production 用 DATABASE_URL を登録"
 	@printf "%s\n" ""
 	@printf "%s\n" "ログ:"
 	@printf "%s\n" "  make tail-staging         staging Worker のログを追う"
@@ -40,24 +37,35 @@ install:
 whoami:
 	cd $(APP_WORKER_DIR) && npx wrangler whoami
 
-.PHONY: build-frontend
-build-frontend:
-	cd $(FRONTEND_DIR) && flutter build web
+.PHONY: build-frontend-staging
+build-frontend-staging:
+	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=DEMO_MODE=false \
+		--dart-define=GURUMEET_ENABLE_MOCKS=false \
+		--dart-define=GURUMEET_API_BASE_URL=https://stg.gurumeet.net/api \
+		--dart-define=GURUMEET_INVITE_BASE_URL=https://stg.gurumeet.net
+
+.PHONY: build-frontend-production
+build-frontend-production:
+	cd $(FRONTEND_DIR) && flutter build web --release \
+		--dart-define=DEMO_MODE=false \
+		--dart-define=GURUMEET_ENABLE_MOCKS=false \
+		--dart-define=GURUMEET_API_BASE_URL=https://gurumeet.net/api \
+		--dart-define=GURUMEET_INVITE_BASE_URL=https://gurumeet.net
 
 .PHONY: check
 check:
 	cd $(APP_WORKER_DIR) && npm run check
 
-.PHONY: predeploy
-predeploy: build-frontend check
-
 .PHONY: deploy-staging
-deploy-staging: predeploy
-	cd $(APP_WORKER_DIR) && npm run deploy:staging
+deploy-staging:
+	@printf "%s\n" "GitHub Environment secrets / vars を使うため、deploy は GitHub Actions から実行する。"
+	@exit 1
 
 .PHONY: deploy-production
-deploy-production: predeploy
-	cd $(APP_WORKER_DIR) && npm run deploy:production
+deploy-production:
+	@printf "%s\n" "GitHub Environment secrets / vars を使うため、deploy は GitHub Actions から実行する。"
+	@exit 1
 
 .PHONY: dev-staging
 dev-staging:
@@ -69,11 +77,15 @@ r2-list:
 
 .PHONY: secret-staging
 secret-staging:
-	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env staging
+	@printf "%s\n" "Cloudflare secret の手動登録は通常運用では使わない。"
+	@printf "%s\n" "GitHub Environment secrets / vars に登録し、deploy workflow から渡す。"
+	@exit 1
 
 .PHONY: secret-production
 secret-production:
-	cd $(APP_WORKER_DIR) && npx wrangler secret put DATABASE_URL --env production
+	@printf "%s\n" "Cloudflare secret の手動登録は通常運用では使わない。"
+	@printf "%s\n" "GitHub Environment secrets / vars に登録し、deploy workflow から渡す。"
+	@exit 1
 
 .PHONY: tail-staging
 tail-staging:

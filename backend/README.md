@@ -65,11 +65,13 @@ cp .env.example .env
 ```
 
 通常は `.env.example` の値のままで起動できる。
+Hot Pepper API を実際に叩く場合だけ、`HOTPEPPER_API_KEY` を入れて
+`GURUMEET_ENABLE_MOCK_RESTAURANTS=false` にする。
 
 実際の `backend/.env` に書く値:
 
 ```env
-HOTPEPPER_API_KEY=取得したAPIキー
+HOTPEPPER_API_KEY=
 API_PORT=8000
 
 POSTGRES_DB=gurumeet
@@ -81,7 +83,10 @@ TEMPORARY_GROUP_TTL_MINUTES=1440
 TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+CORS_ALLOW_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8080","http://127.0.0.1:8080"]'
+GURUMEET_ENABLE_MOCK_RESTAURANTS=true
 PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
+INTERNAL_TASK_SECRET=<openssl rand -hex 32 の出力>
 ```
 
 `PARTICIPANT_TOKEN_HASH_SECRET` は匿名参加者トークンをDB保存用にhash化するときのサーバー秘密値。
@@ -114,13 +119,23 @@ DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
 staging / production の `DATABASE_URL` は `backend/.env` には書かない。
 GitHub Environment secrets に登録し、deploy workflow から Cloudflare Worker / Container に渡す。
 
+Environment secrets:
+
 ```text
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
 ```
 
-登録場所:
+Environment vars:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+Environment secrets の登録場所:
 
 ```text
 GitHub repository
@@ -128,6 +143,28 @@ GitHub repository
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
+```
+
+Environment vars の登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+追加値の作り方:
+
+```text
+INTERNAL_TASK_SECRET: openssl rand -hex 32 の出力
+CORS_ALLOW_ORIGINS:
+  staging: https://stg.gurumeet.net
+  production: https://gurumeet.net
+GURUMEET_ENABLE_MOCK_RESTAURANTS: false
 ```
 
 `backend` フォルダ内で実行:

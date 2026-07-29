@@ -39,6 +39,12 @@ cd frontend
 flutter pub get
 ```
 
+初回は local 用 `.env` を作ります。
+
+```sh
+cp .env.example .env
+```
+
 Webで起動する場合：
 
 ```
@@ -51,11 +57,28 @@ Chromeが利用可能な場合：
 make dev-chrome
 ```
 
-ローカル起動ポートは `frontend/.env` の `FRONTEND_PORT` で固定します。
+ローカル起動に使う値は `frontend/.env` にまとめます。
 
 ```env
 FRONTEND_PORT=3000
+GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=true
+DEMO_MODE=true
+DEMO_ROOM_CODE=G7M24
 ```
+
+実APIへ接続する場合は、`frontend/.env` を以下のように変更します。
+
+```env
+GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=false
+DEMO_MODE=false
+```
+
+staging / production build では deploy workflow が `--dart-define` で公開URLを渡します。
+招待URLとQRコードは `GURUMEET_INVITE_BASE_URL/#/join/{roomId}` 形式で生成されます。
 
 `make dev` は内部で以下を実行します。
 
@@ -81,7 +104,7 @@ flutter run -d <device-id>
 ```
 flutter format .
 flutter analyze
-flutter test
+make test
 ```
 
 現在の実装範囲
@@ -94,28 +117,9 @@ flutter test
 - 各画面のルーティング
 - フロントエンド上の入力バリデーション
 
-モック実装
+モック切り替え
 
-現在はバックエンド未接続のため、以下はモックです。
-
-- 招待URL
-- 飲食店データ
-- 参加メンバー
-- グループ作成処理
-- 店舗のマッチ判定
-- 共有ボタンの一部挙動
-
-仮の招待URL：
-
-https://gurumeet.app/join/demo-group
-
-今後の接続予定
-
-- グループ作成API
-- 招待URL発行
-- URLからのグループ参加
-- 待機ルームのリアルタイム同期
-- ホットペッパーグルメAPIからの店舗取得
-- 投票結果の送信
-- マッチ結果の取得
-- Google Maps連携
+`GURUMEET_ENABLE_MOCKS=true` の場合はUI確認用のモックデータを使います。
+公開環境では必ず `false` にしてください。
+`DEMO_MODE=true` の場合は `DEMO_ROOM_CODE` の固定コードを使います。
+公開環境では必ず `false` にしてください。

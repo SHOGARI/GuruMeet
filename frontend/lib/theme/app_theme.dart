@@ -33,22 +33,22 @@ ThemeData buildAppTheme() {
     scaffoldBackgroundColor: backgroundColor,
     textTheme: textTheme.copyWith(
       displaySmall: textTheme.displaySmall?.copyWith(
-        fontSize: 54,
+        fontSize: 44,
+        fontWeight: FontWeight.w800,
+        height: 1.12,
+      ),
+      headlineLarge: textTheme.headlineLarge?.copyWith(
+        fontSize: 32,
+        fontWeight: FontWeight.w800,
+        height: 1.14,
+      ),
+      headlineMedium: textTheme.headlineMedium?.copyWith(
+        fontSize: 28,
         fontWeight: FontWeight.w800,
         height: 1.16,
       ),
-      headlineLarge: textTheme.headlineLarge?.copyWith(
-        fontSize: 40,
-        fontWeight: FontWeight.w800,
-        height: 1.18,
-      ),
-      headlineMedium: textTheme.headlineMedium?.copyWith(
-        fontSize: 34,
-        fontWeight: FontWeight.w800,
-        height: 1.2,
-      ),
       headlineSmall: textTheme.headlineSmall?.copyWith(
-        fontSize: 28,
+        fontSize: 24,
         fontWeight: FontWeight.w800,
       ),
       titleLarge: textTheme.titleLarge?.copyWith(
@@ -57,8 +57,8 @@ ThemeData buildAppTheme() {
       ),
       titleMedium: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       titleSmall: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-      bodyLarge: textTheme.bodyLarge?.copyWith(height: 1.65),
-      bodyMedium: textTheme.bodyMedium?.copyWith(height: 1.55),
+      bodyLarge: textTheme.bodyLarge?.copyWith(height: 1.52),
+      bodyMedium: textTheme.bodyMedium?.copyWith(height: 1.45),
       bodySmall: textTheme.bodySmall?.copyWith(
         fontWeight: FontWeight.w600,
         height: 1.5,
@@ -123,6 +123,19 @@ ThemeData buildAppTheme() {
         foregroundColor: inkColor,
         side: BorderSide(
           color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        textStyle: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size.fromHeight(AppSizes.secondaryButtonHeight),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.large,
+          vertical: AppSpacing.regular,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.control),

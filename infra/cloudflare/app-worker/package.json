@@ -5,8 +5,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "dev:staging": "wrangler dev --env staging",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production"
+    "deploy:staging": "echo 'Deploy from GitHub Actions so GitHub Environment secrets / vars are passed to Wrangler.' && exit 1",
+    "deploy:production": "echo 'Deploy from GitHub Actions so GitHub Environment secrets / vars are passed to Wrangler.' && exit 1"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7"
