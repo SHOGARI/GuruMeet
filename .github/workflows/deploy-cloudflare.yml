@@ -54,7 +54,18 @@ jobs:
 
       - name: frontend web を build
         working-directory: frontend
-        run: flutter build web --release
+        run: |
+          if [[ "$DEPLOY_ENV" == "production" ]]; then
+            FRONTEND_URL="https://gurumeet.net"
+          else
+            FRONTEND_URL="https://stg.gurumeet.net"
+          fi
+
+          flutter build web --release \
+            --dart-define=DEMO_MODE=false \
+            --dart-define=GURUMEET_ENABLE_MOCKS=false \
+            --dart-define=GURUMEET_API_BASE_URL="${FRONTEND_URL}/api" \
+            --dart-define=GURUMEET_INVITE_BASE_URL="${FRONTEND_URL}"
 
       - name: Worker の依存関係を install
         working-directory: infra/cloudflare/app-worker
@@ -67,18 +78,115 @@ jobs:
       - name: Docker を確認
         run: docker info
 
-      - name: Cloudflare secrets を検証
+      - name: GitHub Environment secrets / vars を検証
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+          PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
+          INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
+          GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
         run: |
+          required_secrets=(
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+            DATABASE_URL
+            HOTPEPPER_API_KEY
+            PARTICIPANT_TOKEN_HASH_SECRET
+            INTERNAL_TASK_SECRET
+          )
+
+          required_vars=(
+            CORS_ALLOW_ORIGINS
+            GURUMEET_ENABLE_MOCK_RESTAURANTS
+          )
+
+          missing=()
+          for name in "${required_secrets[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            printf "::error::GitHub Environment '%s' is missing required secrets: %s\n" \
+              "$DEPLOY_ENV" \
+              "${missing[*]}"
+            exit 1
+          fi
+
+          missing_vars=()
+          for name in "${required_vars[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              missing_vars+=("$name")
+            fi
+          done
+
+          if (( ${#missing_vars[@]} > 0 )); then
+            printf "::error::GitHub Environment '%s' is missing required vars: %s\n" \
+              "$DEPLOY_ENV" \
+              "${missing_vars[*]}"
+            exit 1
+          fi
+
           if [[ ! "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; then
             echo "::error::CLOUDFLARE_ACCOUNT_ID must be exactly 32 lowercase hex characters. Check for leading/trailing spaces in the GitHub secret."
             exit 1
           fi
 
-          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
-            echo "::error::CLOUDFLARE_API_TOKEN is empty."
+          if [[ ! "$DATABASE_URL" =~ ^postgresql(\+psycopg)?:// ]]; then
+            echo "::error::DATABASE_URL must start with postgresql:// or postgresql+psycopg://."
             exit 1
           fi
 
+          case "$PARTICIPANT_TOKEN_HASH_SECRET" in
+            gurumeet-dev-participant-token-secret|change_me*)
+              echo "::error::PARTICIPANT_TOKEN_HASH_SECRET must not use the local development placeholder."
+              exit 1
+              ;;
+          esac
+
+          case "$INTERNAL_TASK_SECRET" in
+            change_me*)
+              echo "::error::INTERNAL_TASK_SECRET must not use the local development placeholder."
+              exit 1
+              ;;
+          esac
+
       - name: Worker を deploy
         working-directory: infra/cloudflare/app-worker
-        run: npx wrangler deploy --env "$DEPLOY_ENV"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+          PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
+          INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
+          GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
+          CLOUDFLARE_SECRETS_FILE: ${{ runner.temp }}/cloudflare-worker-secrets.json
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+
+          const secretNames = [
+            "DATABASE_URL",
+            "HOTPEPPER_API_KEY",
+            "PARTICIPANT_TOKEN_HASH_SECRET",
+            "INTERNAL_TASK_SECRET",
+          ];
+
+          const secrets = Object.fromEntries(
+            secretNames.map((name) => [name, process.env[name] ?? ""]),
+          );
+
+          writeFileSync(
+            process.env.CLOUDFLARE_SECRETS_FILE,
+            `${JSON.stringify(secrets)}\n`,
+            { mode: 0o600 },
+          );
+          NODE
+
+          npx wrangler deploy \
+            --env "$DEPLOY_ENV" \
+            --secrets-file "$CLOUDFLARE_SECRETS_FILE" \
+            --var "CORS_ALLOW_ORIGINS:$CORS_ALLOW_ORIGINS" \
+            --var "GURUMEET_ENABLE_MOCK_RESTAURANTS:$GURUMEET_ENABLE_MOCK_RESTAURANTS"

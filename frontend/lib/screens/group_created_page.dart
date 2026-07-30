@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/group_creation_draft.dart';
 import '../theme/app_tokens.dart';
@@ -35,7 +37,7 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
     final colors = theme.colorScheme;
     final horizontalPadding =
         MediaQuery.sizeOf(context).width < AppBreakpoints.compact
-        ? AppSpacing.large
+        ? AppSpacing.medium
         : AppSpacing.xLarge;
 
     return Scaffold(
@@ -66,24 +68,24 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const _SuccessMark(),
-                            const SizedBox(height: AppSpacing.large),
+                            const SizedBox(height: AppSpacing.medium),
                             Text(
-                              'グループを作成しました。\n招待を送ろう。',
+                              '招待を送ろう',
                               style: theme.textTheme.headlineMedium,
                             ),
                             const SizedBox(height: AppSpacing.small),
                             Text(
-                              'このリンクを参加者へ送ってください。',
+                              'ルームコードかURLを共有して、参加者を待ちます。',
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: colors.onSurfaceVariant,
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.section),
+                            const SizedBox(height: AppSpacing.xLarge),
                             _InvitationPanel(
                               draft: widget.draft,
                               onCopyUrl: () => _copyUrl(context),
                               onCopyCode: () => _copyCode(context),
-                              onShare: () => _showShareFeedback(context),
+                              onShare: () => _shareInvite(context),
                             ),
                             const SizedBox(height: AppSpacing.large),
                             AnimatedSwitcher(
@@ -107,7 +109,7 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                                       message: _copyFeedback!,
                                     ),
                             ),
-                            const SizedBox(height: AppSpacing.xxLarge),
+                            const SizedBox(height: AppSpacing.xLarge),
                             _GroupSummary(draft: widget.draft),
                           ],
                         ),
@@ -157,9 +159,6 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
       return;
     }
     _showCopySuccess('招待URLをコピーしました');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('招待URLをコピーしました')));
   }
 
   Future<void> _copyCode(BuildContext context) async {
@@ -168,15 +167,28 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
       return;
     }
     _showCopySuccess('グループコードをコピーしました');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('グループコードをコピーしました')));
   }
 
-  void _showShareFeedback(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('共有機能は現在準備中です。URLをコピーして共有できます。')),
-    );
+  Future<void> _shareInvite(BuildContext context) async {
+    final text =
+        'GuruMeetのルームに参加してください。\n'
+        'コード: ${widget.draft.groupId}\n'
+        '${widget.draft.inviteUrl}';
+    try {
+      await SharePlus.instance.share(
+        ShareParams(title: 'GuruMeetの招待', subject: 'GuruMeetの招待', text: text),
+      );
+      if (!context.mounted) {
+        return;
+      }
+      _showCopySuccess('招待を共有しました');
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: widget.draft.inviteUrl));
+      if (!context.mounted) {
+        return;
+      }
+      _showCopySuccess('共有できなかったためURLをコピーしました');
+    }
   }
 }
 
@@ -280,7 +292,7 @@ class _InvitationPanel extends StatelessWidget {
               final isWide =
                   constraints.maxWidth > AppBreakpoints.stackedActions;
               final codeBox = _CodeBox(draft: draft);
-              final qrCode = _MockQrCode(value: draft.groupId);
+              final qrCode = _InviteQrCode(value: draft.inviteUrl);
 
               if (isWide) {
                 return Row(
@@ -389,8 +401,8 @@ class _CodeBox extends StatelessWidget {
   }
 }
 
-class _MockQrCode extends StatelessWidget {
-  const _MockQrCode({required this.value});
+class _InviteQrCode extends StatelessWidget {
+  const _InviteQrCode({required this.value});
 
   final String value;
 
@@ -399,7 +411,7 @@ class _MockQrCode extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Semantics(
-      label: '$value のモックQRコード',
+      label: '$value の招待QRコード',
       child: Container(
         width: AppSizes.qrCodeSize,
         height: AppSizes.qrCodeSize,
@@ -408,32 +420,20 @@ class _MockQrCode extends StatelessWidget {
           color: colors.surface,
           borderRadius: BorderRadius.circular(AppRadius.small),
         ),
-        child: GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
+        child: QrImageView(
+          data: value,
+          version: QrVersions.auto,
+          gapless: false,
           padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
+          backgroundColor: colors.surface,
+          eyeStyle: QrEyeStyle(
+            eyeShape: QrEyeShape.square,
+            color: colors.onSurface,
           ),
-          itemCount: 49,
-          itemBuilder: (context, index) {
-            final seed = value.codeUnitAt(index % value.length);
-            final isFilled =
-                index < 8 ||
-                index > 40 ||
-                index % 7 == 0 ||
-                (seed + index).isEven;
-            return Padding(
-              padding: const EdgeInsets.all(1.6),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isFilled
-                      ? colors.onSurface
-                      : colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            );
-          },
+          dataModuleStyle: QrDataModuleStyle(
+            dataModuleShape: QrDataModuleShape.square,
+            color: colors.onSurface,
+          ),
         ),
       ),
     );

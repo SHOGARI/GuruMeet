@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../models/group_creation_draft.dart';
 import '../models/location_suggestion.dart';
 import '../services/location_repository.dart';
+import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
@@ -19,6 +23,7 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
   final _formKey = GlobalKey<FormState>();
   final _areaController = TextEditingController();
   final _areaFocusNode = FocusNode();
@@ -28,6 +33,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   BudgetOption? _selectedBudget = BudgetOption.from2000To3000;
   bool _hasTriedSubmit = false;
   bool _isSubmitting = false;
+  bool _isReadingLocation = false;
 
   @override
   void dispose() {
@@ -48,9 +54,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       _areaFocusNode.requestFocus();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('エリアを入力するとグループを作成できます')),
-        );
+        ..showSnackBar(const SnackBar(content: Text('エリアを入力するとグループを作成できます')));
       return;
     }
 
@@ -64,23 +68,29 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
     setState(() => _isSubmitting = true);
     FocusManager.instance.primaryFocus?.unfocus();
-    await Future<void>.delayed(AppMotion.quick);
-    if (!mounted) {
-      return;
-    }
-
-    final draft = GroupCreationDraft.createMock(
-      peopleCount: _peopleCount,
-      area: _selectedLocation?.displayName ?? _areaController.text.trim(),
-      budget: selectedBudget,
-      locationId: _selectedLocation?.id,
-    );
-
-    await Navigator.of(
-      context,
-    ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
-    if (mounted) {
-      setState(() => _isSubmitting = false);
+    try {
+      final draft = await _roomRepository.createRoom(
+        peopleCount: _peopleCount,
+        area: _selectedLocation?.displayName ?? _areaController.text.trim(),
+        budget: selectedBudget,
+      );
+      if (!mounted) {
+        return;
+      }
+      await Navigator.of(
+        context,
+      ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(roomCreateErrorMessage(error))));
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -92,11 +102,124 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     setState(() => _selectedLocation = location);
   }
 
+  Future<void> _readAreaFromLocation() async {
+    if (_isReadingLocation) {
+      return;
+    }
+
+    setState(() => _isReadingLocation = true);
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showLocationSnackBar('位置情報サービスをオンにしてください');
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        _showLocationSnackBar('位置情報の許可が必要です');
+        return;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showLocationSnackBar('設定から位置情報の許可をオンにしてください');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      final placemarks = await Geocoding(
+        locale: const Locale('ja', 'JP'),
+      ).placemarkFromCoordinates(position.latitude, position.longitude);
+      final area = _formatAreaFromPlacemark(
+        placemarks.isEmpty ? null : placemarks.first,
+      );
+
+      if (area == null) {
+        _showLocationSnackBar('現在地の地名を読み取れませんでした');
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _areaController.text = area;
+        _selectedLocation = null;
+        _hasTriedSubmit = false;
+      });
+      _showLocationSnackBar('$area を入力しました');
+    } catch (_) {
+      _showLocationSnackBar('位置情報を読み取れませんでした');
+    } finally {
+      if (mounted) {
+        setState(() => _isReadingLocation = false);
+      }
+    }
+  }
+
+  String? _formatAreaFromPlacemark(Placemark? placemark) {
+    if (placemark == null) {
+      return null;
+    }
+
+    final locality = placemark.locality?.trim();
+    final subLocality = placemark.subLocality?.trim();
+    final administrativeArea = placemark.administrativeArea?.trim();
+    final thoroughfare = placemark.thoroughfare?.trim();
+
+    final primary = _firstFilled([locality, subLocality, administrativeArea]);
+    if (primary == null) {
+      return _firstFilled([thoroughfare, placemark.name?.trim()]);
+    }
+
+    if (subLocality != null &&
+        subLocality.isNotEmpty &&
+        subLocality != primary) {
+      return '$primary $subLocality';
+    }
+
+    if (thoroughfare != null &&
+        thoroughfare.isNotEmpty &&
+        !primary.contains(thoroughfare)) {
+      return '$primary $thoroughfare';
+    }
+
+    return primary;
+  }
+
+  String? _firstFilled(Iterable<String?> values) {
+    for (final value in values) {
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  void _showLocationSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final horizontalPadding = screenWidth < AppBreakpoints.compact
-        ? AppSpacing.large
+        ? AppSpacing.medium
         : AppSpacing.xLarge;
 
     return Scaffold(
@@ -128,8 +251,10 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                         peopleCount: _peopleCount,
                         selectedLocation: _selectedLocation,
                         selectedBudget: _selectedBudget,
+                        isReadingLocation: _isReadingLocation,
                         onAreaSubmitted: _createGroup,
                         onLocationSelected: _selectLocation,
+                        onReadAreaFromLocation: _readAreaFromLocation,
                         onDecreasePeople: _peopleCount > 2
                             ? () => setState(() => _peopleCount--)
                             : null,
@@ -167,8 +292,10 @@ class _CreateGroupForm extends StatelessWidget {
     required this.peopleCount,
     required this.selectedLocation,
     required this.selectedBudget,
+    required this.isReadingLocation,
     required this.onAreaSubmitted,
     required this.onLocationSelected,
+    required this.onReadAreaFromLocation,
     required this.onDecreasePeople,
     required this.onIncreasePeople,
     required this.onBudgetSelected,
@@ -181,8 +308,10 @@ class _CreateGroupForm extends StatelessWidget {
   final int peopleCount;
   final LocationSuggestion? selectedLocation;
   final BudgetOption? selectedBudget;
+  final bool isReadingLocation;
   final VoidCallback onAreaSubmitted;
   final ValueChanged<LocationSuggestion?> onLocationSelected;
+  final VoidCallback onReadAreaFromLocation;
   final VoidCallback? onDecreasePeople;
   final VoidCallback? onIncreasePeople;
   final ValueChanged<BudgetOption> onBudgetSelected;
@@ -200,15 +329,15 @@ class _CreateGroupForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('今夜の集合を\nつくろう。', style: theme.textTheme.headlineLarge),
-          const SizedBox(height: AppSpacing.regular),
+          Text('集合をつくる', style: theme.textTheme.headlineLarge),
+          const SizedBox(height: AppSpacing.small),
           Text(
-            '人数、場所、予算。決まったらすぐ招待できます。',
+            '人数・場所・予算を決めたら、すぐ招待できます。',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '01',
             title: '何人で行く？',
@@ -218,19 +347,35 @@ class _CreateGroupForm extends StatelessWidget {
               onIncrease: onIncreasePeople,
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '02',
             title: 'どのあたり？',
-            child: _LocationSearchField(
-              controller: areaController,
-              focusNode: areaFocusNode,
-              selectedLocation: selectedLocation,
-              onSubmitted: onAreaSubmitted,
-              onSelected: onLocationSelected,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _LocationSearchField(
+                  controller: areaController,
+                  focusNode: areaFocusNode,
+                  selectedLocation: selectedLocation,
+                  onSubmitted: onAreaSubmitted,
+                  onSelected: onLocationSelected,
+                ),
+                const SizedBox(height: AppSpacing.regular),
+                OutlinedButton.icon(
+                  onPressed: isReadingLocation ? null : onReadAreaFromLocation,
+                  icon: isReadingLocation
+                      ? const SizedBox.square(
+                          dimension: AppSizes.iconMedium,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location_outlined),
+                  label: Text(isReadingLocation ? '読み取り中' : '現在地から入力'),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.section),
+          const SizedBox(height: AppSpacing.xLarge),
           _FormSection(
             step: '03',
             title: '予算はどれくらい？',
@@ -403,10 +548,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
           ),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return '行きたい地点を入力してください';
-            }
-            if (widget.selectedLocation == null) {
-              return '候補から地点を選んでください';
+              return '行きたいエリアを入力してください';
             }
             return null;
           },
@@ -458,10 +600,8 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: _suggestions.length,
-      separatorBuilder: (_, _) => Divider(
-        height: 1,
-        color: colors.outlineVariant,
-      ),
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, color: colors.outlineVariant),
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
         return ListTile(

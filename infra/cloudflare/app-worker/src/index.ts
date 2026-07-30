@@ -4,15 +4,40 @@ import { env as workerEnv } from "cloudflare:workers";
 const INSTANCE_COUNT = 1;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 };
 
 export class BackendContainer extends Container {
   defaultPort = 8000;
   sleepAfter = "5m";
   envVars = {
-    DATABASE_URL: runtimeEnv.DATABASE_URL,
+    DATABASE_URL: requiredRuntimeEnv(runtimeEnv.DATABASE_URL, "DATABASE_URL"),
+    HOTPEPPER_API_KEY: requiredRuntimeEnv(
+      runtimeEnv.HOTPEPPER_API_KEY,
+      "HOTPEPPER_API_KEY",
+    ),
+    CORS_ALLOW_ORIGINS: requiredRuntimeEnv(
+      runtimeEnv.CORS_ALLOW_ORIGINS,
+      "CORS_ALLOW_ORIGINS",
+    ),
+    PARTICIPANT_TOKEN_HASH_SECRET: requiredRuntimeEnv(
+      runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+    ),
+    INTERNAL_TASK_SECRET: requiredRuntimeEnv(
+      runtimeEnv.INTERNAL_TASK_SECRET,
+      "INTERNAL_TASK_SECRET",
+    ),
+    GURUMEET_ENABLE_MOCK_RESTAURANTS:
+      runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
+    GURUMEET_API_ROOT_PATH: runtimeEnv.GURUMEET_API_ROOT_PATH ?? "",
   };
 }
 
@@ -21,7 +46,13 @@ interface Env {
   BACKEND_CONTAINER: DurableObjectNamespace<BackendContainer>;
   ASSETS_BUCKET: R2Bucket;
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
+  GURUMEET_API_ROOT_PATH?: string;
 }
 
 export default {
@@ -36,6 +67,14 @@ export default {
       return handleFileRequest(request, env);
     }
 
+    if (isProduction(env) && isApiPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (isApiRootPath(url.pathname)) {
+      return new Response("Not found", { status: 404 });
+    }
+
     if (url.pathname.startsWith("/api/")) {
       const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
       return container.fetch(stripApiPrefix(request));
@@ -43,7 +82,38 @@ export default {
 
     return env.ASSETS.fetch(request);
   },
+
+  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+    if (!env.INTERNAL_TASK_SECRET) {
+      console.error("INTERNAL_TASK_SECRET is not configured.");
+      return;
+    }
+    const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
+    const response = await container.fetch(
+      new Request("http://container/internal/cleanup-expired-temporary-groups", {
+        method: "POST",
+        headers: {
+          "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
+        },
+      }),
+    );
+    if (!response.ok) {
+      console.error(
+        JSON.stringify({
+          event: "cleanup_expired_temporary_groups_failed",
+          status: response.status,
+        }),
+      );
+    }
+  },
 };
+
+function requiredRuntimeEnv(value: string | undefined, name: string): string {
+  if (!value?.trim()) {
+    throw new Error(`${name} must be configured and non-empty.`);
+  }
+  return value;
+}
 
 async function edgeHealth(env: Env): Promise<Response> {
   const checks = {
@@ -89,6 +159,18 @@ function stripApiPrefix(request: Request): Request {
   const url = new URL(request.url);
   url.pathname = url.pathname.replace(/^\/api/, "") || "/";
   return new Request(url, request);
+}
+
+function isProduction(env: Env): boolean {
+  return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
+}
+
+function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+function isApiRootPath(pathname: string): boolean {
+  return pathname === "/api" || pathname === "/api/";
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
