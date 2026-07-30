@@ -216,6 +216,10 @@ ThemeData buildAppTheme() {
       behavior: SnackBarBehavior.fixed,
       backgroundColor: inkColor,
       contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
     ),
     focusColor: brandColor.withValues(alpha: 0.12),
     hoverColor: brandColor.withValues(alpha: 0.06),

@@ -5,6 +5,8 @@ import 'package:gurumeet/models/group_creation_draft.dart';
 import 'package:gurumeet/models/restaurant_preview.dart';
 import 'package:gurumeet/screens/group_created_page.dart';
 import 'package:gurumeet/screens/match_page.dart';
+import 'package:gurumeet/screens/swipe_page.dart';
+import 'package:gurumeet/theme/app_theme.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
@@ -154,7 +156,9 @@ void main() {
       await tester.tap(
         find.widgetWithIcon(
           IconButton,
-          likesRestaurant ? Icons.favorite_rounded : Icons.close_rounded,
+          likesRestaurant
+              ? Icons.bookmark_add_rounded
+              : Icons.do_not_disturb_alt_rounded,
         ),
       );
       await tester.pumpAndSettle();
@@ -172,7 +176,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('残り 5 / 5'), findsOneWidget);
         await tester.tap(
-          find.widgetWithIcon(IconButton, Icons.favorite_rounded),
+          find.widgetWithIcon(IconButton, Icons.bookmark_add_rounded),
         );
         await tester.pumpAndSettle();
       }
@@ -449,6 +453,69 @@ void main() {
       expect(find.text('今日どこ行く？'), findsOneWidget);
       expect(find.text('グループを作る'), findsOneWidget);
       expect(find.text('コードで参加する'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('swipe and result support requested responsive widths', (
+    tester,
+  ) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.devicePixelRatio = 1;
+    final draft = GroupCreationDraft.createMock(
+      peopleCount: 4,
+      area: '東京都渋谷区のとても長いエリア名',
+      budget: BudgetOption.from3000To5000,
+    );
+    final result = RestaurantMatchResult(
+      restaurant: mockRestaurants.first,
+      peopleCount: 4,
+      results: [
+        RestaurantVoteResult(
+          restaurant: mockRestaurants.first,
+          likeCount: 4,
+          rejectCount: 0,
+        ),
+      ],
+    );
+
+    for (final size in [
+      const Size(375, 812),
+      const Size(390, 844),
+      const Size(430, 932),
+      const Size(768, 1024),
+      const Size(1440, 900),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(),
+          home: SwipePage(draft: draft),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('食べたい？'), findsOneWidget);
+      expect(find.text('残り 5 / 5'), findsOneWidget);
+      expect(
+        find.widgetWithIcon(IconButton, Icons.bookmark_add_rounded),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(),
+          home: MatchPage(draft: draft, result: result),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 550));
+
+      expect(find.text('今日のお店が決定。'), findsOneWidget);
+      expect(find.text(mockRestaurants.first.name), findsAtLeastNWidgets(1));
       expect(tester.takeException(), isNull);
     }
   });

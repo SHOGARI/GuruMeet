@@ -7,10 +7,12 @@ class PrimaryActionButton extends StatefulWidget {
     super.key,
     required this.label,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
+  final bool isLoading;
 
   @override
   State<PrimaryActionButton> createState() => _PrimaryActionButtonState();
@@ -82,7 +84,22 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton> {
                     return BorderSide.none;
                   }),
                 ),
-                child: Text(widget.label),
+                child: widget.isLoading
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox.square(
+                            dimension: AppSizes.iconMedium,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.small),
+                          Text(widget.label),
+                        ],
+                      )
+                    : Text(widget.label),
               ),
             ),
           ),

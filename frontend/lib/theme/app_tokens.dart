@@ -47,7 +47,7 @@ abstract final class AppSizes {
 abstract final class AppMotion {
   static const Duration quick = Duration(milliseconds: 150);
   static const Duration medium = Duration(milliseconds: 220);
-  static const Duration pageEntrance = Duration(milliseconds: 420);
+  static const Duration pageEntrance = Duration(milliseconds: 280);
   static const double pressedScale = 0.97;
 }
 

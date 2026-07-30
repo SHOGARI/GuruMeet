@@ -1,4 +1,52 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+int restaurantImageCacheWidth(BuildContext context) {
+  final mediaQuery = MediaQuery.of(context);
+  return math.min(
+    1600,
+    math.max(
+      720,
+      (mediaQuery.size.width * mediaQuery.devicePixelRatio).round(),
+    ),
+  );
+}
+
+String? normalizedRestaurantImageUrl(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+
+  final withScheme = trimmed.startsWith('//') ? 'https:$trimmed' : trimmed;
+  final uri = Uri.tryParse(withScheme);
+  if (uri == null || !uri.hasScheme) {
+    return null;
+  }
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return null;
+  }
+  if (uri.scheme == 'http') {
+    return uri.replace(scheme: 'https').toString();
+  }
+  return uri.toString();
+}
+
+ImageProvider<Object>? restaurantImageProvider(
+  String imageUrl, {
+  required int cacheWidth,
+}) {
+  final normalizedUrl = normalizedRestaurantImageUrl(imageUrl);
+  if (normalizedUrl == null) {
+    return null;
+  }
+  return ResizeImage.resizeIfNeeded(
+    cacheWidth,
+    null,
+    NetworkImage(normalizedUrl),
+  );
+}
 
 class RestaurantImage extends StatelessWidget {
   const RestaurantImage({
@@ -16,7 +64,7 @@ class RestaurantImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final effectiveImageUrl = _normalizeImageUrl(imageUrl);
+    final effectiveImageUrl = normalizedRestaurantImageUrl(imageUrl);
     if (effectiveImageUrl == null) {
       return _ImagePlaceholder(colors: colors);
     }
@@ -27,6 +75,7 @@ class RestaurantImage extends StatelessWidget {
       width: double.infinity,
       height: double.infinity,
       fit: fit,
+      cacheWidth: restaurantImageCacheWidth(context),
       webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (context, error, stackTrace) {
         return _ImagePlaceholder(colors: colors);
@@ -38,26 +87,6 @@ class RestaurantImage extends StatelessWidget {
         return _ImageSkeleton(color: colors.surfaceContainerHighest);
       },
     );
-  }
-
-  String? _normalizeImageUrl(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    final withScheme = trimmed.startsWith('//') ? 'https:$trimmed' : trimmed;
-    final uri = Uri.tryParse(withScheme);
-    if (uri == null || !uri.hasScheme) {
-      return null;
-    }
-    if (uri.scheme != 'http' && uri.scheme != 'https') {
-      return null;
-    }
-    if (uri.scheme == 'http') {
-      return uri.replace(scheme: 'https').toString();
-    }
-    return uri.toString();
   }
 }
 

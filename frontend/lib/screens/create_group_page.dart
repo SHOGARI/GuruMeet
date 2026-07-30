@@ -396,7 +396,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                   SizedBox(
                     width: double.infinity,
                     child: PrimaryActionButton(
-                      label: 'グループを作成',
+                      label: _isSubmitting ? '作成中…' : 'グループを作成',
+                      isLoading: _isSubmitting,
                       onPressed: _isSubmitting ? null : _createGroup,
                     ),
                   ),

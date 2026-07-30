@@ -38,6 +38,8 @@ class _SwipePageState extends State<SwipePage> {
   bool _isComplete = false;
   bool _isOpeningResult = false;
   bool _isOpeningMaps = false;
+  bool _isOpeningDetails = false;
+  bool _isLoadingVotingStatus = false;
   String? _restaurantLoadError;
   Timer? _completionTimer;
 
@@ -78,6 +80,7 @@ class _SwipePageState extends State<SwipePage> {
         _restaurants = restaurants;
         _isLoadingRestaurants = false;
       });
+      unawaited(_precacheUpcomingRestaurants(0));
     } catch (error) {
       if (!mounted) {
         return;
@@ -99,6 +102,8 @@ class _SwipePageState extends State<SwipePage> {
       return;
     }
     setState(() => _isResolvingChoice = true);
+    final previousLastChoice = _lastChoice;
+    final selectedIndex = _currentIndex;
     final currentRestaurant = _currentRestaurant;
     final voteChoice = VoteChoice(
       restaurantId: currentRestaurant.id,
@@ -110,6 +115,21 @@ class _SwipePageState extends State<SwipePage> {
       liked: liked,
       photoIndex: photoIndex,
     );
+    final isLastRestaurant = selectedIndex == _restaurants.length - 1;
+
+    _localChoices.add(voteChoice);
+    setState(() {
+      _lastChoice = choice;
+      _restoredPhotoIndex = 0;
+      if (isLastRestaurant) {
+        _isComplete = true;
+      } else {
+        _currentIndex = selectedIndex + 1;
+      }
+    });
+    if (!isLastRestaurant) {
+      unawaited(_precacheUpcomingRestaurants(selectedIndex + 1));
+    }
 
     try {
       await _roomRepository.submitVote(draft: widget.draft, choice: voteChoice);
@@ -117,37 +137,76 @@ class _SwipePageState extends State<SwipePage> {
       if (!mounted) {
         return;
       }
-      setState(() => _isResolvingChoice = false);
+      _removeLocalVote(choice);
+      setState(() {
+        _currentIndex = selectedIndex;
+        _lastChoice = previousLastChoice;
+        _restoredPhotoIndex = photoIndex;
+        _isComplete = false;
+        _isResolvingChoice = false;
+      });
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
       return;
     }
 
-    _localChoices.add(voteChoice);
-
-    if (_currentIndex == _restaurants.length - 1) {
-      final votingStatus = await _roomRepository.getVotingStatus(widget.draft);
-      if (!mounted) {
-        return;
+    if (isLastRestaurant) {
+      try {
+        final votingStatus = await _roomRepository.getVotingStatus(
+          widget.draft,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _votingMembers = votingStatus.members;
+          _isResolvingChoice = false;
+        });
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _isResolvingChoice = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
       }
-      setState(() {
-        _lastChoice = choice;
-        _votingMembers = votingStatus.members;
-        _restoredPhotoIndex = 0;
-        _isComplete = true;
-        _isResolvingChoice = false;
-      });
       _startCompletionSimulation();
       return;
     }
 
-    setState(() {
-      _lastChoice = choice;
-      _restoredPhotoIndex = 0;
-      _currentIndex++;
-      _isResolvingChoice = false;
-    });
+    if (mounted) {
+      setState(() => _isResolvingChoice = false);
+    }
+  }
+
+  Future<void> _precacheUpcomingRestaurants(int startIndex) async {
+    if (!mounted || _restaurants.isEmpty) {
+      return;
+    }
+    final cacheWidth = restaurantImageCacheWidth(context);
+    final lastIndex = (startIndex + 1).clamp(0, _restaurants.length - 1);
+    final providers = <ImageProvider<Object>>[];
+    for (var index = startIndex; index <= lastIndex; index++) {
+      final urls = _restaurants[index].imageUrls;
+      if (urls.isEmpty) {
+        continue;
+      }
+      final photoLimit = index == startIndex ? 2 : 1;
+      for (final url in urls.take(photoLimit)) {
+        final provider = restaurantImageProvider(url, cacheWidth: cacheWidth);
+        if (provider != null) {
+          providers.add(provider);
+        }
+      }
+    }
+    await Future.wait(
+      providers.map(
+        (provider) =>
+            precacheImage(provider, context, onError: (error, stackTrace) {}),
+      ),
+    );
   }
 
   void _undoLastChoice() {
@@ -223,6 +282,10 @@ class _SwipePageState extends State<SwipePage> {
   }
 
   Future<void> _loadVotingStatus() async {
+    if (_isLoadingVotingStatus) {
+      return;
+    }
+    _isLoadingVotingStatus = true;
     try {
       final status = await _roomRepository.getVotingStatus(widget.draft);
       if (!mounted) {
@@ -239,20 +302,32 @@ class _SwipePageState extends State<SwipePage> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+    } finally {
+      _isLoadingVotingStatus = false;
     }
   }
 
   Future<void> _showRestaurantDetails(RestaurantPreview restaurant) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _RestaurantDetailSheet(
-        restaurant: restaurant,
-        onOpenMaps: () => _openMaps(restaurant),
-      ),
-    );
+    if (_isOpeningDetails) {
+      return;
+    }
+    setState(() => _isOpeningDetails = true);
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _RestaurantDetailSheet(
+          restaurant: restaurant,
+          onOpenMaps: () => _openMaps(restaurant),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningDetails = false);
+      }
+    }
   }
 
   Future<void> _openMaps(RestaurantPreview restaurant) async {
@@ -368,7 +443,8 @@ class _SwipePageState extends State<SwipePage> {
                         key: ValueKey(_currentRestaurant.id),
                         restaurant: _currentRestaurant,
                         initialPhotoIndex: _restoredPhotoIndex,
-                        isResolvingChoice: _isResolvingChoice,
+                        isResolvingChoice:
+                            _isResolvingChoice || _isOpeningDetails,
                         onShowDetails: () =>
                             _showRestaurantDetails(_currentRestaurant),
                         onSelected: (liked, photoIndex) => _chooseRestaurant(
@@ -911,12 +987,10 @@ class _SwipeCardState extends State<_SwipeCard>
 
   late final AnimationController _controller;
   Animation<Offset>? _offsetAnimation;
-  Offset _dragOffset = Offset.zero;
+  final ValueNotifier<Offset> _dragOffset = ValueNotifier(Offset.zero);
   int _photoIndex = 0;
   bool _isAnimatingOut = false;
 
-  double get _decisionProgress =>
-      (_dragOffset.dx.abs() / _decisionDistance).clamp(0, 1);
   bool get _isInteractionLocked => widget.isResolvingChoice || _isAnimatingOut;
 
   @override
@@ -929,7 +1003,7 @@ class _SwipeCardState extends State<_SwipeCard>
         if (animation == null) {
           return;
         }
-        setState(() => _dragOffset = animation.value);
+        _dragOffset.value = animation.value;
       });
   }
 
@@ -939,7 +1013,7 @@ class _SwipeCardState extends State<_SwipeCard>
     if (oldWidget.restaurant.id != widget.restaurant.id) {
       _controller.stop();
       _offsetAnimation = null;
-      _dragOffset = Offset.zero;
+      _dragOffset.value = Offset.zero;
       _photoIndex = widget.initialPhotoIndex;
       _isAnimatingOut = false;
     }
@@ -948,6 +1022,7 @@ class _SwipeCardState extends State<_SwipeCard>
   @override
   void dispose() {
     _controller.dispose();
+    _dragOffset.dispose();
     super.dispose();
   }
 
@@ -955,7 +1030,7 @@ class _SwipeCardState extends State<_SwipeCard>
     if (_isInteractionLocked) {
       return;
     }
-    setState(() => _dragOffset += details.delta);
+    _dragOffset.value += details.delta;
   }
 
   void _handlePanEnd(DragEndDetails details) {
@@ -965,18 +1040,18 @@ class _SwipeCardState extends State<_SwipeCard>
 
     final velocity = details.velocity.pixelsPerSecond.dx;
     final shouldChoose =
-        _dragOffset.dx.abs() > _decisionDistance || velocity.abs() > 720;
+        _dragOffset.value.dx.abs() > _decisionDistance || velocity.abs() > 720;
     if (!shouldChoose) {
       _animateTo(Offset.zero);
       return;
     }
 
-    _animateOut(liked: _dragOffset.dx > 0 || velocity > 0);
+    _animateOut(liked: _dragOffset.value.dx > 0 || velocity > 0);
   }
 
   void _animateTo(Offset target) {
     _offsetAnimation = Tween<Offset>(
-      begin: _dragOffset,
+      begin: _dragOffset.value,
       end: target,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller
@@ -992,8 +1067,8 @@ class _SwipeCardState extends State<_SwipeCard>
     setState(() => _isAnimatingOut = true);
     final direction = liked ? 1.0 : -1.0;
     _offsetAnimation = Tween<Offset>(
-      begin: _dragOffset,
-      end: Offset(direction * _flyDistance, _dragOffset.dy - 80),
+      begin: _dragOffset.value,
+      end: Offset(direction * _flyDistance, _dragOffset.value.dy - 80),
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInCubic));
     _controller
       ..duration = const Duration(milliseconds: 260)
@@ -1044,43 +1119,90 @@ class _SwipeCardState extends State<_SwipeCard>
 
   @override
   Widget build(BuildContext context) {
-    final rotation = (_dragOffset.dx / 420).clamp(-_maxRotation, _maxRotation);
-    final likeOpacity = _dragOffset.dx > 0 ? _decisionProgress : 0.0;
-    final rejectOpacity = _dragOffset.dx < 0 ? _decisionProgress : 0.0;
-
-    return Transform.translate(
-      offset: _dragOffset,
-      child: Transform.rotate(
-        angle: rotation,
-        child: GestureDetector(
-          onPanUpdate: _handlePanUpdate,
-          onPanEnd: _handlePanEnd,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final cardSize = Size(
-                constraints.maxWidth,
-                constraints.hasBoundedHeight
-                    ? constraints.maxHeight
-                    : constraints.maxWidth * 1.25,
-              );
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) => _handleTapUp(details, cardSize),
-                child: _CardSurface(
-                  restaurant: widget.restaurant,
-                  photoIndex: _photoIndex,
-                  likeOpacity: likeOpacity,
-                  rejectOpacity: rejectOpacity,
-                  isResolvingChoice: _isInteractionLocked,
-                  onShowDetails: widget.onShowDetails,
-                  onRejected: () => _animateOut(liked: false),
-                  onLiked: () => _animateOut(liked: true),
-                ),
-              );
-            },
-          ),
+    return ValueListenableBuilder<Offset>(
+      valueListenable: _dragOffset,
+      child: RepaintBoundary(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardSize = Size(
+              constraints.maxWidth,
+              constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : constraints.maxWidth * 1.25,
+            );
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) => _handleTapUp(details, cardSize),
+              child: _CardSurface(
+                restaurant: widget.restaurant,
+                photoIndex: _photoIndex,
+                isResolvingChoice: _isInteractionLocked,
+                onShowDetails: widget.onShowDetails,
+                onRejected: () => _animateOut(liked: false),
+                onLiked: () => _animateOut(liked: true),
+              ),
+            );
+          },
         ),
       ),
+      builder: (context, dragOffset, child) {
+        final rotation = (dragOffset.dx / 420).clamp(
+          -_maxRotation,
+          _maxRotation,
+        );
+        final decisionProgress = (dragOffset.dx.abs() / _decisionDistance)
+            .clamp(0.0, 1.0);
+        final likeOpacity = dragOffset.dx > 0 ? decisionProgress : 0.0;
+        final rejectOpacity = dragOffset.dx < 0 ? decisionProgress : 0.0;
+        return Transform.translate(
+          offset: dragOffset,
+          child: Transform.rotate(
+            angle: rotation,
+            child: GestureDetector(
+              onHorizontalDragUpdate: _handlePanUpdate,
+              onHorizontalDragEnd: _handlePanEnd,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  child!,
+                  Positioned(
+                    left: AppSpacing.xLarge,
+                    top: AppSpacing.xLarge + AppSpacing.large,
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: likeOpacity,
+                        child: Transform.rotate(
+                          angle: -0.12,
+                          child: const _DecisionStamp(
+                            label: '行きたい',
+                            icon: Icons.bookmark_add_rounded,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: AppSpacing.xLarge,
+                    top: AppSpacing.xLarge + AppSpacing.large,
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: rejectOpacity,
+                        child: Transform.rotate(
+                          angle: 0.12,
+                          child: const _DecisionStamp(
+                            label: '今回は見送る',
+                            icon: Icons.do_not_disturb_alt_rounded,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1089,8 +1211,6 @@ class _CardSurface extends StatelessWidget {
   const _CardSurface({
     required this.restaurant,
     required this.photoIndex,
-    required this.likeOpacity,
-    required this.rejectOpacity,
     required this.isResolvingChoice,
     required this.onShowDetails,
     required this.onRejected,
@@ -1099,8 +1219,6 @@ class _CardSurface extends StatelessWidget {
 
   final RestaurantPreview restaurant;
   final int photoIndex;
-  final double likeOpacity;
-  final double rejectOpacity;
   final bool isResolvingChoice;
   final VoidCallback onShowDetails;
   final VoidCallback onRejected;
@@ -1188,34 +1306,6 @@ class _CardSurface extends StatelessWidget {
                 ),
                 Positioned(
                   left: AppSpacing.xLarge,
-                  top: AppSpacing.xLarge + AppSpacing.large,
-                  child: Opacity(
-                    opacity: likeOpacity,
-                    child: Transform.rotate(
-                      angle: -0.18,
-                      child: const _DecisionStamp(
-                        label: 'LIKE',
-                        icon: Icons.favorite_rounded,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: AppSpacing.xLarge,
-                  top: AppSpacing.xLarge + AppSpacing.large,
-                  child: Opacity(
-                    opacity: rejectOpacity,
-                    child: Transform.rotate(
-                      angle: 0.18,
-                      child: const _DecisionStamp(
-                        label: 'NOPE',
-                        icon: Icons.close_rounded,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: AppSpacing.xLarge,
                   right: AppSpacing.xLarge,
                   bottom: 118,
                   child: Column(
@@ -1288,15 +1378,15 @@ class _CardSurface extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _SwipeActionButton(
-                        tooltip: '拒否',
-                        icon: Icons.close_rounded,
+                        tooltip: '今回は見送る',
+                        icon: Icons.do_not_disturb_alt_rounded,
                         foregroundColor: colors.onErrorContainer,
                         backgroundColor: colors.errorContainer,
                         onPressed: isResolvingChoice ? null : onRejected,
                       ),
                       _SwipeActionButton(
-                        tooltip: 'いいね',
-                        icon: Icons.favorite_rounded,
+                        tooltip: '行きたい',
+                        icon: Icons.bookmark_add_rounded,
                         foregroundColor: colors.onPrimary,
                         backgroundColor: colors.primary,
                         onPressed: isResolvingChoice ? null : onLiked,

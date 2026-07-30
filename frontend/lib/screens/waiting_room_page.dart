@@ -30,6 +30,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   Timer? _joinTimer;
   bool _isNavigating = false;
   bool _isLoadingMembers = true;
+  bool _isMemberRequestInFlight = false;
   bool _isVotingStarted = false;
   String? _memberLoadError;
   DateTime? _lastMemberLoadedAt;
@@ -55,9 +56,10 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   }
 
   Future<void> _loadMembers({bool showLoading = true}) async {
-    if (!mounted) {
+    if (!mounted || _isMemberRequestInFlight) {
       return;
     }
+    _isMemberRequestInFlight = true;
     if (showLoading) {
       setState(() {
         _isLoadingMembers = true;
@@ -90,6 +92,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         _isLoadingMembers = false;
         _memberLoadError = votingErrorMessage(error);
       });
+    } finally {
+      _isMemberRequestInFlight = false;
     }
   }
 
@@ -203,7 +207,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                     ),
                     const SizedBox(height: AppSpacing.regular),
                     PrimaryActionButton(
-                      label: '投票を開始',
+                      label: _isNavigating ? '開始しています…' : '投票を開始',
+                      isLoading: _isNavigating,
                       onPressed: _isNavigating || !_isRoomReady
                           ? null
                           : _startSwipe,
@@ -212,7 +217,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                     _ParticipantVotingHint(isVotingStarted: _isVotingStarted),
                     const SizedBox(height: AppSpacing.regular),
                     PrimaryActionButton(
-                      label: '投票画面へ進む',
+                      label: _isNavigating ? '移動しています…' : '投票画面へ進む',
+                      isLoading: _isNavigating,
                       onPressed: _isNavigating || !_isVotingStarted
                           ? null
                           : _enterSwipe,
