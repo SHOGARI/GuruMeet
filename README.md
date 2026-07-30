@@ -8,12 +8,10 @@
 
 <br>
 
-<a href="https://skillicons.dev">
-  <img
-    src="https://skillicons.dev/icons?i=flutter,dart,py,fastapi,postgres,cloudflare,workers,docker,githubactions&theme=light&perline=9"
-    alt="Flutter, Dart, Python, FastAPI, PostgreSQL, Cloudflare Workers, Docker, GitHub Actions"
-  >
-</a>
+[![Flutter](https://img.shields.io/badge/Flutter-Frontend-46A6FF?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Cloudflare](https://img.shields.io/badge/Cloudflare-Deploy-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://www.cloudflare.com)
 
 </div>
 
@@ -40,50 +38,97 @@ frontend は候補をスワイプして投票・結果表示までを担当し�
 
 | feature | status |
 | --- | --- |
-| 招待URL / 5桁コードによる一時グループ参加 | implemented |
-| 匿名参加者トークンによる参加者識別 | implemented |
-| 都道府県別の駅・市区町村候補検索 | implemented |
-| 現在地からの店舗検索 | implemented |
-| Hot Pepper Gourmet API による店舗候補取得 | implemented |
-| スワイプ投票と結果表示 | implemented |
-| 期限切れ一時グループの cleanup | implemented |
-| Cloudflare Workers / Containers デプロイ | in progress |
-
-## Architecture
-
-```text
-Flutter Web / iOS / Android
-        |
-        | JSON API
-        v
-FastAPI backend
-        |
-        | SQLAlchemy / Alembic
-        v
-PostgreSQL
-
-External services:
-  Hot Pepper Gourmet API
-  Geolonia address data
-  Ekidata station data
-
-Deploy target:
-  Cloudflare Worker
-  Cloudflare Workers Container
-  Cloudflare R2
-  Neon PostgreSQL
-```
+| 🔗 招待URL / 5桁コードによる一時グループ参加 | ✅ implemented |
+| 👤 匿名参加者トークンによる参加者識別 | ✅ implemented |
+| 🗾 都道府県別の駅・市区町村候補検索 | ✅ implemented |
+| 📍 現在地からの店舗検索 | ✅ implemented |
+| 🍽️ Hot Pepper Gourmet API による店舗候補取得 | ✅ implemented |
+| 👆 スワイプ投票と結果表示 | ✅ implemented |
+| 🧹 期限切れ一時グループの cleanup | ✅ implemented |
+| ☁️ Cloudflare Workers / Containers デプロイ | ✅ implemented |
 
 ## Tech Stack
 
-| layer | technology |
-| --- | --- |
-| Frontend | Flutter, Dart, Material 3 |
-| Backend | FastAPI, Pydantic, SQLAlchemy |
-| Database | PostgreSQL, Alembic |
-| Location master | Geolonia 住所データ, 駅データ.jp |
-| Restaurant search | Hot Pepper Gourmet API |
-| Infrastructure | Cloudflare Workers, Workers Containers, R2, Neon PostgreSQL |
+| layer             | technology                                                  |
+| ----------------- | ----------------------------------------------------------- |
+| Frontend          | Flutter, Dart, Material 3                                   |
+| Backend           | FastAPI, Pydantic, SQLAlchemy                               |
+| Database          | PostgreSQL, Alembic                                         |
+| Location master   | Geolonia 住所データ, 駅データ.jp                            |
+| Restaurant search | Hot Pepper Gourmet API                                      |
+| Infrastructure    | Cloudflare Workers, Workers Containers, R2, Neon PostgreSQL |
+
+## Frontend
+
+<div align="center">
+  <a href="https://skillicons.dev">
+    <img src="https://skillicons.dev/icons?i=flutter,dart&theme=light" alt="Flutter and Dart">
+  </a>
+</div>
+
+`frontend/` は Flutter アプリです。
+グループ作成、招待URL表示、参加、待機室、店舗候補のスワイプ、投票結果、店舗詳細表示を担当します。
+
+使い心地はシンプルに保ちつつ、店選びの画面がちゃんと美味しそうに見えることを重視しています。
+暖色を中心にした配色、写真が主役になるカード、迷わず次の操作へ進める導線で、食事会らしい温度感を出しています。
+
+| area                      | files                                          |
+| ------------------------- | ---------------------------------------------- |
+| Screens                   | `frontend/lib/screens/`                        |
+| API client / repositories | `frontend/lib/services/`                       |
+| Models                    | `frontend/lib/models/`                         |
+| Theme / shared widgets    | `frontend/lib/theme/`, `frontend/lib/widgets/` |
+
+ローカルでは `frontend/.env` の値を `--dart-define` として渡します。
+UI確認だけなら mock mode、backend とつなぐ場合は `GURUMEET_ENABLE_MOCKS=false` にします。
+
+## Backend
+
+<div align="center">
+  <a href="https://skillicons.dev">
+    <img src="https://skillicons.dev/icons?i=py,fastapi,postgres&theme=light" alt="Python, FastAPI, and PostgreSQL">
+  </a>
+</div>
+
+`backend/` は FastAPI アプリです。
+一時グループ、匿名参加者、地点検索、店舗候補取得、投票、期限切れ cleanup を担当します。
+
+backend では、ただ店舗を並べるだけでなく、予算・人数・候補の偏りを考慮したレコメンドアルゴリズムを重視しています。
+DB は一時グループ、参加者、投票、地点マスタを素直に扱えるように、PostgreSQL と SQLAlchemy / Alembic を前提に設計しています。
+
+| area            | files                                 |
+| --------------- | ------------------------------------- |
+| API routes      | `backend/app/api/routes/`             |
+| Schemas         | `backend/app/schemas/`                |
+| Models          | `backend/app/models/`                 |
+| Services        | `backend/app/services/`               |
+| DB / migrations | `backend/app/db/`, `backend/alembic/` |
+
+店舗検索はグループ作成時に実行します。
+選択地点は `locations`、現在地や地図ピンは `custom_locations` を検索原点として扱います。
+
+## Infra
+
+<div align="center">
+  <a href="https://skillicons.dev">
+    <img src="https://skillicons.dev/icons?i=cloudflare,workers,docker,githubactions&theme=light" alt="Cloudflare, Workers, Docker, and GitHub Actions">
+  </a>
+</div>
+
+`infra/` は Cloudflare と周辺運用の設定を置きます。
+Flutter Web を Worker Static Assets で配信し、`/api/*` を Workers Container 上の FastAPI に流す構成です。
+
+infra は「楽に開発する」と「Cloudflare を使い倒す」を意識しています。
+deploy、環境変数、staging / production の分離を整えつつ、Discord webhook で実際に使われている感覚や障害の兆候を拾える運用にしています。
+
+| area                  | files                          |
+| --------------------- | ------------------------------ |
+| Cloudflare Worker     | `infra/cloudflare/app-worker/` |
+| Deploy commands       | `infra/cloudflare/Makefile`    |
+| Cloudflare operations | `infra/cloudflare/README.md`   |
+| Discord alerts        | `infra/discord/`               |
+
+staging / production の secret 実値は Git に置かず、GitHub Environment secrets から deploy workflow 経由で渡します。
 
 ## Quick Start
 
@@ -158,16 +203,43 @@ cd backend
 
 ```text
 gurumeet/
-  frontend/          Flutter app
-  backend/           FastAPI app, SQLAlchemy models, Alembic migrations
-  infra/
-    cloudflare/      Worker / Container deploy settings
-    discord/         Discord alert integration
-  docs/
-    api/             API specs
-    database/        ER diagram and table docs
-    designs/         design decisions
-    reference/       setup guides, external services, operation notes
+├── frontend/                     # Flutter app
+│   ├── lib/
+│   │   ├── screens/              # 画面
+│   │   ├── services/             # API client / repositories
+│   │   ├── models/               # UI/API models
+│   │   ├── theme/                # 色・余白・Typography
+│   │   └── widgets/              # 共通UI
+│   ├── android/                  # Android project
+│   ├── ios/                      # iOS project
+│   └── web/                      # Web assets
+│
+├── backend/                      # FastAPI app
+│   ├── app/
+│   │   ├── api/routes/           # API endpoints
+│   │   ├── schemas/              # request / response
+│   │   ├── models/               # SQLAlchemy models
+│   │   ├── services/             # business logic
+│   │   ├── repositories/         # DB access
+│   │   └── db/                   # DB session / base
+│   ├── alembic/                  # migrations
+│   ├── scripts/                  # location import scripts
+│   └── tests/                    # backend tests
+│
+├── infra/                        # deploy / operations
+│   ├── cloudflare/
+│   │   └── app-worker/           # Worker entrypoint
+│   └── discord/                  # Discord webhook integration
+│
+├── docs/                         # specs / design / reference
+│   ├── api/                      # API specs
+│   ├── database/                 # ER diagram and table docs
+│   ├── designs/                  # design decisions
+│   ├── reference/                # setup guides / external services
+│   └── assets/                   # README / docs images
+│
+├── scripts/                      # repo-level helper scripts
+└── README.md
 ```
 
 ## Documentation
