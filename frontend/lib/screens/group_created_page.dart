@@ -21,6 +21,20 @@ class GroupCreatedPage extends StatefulWidget {
 
 class _GroupCreatedPageState extends State<GroupCreatedPage> {
   String? _copyFeedback;
+  bool _isNavigating = false;
+
+  Future<void> _openWaitingRoom() async {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(
+      context,
+    ).pushNamed(WaitingRoomPage.routeName, arguments: widget.draft);
+    if (mounted) {
+      setState(() => _isNavigating = false);
+    }
+  }
 
   void _showCopySuccess(String message) {
     setState(() => _copyFeedback = message);
@@ -136,12 +150,9 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                     width: double.infinity,
                     child: PrimaryActionButton(
                       label: '待機画面へ進む',
-                      onPressed: () {
-                        Navigator.of(context).pushNamed(
-                          WaitingRoomPage.routeName,
-                          arguments: widget.draft,
-                        );
-                      },
+                      onPressed: _isNavigating ? null : _openWaitingRoom,
+                      isLoading: _isNavigating,
+                      loadingLabel: '移動中',
                     ),
                   ),
                 ),

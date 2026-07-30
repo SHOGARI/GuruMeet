@@ -322,9 +322,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       if (!mounted) {
         return;
       }
-      final prefecture =
-          locationName.prefecture ??
-          _normalizePrefecture(area);
+      final prefecture = locationName.prefecture ?? _normalizePrefecture(area);
       _prefectureController.clear();
       _areaController.clear();
       setState(() {
@@ -602,6 +600,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                     child: PrimaryActionButton(
                       label: 'グループを作成',
                       onPressed: _isSubmitting ? null : _createGroup,
+                      isLoading: _isSubmitting,
+                      loadingLabel: '作成中',
                     ),
                   ),
                 ],
@@ -857,10 +857,10 @@ class _SearchablePrefectureFieldState
     }
 
     if (_focusNode.hasFocus && widget.selectedPrefecture != null) {
-      _isApplyingSelection = true;
-      widget.controller.clear();
-      _isApplyingSelection = false;
-      widget.onSelected(null);
+      widget.controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: widget.controller.text.length,
+      );
       setState(() {
         _filteredPrefectures = _prefectureOptions;
       });
@@ -1038,6 +1038,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     }
     if (oldWidget.selectedPrefecture != widget.selectedPrefecture) {
       _debounceTimer?.cancel();
+      _requestSerial++;
       final selectedPrefecture = widget.selectedPrefecture;
       setState(() {
         _allSuggestions = const [];
@@ -1066,12 +1067,11 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     }
 
     _debounceTimer?.cancel();
-    if (widget.selectedLocation != null || widget.hasCurrentLocation) {
-      _isApplyingSelection = true;
-      widget.controller.clear();
-      _isApplyingSelection = false;
-      widget.onSelected(null);
-      widget.onCurrentLocationCleared();
+    if (widget.selectedLocation != null) {
+      widget.controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: widget.controller.text.length,
+      );
     }
     if (widget.selectedPrefecture == null) {
       return;
@@ -1092,7 +1092,11 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
       return;
     }
 
-    if (widget.selectedLocation != null || widget.hasCurrentLocation) {
+    final selectedLocation = widget.selectedLocation;
+    final didChangeSelectedLocation =
+        selectedLocation != null &&
+        widget.controller.text != selectedLocation.displayName;
+    if (didChangeSelectedLocation || widget.hasCurrentLocation) {
       widget.onSelected(null);
       widget.onCurrentLocationCleared();
     }

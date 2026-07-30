@@ -31,6 +31,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   bool _isNavigating = false;
   bool _isLoadingMembers = true;
   bool _isVotingStarted = false;
+  bool _isLoadingMembersRequest = false;
   String? _memberLoadError;
   DateTime? _lastMemberLoadedAt;
 
@@ -55,9 +56,10 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   }
 
   Future<void> _loadMembers({bool showLoading = true}) async {
-    if (!mounted) {
+    if (!mounted || _isLoadingMembersRequest) {
       return;
     }
+    _isLoadingMembersRequest = true;
     if (showLoading) {
       setState(() {
         _isLoadingMembers = true;
@@ -90,6 +92,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         _isLoadingMembers = false;
         _memberLoadError = votingErrorMessage(error);
       });
+    } finally {
+      _isLoadingMembersRequest = false;
     }
   }
 
@@ -204,6 +208,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                     const SizedBox(height: AppSpacing.regular),
                     PrimaryActionButton(
                       label: '投票を開始',
+                      isLoading: _isNavigating,
+                      loadingLabel: '開始中',
                       onPressed: _isNavigating || !_isRoomReady
                           ? null
                           : _startSwipe,
@@ -213,6 +219,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                     const SizedBox(height: AppSpacing.regular),
                     PrimaryActionButton(
                       label: '投票画面へ進む',
+                      isLoading: _isNavigating,
+                      loadingLabel: '移動中',
                       onPressed: _isNavigating || !_isVotingStarted
                           ? null
                           : _enterSwipe,
