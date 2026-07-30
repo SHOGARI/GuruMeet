@@ -6,6 +6,7 @@ import { sendDiscordAlert } from "../../../discord/discordWebhook";
 const INSTANCE_COUNT = 1;
 const CLEANUP_CRON_UTC_HOUR = 12;
 const CLEANUP_CRON_UTC_MINUTE = 0;
+const ERROR_ALERT_SUPPRESSION_SECONDS = 300;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
   HOTPEPPER_API_KEY?: string;
@@ -63,31 +64,39 @@ interface Env {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/edge/health") {
-      return edgeHealth(env);
-    }
+    try {
+      if (url.pathname === "/edge/health") {
+        return edgeHealth(request, env);
+      }
 
-    if (url.pathname.startsWith("/files/")) {
-      return handleFileRequest(request, env);
-    }
+      if (url.pathname.startsWith("/files/")) {
+        return handleFileRequest(request, env);
+      }
 
-    if (isProduction(env) && isApiPath(url.pathname)) {
-      return new Response("Not found", { status: 404 });
-    }
+      if (isProduction(env) && isApiPath(url.pathname)) {
+        return new Response("Not found", { status: 404 });
+      }
 
-    if (isApiRootPath(url.pathname)) {
-      return new Response("Not found", { status: 404 });
-    }
+      if (isApiRootPath(url.pathname)) {
+        return new Response("Not found", { status: 404 });
+      }
 
-    if (url.pathname.startsWith("/api/")) {
-      const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
-      return container.fetch(stripApiPrefix(request));
-    }
+      if (url.pathname.startsWith("/api/")) {
+        return handleApiRequest(request, env, ctx);
+      }
 
-    return env.ASSETS.fetch(request);
+      return env.ASSETS.fetch(request);
+    } catch (error) {
+      logWorkerError("worker_request_failed", request, env, error);
+      return new Response("Internal server error", { status: 500 });
+    }
   },
 
   async scheduled(event: ScheduledEvent, env: Env): Promise<void> {
@@ -112,7 +121,7 @@ export default {
     );
 
     if (!env.INTERNAL_TASK_SECRET) {
-      console.error("INTERNAL_TASK_SECRET is not configured.");
+      logWorkerError("cleanup_internal_task_secret_missing", undefined, env);
       await notifyCleanupFailed(env, {
         status: "missing_internal_task_secret",
         message: "INTERNAL_TASK_SECRET is not configured.",
@@ -136,7 +145,9 @@ export default {
       console.error(
         JSON.stringify({
           event: "cleanup_expired_temporary_groups_failed",
+          environment: env.ENVIRONMENT ?? "unknown",
           status: response.status,
+          response_body: truncate(message, 1000),
         }),
       );
       await notifyCleanupFailed(env, {
@@ -188,7 +199,66 @@ function requiredRuntimeEnv(value: string | undefined, name: string): string {
   return value;
 }
 
-async function edgeHealth(env: Env): Promise<Response> {
+async function handleApiRequest(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  try {
+    const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
+    const response = await container.fetch(stripApiPrefix(request));
+    if (response.status >= 500) {
+      const responseForLog = response.clone();
+      ctx.waitUntil(reportContainerErrorResponse(request, env, responseForLog));
+    }
+    return response;
+  } catch (error) {
+    logWorkerError("container_proxy_failed", request, env, error);
+    ctx.waitUntil(
+      notifyProductionContainerError({
+        env,
+        request,
+        event: "container_proxy_failed",
+        status: 502,
+        message: errorMessage(error),
+      }),
+    );
+    return new Response("Bad gateway", { status: 502 });
+  }
+}
+
+async function reportContainerErrorResponse(
+  request: Request,
+  env: Env,
+  response: Response,
+): Promise<void> {
+  let responseBody: string | undefined;
+  try {
+    responseBody = truncate(await response.text(), 1000);
+  } catch (error) {
+    responseBody = `failed to read response body: ${errorMessage(error)}`;
+  }
+
+  console.error(
+    JSON.stringify({
+      event: "container_error_response",
+      environment: env.ENVIRONMENT ?? "unknown",
+      method: request.method,
+      path: new URL(request.url).pathname,
+      status: response.status,
+      response_body: responseBody,
+    }),
+  );
+  await notifyProductionContainerError({
+    env,
+    request,
+    event: "container_error_response",
+    status: response.status,
+    message: "Container returned a 5xx response. Check Cloudflare Logs.",
+  });
+}
+
+async function edgeHealth(request: Request, env: Env): Promise<Response> {
   const checks = {
     environment: env.ENVIRONMENT ?? "unknown",
     worker: "healthy",
@@ -198,8 +268,9 @@ async function edgeHealth(env: Env): Promise<Response> {
   try {
     await env.ASSETS_BUCKET.head("__healthcheck__");
     checks.r2 = "healthy";
-  } catch {
+  } catch (error) {
     checks.r2 = "unhealthy";
+    logWorkerError("edge_health_r2_check_failed", request, env, error);
   }
 
   return json(checks);
@@ -268,6 +339,114 @@ function formatJst(value: Date): string {
     second: "2-digit",
     hour12: false,
   });
+}
+
+async function notifyProductionContainerError({
+  env,
+  request,
+  event,
+  status,
+  message,
+}: {
+  env: Env;
+  request: Request;
+  event: string;
+  status: number;
+  message: string;
+}): Promise<void> {
+  if (!isProduction(env) || !env.DISCORD_ALERT_WEBHOOK_URL?.trim()) {
+    return;
+  }
+
+  const path = new URL(request.url).pathname;
+  if (!(await shouldSendErrorAlert(event, path, status))) {
+    return;
+  }
+
+  try {
+    await sendDiscordAlert({
+      webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
+      title: "production_container_error",
+      level: "critical",
+      fields: {
+        environment: env.ENVIRONMENT ?? "unknown",
+        event,
+        method: request.method,
+        path,
+        status,
+        message: truncate(message, 300),
+        occurred_at: formatJst(new Date()),
+      },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "production_container_error_alert_failed",
+        environment: env.ENVIRONMENT ?? "unknown",
+        original_event: event,
+        path,
+        status,
+        error: errorMessage(error),
+      }),
+    );
+  }
+}
+
+async function shouldSendErrorAlert(
+  event: string,
+  path: string,
+  status: number,
+): Promise<boolean> {
+  const cacheKey = new Request(
+    `https://gurumeet-alert-suppression.local/${encodeURIComponent(
+      event,
+    )}/${encodeURIComponent(path)}/${status}`,
+  );
+  try {
+    if (await caches.default.match(cacheKey)) {
+      return false;
+    }
+    await caches.default.put(
+      cacheKey,
+      new Response("1", {
+        headers: {
+          "Cache-Control": `max-age=${ERROR_ALERT_SUPPRESSION_SECONDS}`,
+        },
+      }),
+    );
+    return true;
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "production_container_error_alert_suppression_failed",
+        error: errorMessage(error),
+      }),
+    );
+    return true;
+  }
+}
+
+function logWorkerError(
+  event: string,
+  request: Request | undefined,
+  env: Env,
+  error?: unknown,
+): void {
+  const url = request ? new URL(request.url) : undefined;
+  console.error(
+    JSON.stringify({
+      event,
+      environment: env.ENVIRONMENT ?? "unknown",
+      method: request?.method,
+      path: url?.pathname,
+      error: error === undefined ? undefined : errorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    }),
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
