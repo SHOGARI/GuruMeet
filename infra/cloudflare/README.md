@@ -656,7 +656,7 @@ Branch
 
 ## 自動削除とバックアップ
 
-一時グループの期限切れデータは Cloudflare Cron Trigger から毎時1回、
+一時グループの期限切れデータは Cloudflare Cron Trigger から毎日13:00 JSTに、
 Backend Container の `/internal/cleanup-expired-temporary-groups` を呼んで削除する。
 
 Neon PostgreSQL のバックアップ / PITR は Neon Dashboard 側で有効化・確認する。
