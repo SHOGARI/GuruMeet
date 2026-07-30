@@ -175,7 +175,7 @@ List<LocationSuggestion> filterLocationSuggestions(
 }) {
   final normalizedQuery = normalizeLocationText(query);
   if (normalizedQuery.isEmpty) {
-    return const [];
+    return sortLocationSuggestions(suggestions);
   }
 
   final ranked = suggestions
@@ -194,6 +194,30 @@ List<LocationSuggestion> filterLocationSuggestions(
   });
 
   return ranked.take(limit).toList(growable: false);
+}
+
+List<LocationSuggestion> sortLocationSuggestions(
+  List<LocationSuggestion> suggestions,
+) {
+  final sorted = suggestions.toList(growable: false);
+  sorted.sort((left, right) {
+    final leftKey = _sortKey(left);
+    final rightKey = _sortKey(right);
+    final keyOrder = leftKey.compareTo(rightKey);
+    if (keyOrder != 0) {
+      return keyOrder;
+    }
+    return left.displayName.compareTo(right.displayName);
+  });
+  return sorted;
+}
+
+String _sortKey(LocationSuggestion suggestion) {
+  final kana = suggestion.kana;
+  if (kana != null && kana.trim().isNotEmpty) {
+    return normalizeLocationText(kana);
+  }
+  return normalizeLocationText(suggestion.name);
 }
 
 bool _matches(LocationSuggestion suggestion, String normalizedQuery) {

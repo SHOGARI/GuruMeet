@@ -154,6 +154,15 @@ docker compose exec -T db psql -U gurumeet -d gurumeet \
 curl 'http://localhost:8000/locations?prefecture=東京都'
 ```
 
+ここで `[]` が返る場合、フロント側で駅・市区町村候補は出ない。
+地点マスタがDBに入っていないか、指定した都道府県名がDBの `prefecture_name` と一致していない。
+
+件数だけ確認する場合:
+
+```sh
+curl -s 'http://localhost:8000/locations?prefecture=東京都' | python -m json.tool | head
+```
+
 ## 注意
 
 - CSV本体はコミットしない。

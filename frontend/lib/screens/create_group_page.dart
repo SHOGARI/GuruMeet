@@ -63,6 +63,56 @@ const _prefectureOptions = <String>[
   '沖縄県',
 ];
 
+const _prefectureKanaByName = <String, String>{
+  '北海道': 'ほっかいどう',
+  '青森県': 'あおもりけん',
+  '岩手県': 'いわてけん',
+  '宮城県': 'みやぎけん',
+  '秋田県': 'あきたけん',
+  '山形県': 'やまがたけん',
+  '福島県': 'ふくしまけん',
+  '茨城県': 'いばらきけん',
+  '栃木県': 'とちぎけん',
+  '群馬県': 'ぐんまけん',
+  '埼玉県': 'さいたまけん',
+  '千葉県': 'ちばけん',
+  '東京都': 'とうきょうと',
+  '神奈川県': 'かながわけん',
+  '新潟県': 'にいがたけん',
+  '富山県': 'とやまけん',
+  '石川県': 'いしかわけん',
+  '福井県': 'ふくいけん',
+  '山梨県': 'やまなしけん',
+  '長野県': 'ながのけん',
+  '岐阜県': 'ぎふけん',
+  '静岡県': 'しずおかけん',
+  '愛知県': 'あいちけん',
+  '三重県': 'みえけん',
+  '滋賀県': 'しがけん',
+  '京都府': 'きょうとふ',
+  '大阪府': 'おおさかふ',
+  '兵庫県': 'ひょうごけん',
+  '奈良県': 'ならけん',
+  '和歌山県': 'わかやまけん',
+  '鳥取県': 'とっとりけん',
+  '島根県': 'しまねけん',
+  '岡山県': 'おかやまけん',
+  '広島県': 'ひろしまけん',
+  '山口県': 'やまぐちけん',
+  '徳島県': 'とくしまけん',
+  '香川県': 'かがわけん',
+  '愛媛県': 'えひめけん',
+  '高知県': 'こうちけん',
+  '福岡県': 'ふくおかけん',
+  '佐賀県': 'さがけん',
+  '長崎県': 'ながさきけん',
+  '熊本県': 'くまもとけん',
+  '大分県': 'おおいたけん',
+  '宮崎県': 'みやざきけん',
+  '鹿児島県': 'かごしまけん',
+  '沖縄県': 'おきなわけん',
+};
+
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
 
@@ -581,6 +631,18 @@ class _SearchablePrefectureFieldState
     if (!mounted) {
       return;
     }
+
+    if (_focusNode.hasFocus && widget.selectedPrefecture != null) {
+      _isApplyingSelection = true;
+      widget.controller.clear();
+      _isApplyingSelection = false;
+      widget.onSelected(null);
+      setState(() {
+        _filteredPrefectures = _prefectureOptions;
+      });
+      return;
+    }
+
     setState(() {
       _filteredPrefectures = _filterPrefectures(widget.controller.text);
     });
@@ -609,10 +671,19 @@ class _SearchablePrefectureFieldState
     }
     return _prefectureOptions
         .where(
-          (prefecture) =>
-              normalizeLocationText(prefecture).contains(normalizedQuery),
+          (prefecture) => _prefectureSearchTargets(
+            prefecture,
+          ).any((target) => target.contains(normalizedQuery)),
         )
         .toList(growable: false);
+  }
+
+  Iterable<String> _prefectureSearchTargets(String prefecture) sync* {
+    yield normalizeLocationText(prefecture);
+    final kana = _prefectureKanaByName[prefecture];
+    if (kana != null) {
+      yield normalizeLocationText(kana);
+    }
   }
 
   void _selectPrefecture(String prefecture) {
@@ -720,6 +791,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
   void initState() {
     super.initState();
     widget.controller.addListener(_handleTextChanged);
+    widget.focusNode.addListener(_handleFocusChanged);
     final selectedPrefecture = widget.selectedPrefecture;
     if (selectedPrefecture != null) {
       _loadPrefectureCandidates(selectedPrefecture);
@@ -729,6 +801,10 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
   @override
   void didUpdateWidget(covariant _LocationSearchField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_handleFocusChanged);
+      widget.focusNode.addListener(_handleFocusChanged);
+    }
     if (oldWidget.selectedPrefecture != widget.selectedPrefecture) {
       _debounceTimer?.cancel();
       final selectedPrefecture = widget.selectedPrefecture;
@@ -748,8 +824,35 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
   @override
   void dispose() {
     widget.controller.removeListener(_handleTextChanged);
+    widget.focusNode.removeListener(_handleFocusChanged);
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleFocusChanged() {
+    if (!mounted || !widget.focusNode.hasFocus) {
+      return;
+    }
+    if (widget.selectedPrefecture == null) {
+      return;
+    }
+
+    _debounceTimer?.cancel();
+    if (widget.selectedLocation != null) {
+      _isApplyingSelection = true;
+      widget.controller.clear();
+      _isApplyingSelection = false;
+      widget.onSelected(null);
+    }
+
+    setState(() {
+      _suggestions = filterLocationSuggestions(
+        _allSuggestions,
+        widget.controller.text,
+      );
+      _hasFiltered = true;
+      _errorMessage = null;
+    });
   }
 
   void _handleTextChanged() {
@@ -766,8 +869,11 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
 
     if (query.isEmpty || widget.selectedPrefecture == null) {
       setState(() {
-        _suggestions = const [];
-        _hasFiltered = false;
+        _suggestions = widget.selectedPrefecture == null
+            ? const []
+            : filterLocationSuggestions(_allSuggestions, query);
+        _hasFiltered =
+            widget.selectedPrefecture != null && widget.focusNode.hasFocus;
         _errorMessage = null;
       });
       return;
@@ -799,7 +905,9 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
           widget.controller.text,
         );
         _isLoading = false;
-        _hasFiltered = widget.controller.text.trim().isNotEmpty;
+        _hasFiltered =
+            widget.controller.text.trim().isNotEmpty ||
+            (widget.focusNode.hasFocus && widget.selectedPrefecture != null);
       });
     } on LocationSearchException catch (error) {
       if (!mounted || requestSerial != _requestSerial) {
@@ -929,10 +1037,13 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     }
 
     if (_suggestions.isEmpty) {
+      final message = _allSuggestions.isEmpty
+          ? 'この都道府県の地点候補が未投入です'
+          : '候補が見つかりません';
       return Padding(
         padding: const EdgeInsets.all(AppSpacing.medium),
         child: Text(
-          '候補が見つかりません',
+          message,
           style: theme.textTheme.bodySmall?.copyWith(
             color: colors.onSurfaceVariant,
           ),
