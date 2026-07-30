@@ -169,6 +169,14 @@ class TemporaryGroupRepository:
         )
         return list(self.db.scalars(statement))
 
+    def list_expired(self, now: datetime) -> list[TemporaryGroup]:
+        statement = (
+            select(TemporaryGroup)
+            .where(TemporaryGroup.expires_at <= now)
+            .order_by(TemporaryGroup.created_at)
+        )
+        return list(self.db.scalars(statement))
+
     def delete_expired(self, now: datetime) -> int:
         statement = delete(TemporaryGroup).where(TemporaryGroup.expires_at <= now)
         result = self.db.execute(statement)

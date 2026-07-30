@@ -84,6 +84,7 @@ jobs:
           HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
           PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
           INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
           CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
           GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
         run: |
@@ -94,6 +95,7 @@ jobs:
             HOTPEPPER_API_KEY
             PARTICIPANT_TOKEN_HASH_SECRET
             INTERNAL_TASK_SECRET
+            DISCORD_ALERT_WEBHOOK_URL
           )
 
           required_vars=(
@@ -160,6 +162,7 @@ jobs:
           HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
           PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
           INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
           CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
           GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
           CLOUDFLARE_SECRETS_FILE: ${{ runner.temp }}/cloudflare-worker-secrets.json
@@ -172,6 +175,7 @@ jobs:
             "HOTPEPPER_API_KEY",
             "PARTICIPANT_TOKEN_HASH_SECRET",
             "INTERNAL_TASK_SECRET",
+            "DISCORD_ALERT_WEBHOOK_URL",
           ];
 
           const secrets = Object.fromEntries(

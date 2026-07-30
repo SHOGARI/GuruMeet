@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="INTERNAL_TASK_SECRET",
     )
+    discord_alert_webhook_url: SecretStr | None = Field(
+        default=None,
+        validation_alias="DISCORD_ALERT_WEBHOOK_URL",
+    )
     request_body_max_bytes: int = 1024 * 1024
 
     @field_validator("cors_allow_origins", mode="before")
