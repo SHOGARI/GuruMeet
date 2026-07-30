@@ -2,9 +2,9 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from app.models.location import LocationSearchEntry
+from app.models.location import Location
 from app.repositories.location_repository import LocationRepository
-from app.schemas.location import LocationSearchResult
+from app.schemas.location import LocationCandidate, LocationSearchResult
 from app.services.location_normalizer import normalize_location_query
 
 MIN_LOCATION_QUERY_LENGTH = 1
@@ -42,7 +42,7 @@ class LocationService:
     def validate_location_id(self, location_id: str) -> None:
         self.get_location(location_id)
 
-    def get_location(self, location_id: str) -> LocationSearchEntry:
+    def get_location(self, location_id: str) -> Location:
         if not self.is_valid_location_id_format(location_id):
             raise InvalidLocationIdError("invalid location id")
 
@@ -50,6 +50,14 @@ class LocationService:
         if entry is None:
             raise InvalidLocationIdError("unknown location id")
         return entry
+
+    def list_by_prefecture(self, prefecture: str) -> list[LocationCandidate]:
+        normalized_prefecture = prefecture.strip()
+        if not normalized_prefecture:
+            return []
+
+        entries = self.repository.list_by_prefecture(normalized_prefecture)
+        return [self._to_candidate(entry) for entry in entries]
 
     @staticmethod
     def is_valid_location_id_format(location_id: str) -> bool:
@@ -62,7 +70,7 @@ class LocationService:
         )
 
     @staticmethod
-    def _to_result(entry: LocationSearchEntry) -> LocationSearchResult:
+    def _to_result(entry: Location) -> LocationSearchResult:
         return LocationSearchResult(
             id=entry.id,
             type=cast("municipality | station", entry.location_type),
@@ -72,5 +80,18 @@ class LocationService:
             municipality=entry.municipality_name,
             latitude=entry.latitude,
             longitude=entry.longitude,
+            lineName=entry.line_name,
+        )
+
+    @staticmethod
+    def _to_candidate(entry: Location) -> LocationCandidate:
+        return LocationCandidate(
+            id=entry.id,
+            type=cast("municipality | station", entry.location_type),
+            name=entry.name,
+            kana=entry.name_kana,
+            displayName=entry.display_name,
+            prefecture=entry.prefecture_name,
+            municipality=entry.municipality_name,
             lineName=entry.line_name,
         )

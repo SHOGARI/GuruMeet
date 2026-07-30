@@ -17,7 +17,7 @@ from app.models.temporary_group import (
 from app.models.location import (
     LOCATION_TYPE_MUNICIPALITY,
     LOCATION_TYPE_STATION,
-    LocationSearchEntry,
+    Location,
 )
 from app.repositories.location_repository import LocationRepository
 from app.models.temporary_group_participant import TemporaryGroupParticipant
@@ -196,14 +196,14 @@ class TemporaryGroupService:
     def _resolve_location_entry(
         self,
         location_id: str | None,
-    ) -> LocationSearchEntry | None:
+    ) -> Location | None:
         return self._resolve_location_entry_from_db(location_id, self.db)
 
     @staticmethod
     def _resolve_location_entry_from_db(
         location_id: str | None,
         db: Session | None,
-    ) -> LocationSearchEntry | None:
+    ) -> Location | None:
         normalized_location_id = location_id.strip() if location_id else ""
         if not normalized_location_id:
             return None
@@ -226,7 +226,7 @@ class TemporaryGroupService:
 
     @staticmethod
     def _radius_meters_for_location(
-        location_entry: LocationSearchEntry | None,
+        location_entry: Location | None,
     ) -> int | None:
         if location_entry is None:
             return None
@@ -237,7 +237,7 @@ class TemporaryGroupService:
     @staticmethod
     def _group_location_value(
         data: TemporaryGroupCreate,
-        location_entry: LocationSearchEntry | None,
+        location_entry: Location | None,
     ) -> str | None:
         location = data.location.strip() if data.location else ""
         if location:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.location import LocationSearchResult
+from app.schemas.location import LocationCandidate, LocationSearchResult
 from app.services.location_service import (
     DEFAULT_LOCATION_SEARCH_LIMIT,
     MAX_LOCATION_SEARCH_LIMIT,
@@ -13,6 +13,23 @@ from app.services.location_service import (
 )
 
 router = APIRouter(tags=["locations"])
+
+
+@router.get(
+    "",
+    response_model=list[LocationCandidate],
+    summary="都道府県内の地点候補を取得する",
+    description=(
+        "都道府県を指定して、市区町村と駅の候補一覧を取得します。"
+        "フロントエンドはこの結果を保持し、入力中の候補絞り込みをローカルで行います。"
+    ),
+)
+def list_locations(
+    prefecture: Annotated[str, Query(min_length=1, max_length=32)],
+    db: Session = Depends(get_db),
+) -> list[LocationCandidate]:
+    service = LocationService(db)
+    return service.list_by_prefecture(prefecture)
 
 
 @router.get(

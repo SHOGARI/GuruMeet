@@ -111,7 +111,3 @@ class StationLocation(Base):
     line_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     location: Mapped[Location] = relationship(back_populates="station")
-
-
-# Temporary alias while service/repository code is migrated in step 2.
-LocationSearchEntry = Location

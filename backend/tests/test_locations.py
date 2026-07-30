@@ -3,7 +3,13 @@ import unittest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.location import LocationSearchEntry
+from app.models.location import (
+    LOCATION_SOURCE_EKIDATA,
+    LOCATION_SOURCE_GEOLONIA,
+    Location,
+    MunicipalityLocation,
+    StationLocation,
+)
 from scripts.import_locations import normalize_geolonia_row
 from app.services.location_normalizer import normalize_location_query
 from app.services.location_service import (
@@ -16,7 +22,9 @@ from app.services.location_service import (
 class LocationSearchServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         engine = create_engine("sqlite+pysqlite:///:memory:")
-        LocationSearchEntry.__table__.create(engine)
+        Location.__table__.create(engine)
+        MunicipalityLocation.__table__.create(engine)
+        StationLocation.__table__.create(engine)
         self.SessionLocal = sessionmaker(
             bind=engine,
             class_=Session,
@@ -63,6 +71,16 @@ class LocationSearchServiceTests(unittest.TestCase):
         results = LocationService(self.db).search("高田", prefecture="神奈川県")
 
         self.assertEqual([result.id for result in results], ["station:9950101"])
+
+    def test_list_by_prefecture_returns_candidates_without_coordinates(self) -> None:
+        results = LocationService(self.db).list_by_prefecture("東京都")
+
+        self.assertEqual(
+            [result.id for result in results],
+            ["station:1132005", "municipality:13121"],
+        )
+        self.assertEqual(results[0].kana, "キタセンジュ")
+        self.assertEqual(results[0].lineName, "JR常磐線 / 東京メトロ千代田線")
 
     def test_blank_query_does_not_return_all_rows(self) -> None:
         self.assertEqual(LocationService(self.db).search("   "), [])
@@ -111,10 +129,9 @@ class LocationSearchServiceTests(unittest.TestCase):
     def _seed(self) -> None:
         self.db.add_all(
             [
-                LocationSearchEntry(
+                Location(
                     id="station:1132005",
                     location_type="station",
-                    source_id=1,
                     name="北千住駅",
                     name_kana="キタセンジュ",
                     normalized_name=normalize_location_query("北千住駅"),
@@ -124,14 +141,16 @@ class LocationSearchServiceTests(unittest.TestCase):
                     municipality_name="足立区",
                     latitude=35.7494,
                     longitude=139.805,
-                    station_code="1132005",
-                    station_group_code="1132005",
-                    line_name="JR常磐線 / 東京メトロ千代田線",
+                    source=LOCATION_SOURCE_EKIDATA,
+                    station=StationLocation(
+                        station_code="1132005",
+                        station_group_code="1132005",
+                        line_name="JR常磐線 / 東京メトロ千代田線",
+                    ),
                 ),
-                LocationSearchEntry(
+                Location(
                     id="municipality:13121",
                     location_type="municipality",
-                    source_id=2,
                     name="足立区",
                     name_kana="アダチク",
                     normalized_name=normalize_location_query("足立区"),
@@ -141,12 +160,12 @@ class LocationSearchServiceTests(unittest.TestCase):
                     municipality_name="足立区",
                     latitude=35.7757,
                     longitude=139.8048,
-                    municipality_code="13121",
+                    source=LOCATION_SOURCE_GEOLONIA,
+                    municipality=MunicipalityLocation(municipality_code="13121"),
                 ),
-                LocationSearchEntry(
+                Location(
                     id="station:9950101",
                     location_type="station",
-                    source_id=3,
                     name="高田駅",
                     name_kana="タカタ",
                     normalized_name=normalize_location_query("高田駅"),
@@ -156,14 +175,16 @@ class LocationSearchServiceTests(unittest.TestCase):
                     municipality_name="横浜市港北区",
                     latitude=35.549,
                     longitude=139.62,
-                    station_code="9950101",
-                    station_group_code="9950101",
-                    line_name="横浜市営地下鉄グリーンライン",
+                    source=LOCATION_SOURCE_EKIDATA,
+                    station=StationLocation(
+                        station_code="9950101",
+                        station_group_code="9950101",
+                        line_name="横浜市営地下鉄グリーンライン",
+                    ),
                 ),
-                LocationSearchEntry(
+                Location(
                     id="station:1163401",
                     location_type="station",
-                    source_id=4,
                     name="高田駅",
                     name_kana="タカダ",
                     normalized_name=normalize_location_query("高田駅"),
@@ -173,9 +194,12 @@ class LocationSearchServiceTests(unittest.TestCase):
                     municipality_name="大和高田市",
                     latitude=34.516,
                     longitude=135.742,
-                    station_code="1163401",
-                    station_group_code="1163401",
-                    line_name="JR和歌山線",
+                    source=LOCATION_SOURCE_EKIDATA,
+                    station=StationLocation(
+                        station_code="1163401",
+                        station_group_code="1163401",
+                        line_name="JR和歌山線",
+                    ),
                 ),
             ]
         )
