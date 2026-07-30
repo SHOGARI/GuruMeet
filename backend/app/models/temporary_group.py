@@ -45,6 +45,12 @@ class TemporaryGroup(Base):
         nullable=True,
         index=True,
     )
+    custom_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("custom_locations.id"),
+        nullable=True,
+        index=True,
+    )
     budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     restaurant: Mapped[dict[str, Any] | None] = mapped_column(

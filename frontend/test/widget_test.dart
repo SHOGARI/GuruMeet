@@ -37,6 +37,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('グループ作成'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '現在地から入力'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(find.widgetWithText(FilledButton, 'グループを作成'))
@@ -367,6 +368,8 @@ void main() {
     expect(find.text('どのあたり？'), findsOneWidget);
     expect(find.text('予算はどれくらい？'), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(2));
+    await tester.ensureVisible(find.widgetWithText(OutlinedButton, '現在地から入力'));
+    await tester.pumpAndSettle();
     expect(find.widgetWithText(OutlinedButton, '現在地から入力'), findsOneWidget);
     expect(find.text('4人'), findsOneWidget);
 

@@ -42,6 +42,7 @@ POST /temporary-groups
 - participant_count
 - location
 - location_id
+- custom_location
 - budget_min
 - budget_max
 - 招待コード
@@ -52,11 +53,14 @@ POST /temporary-groups
 ② リクエストの
 
 - location_id
+- custom_location
 - budget_min
 - budget_max
 
-を利用。`location_id` からbackendが地点マスタを引き、緯度経度と設定値の半径をHot Pepper APIへ渡す。
-自由入力locationによるkeyword検索は使わない。
+を利用。`location_id` がある場合はbackendが地点マスタを引き、
+`custom_location` がある場合は `custom_locations` に保存した緯度経度を使う。
+解決した緯度経度と設定値の半径をHot Pepper APIへ渡す。
+自由入力地点によるkeyword検索は使わない。
 
 ↓
 
@@ -116,7 +120,7 @@ restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラ�
 
 | value | meaning |
 | --- | --- |
-| `not_requested` | location_idが空で検索していない。 |
+| `not_requested` | `location_id` / `custom_location` が空で検索していない。 |
 | `succeeded` | Hot Pepperから1件以上の店舗候補を取得した。 |
 | `no_results` | Hot Pepper検索は成功したが候補が0件だった。 |
 
@@ -147,11 +151,14 @@ restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラ�
 使用する項目
 
 - location_id
+- custom_location
 - budget_min
 - budget_max
 
 `location_id` からbackendが地点マスタを引き、緯度経度と設定値の半径をHot Pepper APIへ渡す。
-自由入力locationによるkeyword検索は使わない。
+現在地から入力された場合は、`custom_location` を `custom_locations` に保存し、
+その緯度経度と設定値の半径をHot Pepper APIへ渡す。
+自由入力地点によるkeyword検索は使わない。
 
 participant_countはHotPepper APIの検索条件には利用せず、取得後の候補ranking scoreに利用する。
 

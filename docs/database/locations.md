@@ -4,10 +4,12 @@
 
 市区町村と駅は、共通項目を `locations` に持ち、種別ごとの固有項目を
 `municipality_locations` / `station_locations` に分ける。
+現在地や地図ピンのようなユーザー固有の座標は `locations` には登録せず、
+[`custom_locations`](./custom-locations.md) に保存する。
 
 ## locations
 
-地点の親テーブル。フロントエンドや一時グループは、この `id` を保持する。
+地点の親テーブル。駅・市区町村の候補を選択した一時グループは、この `id` を保持する。
 
 | column | description |
 | --- | --- |
@@ -47,8 +49,12 @@
 
 ## temporary_groups への保存
 
-地点候補を選択してグループを作成した場合、`temporary_groups` には
-`location_id` だけを保存する。
+地点候補を選択してグループを作成した場合、`temporary_groups.location_id` に
+`locations.id` を保存する。
 
 Hot Pepper検索に必要な地点種別、緯度経度、市区町村コード、駅コードは、
 backendが `location_id` から `locations` と子テーブルを引いて解決する。
+
+現在地から入力した場合は `locations` を使わない。
+backendはリクエストの緯度経度を `custom_locations` に保存し、
+`temporary_groups.custom_location_id` から検索原点を解決する。

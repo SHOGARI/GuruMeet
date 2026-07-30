@@ -26,6 +26,10 @@ backend/app/db/database_url.py
 | --- | --- | --- |
 | `users` | user情報 | 既存setup-db-etc由来 |
 | `anonymous_users` | 登録なし参加者の匿名識別子 | [Anonymous Users Table](./anonymous-users.md) |
+| `locations` | 駅・市区町村の地点マスタ | [Location Tables](./locations.md) |
+| `municipality_locations` | 市区町村地点の固有情報 | [Location Tables](./locations.md) |
+| `station_locations` | 駅地点の固有情報 | [Location Tables](./locations.md) |
+| `custom_locations` | 現在地・地図ピンなど地点マスタ外の検索原点 | [Custom Locations Table](./custom-locations.md) |
 | `temporary_groups` | 一時グループのUUID、5桁コード、有効期限、希望条件 | [Temporary Groups Table](./temporary-groups.md) |
 | `temporary_group_participants` | 一時グループと匿名参加者の参加関係 | [Temporary Group Participants Table](./temporary-group-participants.md) |
 

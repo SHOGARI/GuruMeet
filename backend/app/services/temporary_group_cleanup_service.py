@@ -17,6 +17,7 @@ class TemporaryGroupCleanupService:
         now = datetime.now(UTC)
         summary = self._build_cleanup_summary(now)
         deleted_count = self.repository.delete_expired(now)
+        self.repository.delete_expired_custom_locations(now)
         self.db.commit()
         notify_cleanup_completed(
             deleted_expired_temporary_groups=deleted_count,

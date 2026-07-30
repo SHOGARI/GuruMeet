@@ -28,6 +28,35 @@ class VotingStatus {
   bool get isComplete => members.isNotEmpty && completedCount == members.length;
 }
 
+class CustomLocationInput {
+  const CustomLocationInput({
+    required this.displayName,
+    required this.latitude,
+    required this.longitude,
+    this.prefectureName,
+    this.accuracyMeters,
+    this.source = 'current_location',
+  });
+
+  final String displayName;
+  final String? prefectureName;
+  final double latitude;
+  final double longitude;
+  final double? accuracyMeters;
+  final String source;
+
+  Map<String, Object?> toJson() {
+    return {
+      'displayName': displayName,
+      'prefectureName': prefectureName,
+      'latitude': latitude,
+      'longitude': longitude,
+      'accuracyMeters': accuracyMeters,
+      'source': source,
+    };
+  }
+}
+
 class RoomInvitePreview {
   const RoomInvitePreview({
     required this.roomId,
@@ -54,6 +83,7 @@ abstract class RoomRepository {
     required String area,
     required BudgetOption budget,
     String? locationId,
+    CustomLocationInput? customLocation,
   });
 
   Future<GroupCreationDraft> joinRoom({required String code});
@@ -105,6 +135,7 @@ class MockRoomRepository implements RoomRepository {
     required String area,
     required BudgetOption budget,
     String? locationId,
+    CustomLocationInput? customLocation,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 180));
     return GroupCreationDraft.createMock(
@@ -264,6 +295,7 @@ class ApiRoomRepository implements RoomRepository {
     required String area,
     required BudgetOption budget,
     String? locationId,
+    CustomLocationInput? customLocation,
   }) async {
     final participantToken = await _participantToken();
     final body = <String, Object?>{
@@ -275,6 +307,9 @@ class ApiRoomRepository implements RoomRepository {
     };
     if (locationId != null) {
       body['location_id'] = locationId;
+    }
+    if (customLocation != null) {
+      body['custom_location'] = customLocation.toJson();
     }
 
     final json = await _apiClient.postJson('/temporary-groups', body: body);

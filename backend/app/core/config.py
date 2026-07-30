@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         default=3000,
         validation_alias="GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS",
     )
+    hotpepper_custom_location_search_radius_meters: int = Field(
+        default=1000,
+        validation_alias="GURUMEET_HOTPEPPER_CUSTOM_LOCATION_SEARCH_RADIUS_METERS",
+    )
     cors_allow_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
@@ -87,6 +91,7 @@ class Settings(BaseSettings):
     @field_validator(
         "hotpepper_station_search_radius_meters",
         "hotpepper_municipality_search_radius_meters",
+        "hotpepper_custom_location_search_radius_meters",
     )
     @classmethod
     def require_positive_radius_meters(cls, value: int) -> int:

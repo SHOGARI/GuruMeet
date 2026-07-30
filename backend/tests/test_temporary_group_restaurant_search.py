@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 
 from app.db.session import get_db
 from app.main import app
-from app.schemas.temporary_group import TemporaryGroupCreate, TemporaryGroupResponse
+from app.schemas.temporary_group import (
+    CustomLocationCreate,
+    TemporaryGroupCreate,
+    TemporaryGroupResponse,
+)
 from app.services.hotpepper_service import (
     BUDGET_SCORE_FALLBACK,
     CAPACITY_SCORE_FALLBACK,
@@ -55,6 +59,36 @@ class TemporaryGroupCreateSchemaTests(unittest.TestCase):
         )
 
         self.assertEqual(request.location_id, "station:1132005")
+
+    def test_custom_location_accepts_camel_case_payload(self) -> None:
+        request = TemporaryGroupCreate.model_validate(
+            {
+                "location": "東京都新宿区付近",
+                "customLocation": {
+                    "displayName": "東京都新宿区付近",
+                    "prefectureName": "東京都",
+                    "latitude": 35.6895,
+                    "longitude": 139.6917,
+                    "accuracyMeters": 24.5,
+                },
+            }
+        )
+
+        self.assertIsNotNone(request.custom_location)
+        assert request.custom_location is not None
+        self.assertEqual(request.custom_location.display_name, "東京都新宿区付近")
+        self.assertEqual(request.custom_location.prefecture_name, "東京都")
+
+    def test_location_id_and_custom_location_are_exclusive(self) -> None:
+        with self.assertRaises(ValueError):
+            TemporaryGroupCreate(
+                location_id="station:1132005",
+                custom_location=CustomLocationCreate(
+                    display_name="東京都新宿区付近",
+                    latitude=35.6895,
+                    longitude=139.6917,
+                ),
+            )
 
 
 class HotPepperBudgetSelectionTests(unittest.TestCase):
@@ -588,6 +622,56 @@ class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTes
         )
         self.assertIs(group.restaurant, search_result)
         self.assertEqual(group.location_id, "station:1132005")
+
+    async def test_create_group_uses_custom_location_for_coordinate_search(
+        self,
+    ) -> None:
+        search_result = {
+            "restaurants": [{"id": "CURRENT"}],
+            "searched_at": "2026-07-25T00:00:00+00:00",
+        }
+
+        with patch(
+            "app.services.temporary_group_service."
+            "search_restaurants_for_group_by_coordinates",
+            new=AsyncMock(return_value=search_result),
+        ) as search_mock:
+            data = TemporaryGroupCreate(
+                location="東京都新宿区付近",
+                custom_location=CustomLocationCreate(
+                    display_name="東京都新宿区付近",
+                    prefecture_name="東京都",
+                    latitude=35.6895,
+                    longitude=139.6917,
+                    accuracy_meters=24.5,
+                ),
+                budget_min=2000,
+                budget_max=3000,
+                participant_count=4,
+            )
+            restaurant, restaurant_search_status = (
+                await TemporaryGroupService.search_restaurants_for_create(
+                    data,
+                    self.db,
+                )
+            )
+            group = self.service.create_group(
+                data,
+                restaurant=restaurant,
+                restaurant_search_status=restaurant_search_status,
+            )
+
+        search_mock.assert_awaited_once_with(
+            latitude=35.6895,
+            longitude=139.6917,
+            radius_meters=1000,
+            budget_min=2000,
+            budget_max=3000,
+            participant_count=4,
+        )
+        self.assertIs(group.restaurant, search_result)
+        self.assertIsNone(group.location_id)
+        self.assertIsNotNone(group.custom_location_id)
 
     async def test_coordinate_search_radius_uses_settings(self) -> None:
         location_entry = SimpleNamespace(

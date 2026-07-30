@@ -1,13 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.anonymous_user import AnonymousUser
+from app.models.custom_location import CustomLocation
 from app.models.temporary_group import (
     RESTAURANT_SEARCH_STATUS_NOT_REQUESTED,
     RESTAURANT_SEARCH_STATUS_NO_RESULTS,
@@ -90,7 +91,12 @@ class TemporaryGroupService:
             minutes=settings.temporary_group_ttl_minutes
         )
         location_entry = self._resolve_location_entry(data.location_id)
-        location_value = self._group_location_value(data, location_entry)
+        custom_location_entry = self._build_custom_location(data, expires_at)
+        location_value = self._group_location_value(
+            data,
+            location_entry,
+            custom_location_entry,
+        )
 
         for _ in range(settings.temporary_group_code_max_attempts):
             group = TemporaryGroup(
@@ -99,6 +105,9 @@ class TemporaryGroupService:
                 participant_count=data.participant_count,
                 location=location_value,
                 location_id=location_entry.id if location_entry else None,
+                custom_location_id=(
+                    custom_location_entry.id if custom_location_entry else None
+                ),
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
                 restaurant=restaurant,
@@ -106,6 +115,9 @@ class TemporaryGroupService:
                 expires_at=expires_at,
             )
             try:
+                if custom_location_entry is not None:
+                    self.db.add(custom_location_entry)
+                    self.db.flush()
                 self.repository.add(group)
                 if data.participant_token is not None:
                     self._join_group(group, data.participant_token)
@@ -151,6 +163,33 @@ class TemporaryGroupService:
                         latitude=location_entry.latitude,
                         longitude=location_entry.longitude,
                         radius_meters=radius_meters,
+                        budget_min=data.budget_min,
+                        budget_max=data.budget_max,
+                        participant_count=data.participant_count,
+                    )
+            except HotPepperBudgetRangeError as exc:
+                raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
+
+            restaurants = restaurant.get("restaurants")
+            if isinstance(restaurants, list) and restaurants:
+                return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
+
+            return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
+
+        custom_location = data.custom_location
+        if custom_location is not None:
+            try:
+                if settings.enable_mock_restaurants:
+                    restaurant = TemporaryGroupService._mock_restaurant_search_result(
+                        custom_location.display_name
+                    )
+                else:
+                    restaurant = await search_restaurants_for_group_by_coordinates(
+                        latitude=custom_location.latitude,
+                        longitude=custom_location.longitude,
+                        radius_meters=(
+                            settings.hotpepper_custom_location_search_radius_meters
+                        ),
                         budget_min=data.budget_min,
                         budget_max=data.budget_max,
                         participant_count=data.participant_count,
@@ -211,13 +250,39 @@ class TemporaryGroupService:
         return settings.hotpepper_municipality_search_radius_meters
 
     @staticmethod
+    def _build_custom_location(
+        data: TemporaryGroupCreate,
+        expires_at: datetime,
+    ) -> CustomLocation | None:
+        custom_location = data.custom_location
+        if custom_location is None:
+            return None
+        return CustomLocation(
+            id=uuid4(),
+            display_name=custom_location.display_name.strip(),
+            prefecture_name=(
+                custom_location.prefecture_name.strip()
+                if custom_location.prefecture_name
+                else None
+            ),
+            latitude=custom_location.latitude,
+            longitude=custom_location.longitude,
+            accuracy_meters=custom_location.accuracy_meters,
+            source=custom_location.source,
+            expires_at=expires_at,
+        )
+
+    @staticmethod
     def _group_location_value(
         data: TemporaryGroupCreate,
         location_entry: Location | None,
+        custom_location_entry: CustomLocation | None = None,
     ) -> str | None:
         location = data.location.strip() if data.location else ""
         if location:
             return location
+        if custom_location_entry is not None:
+            return custom_location_entry.display_name
         if location_entry is not None:
             return location_entry.display_name
         return None

@@ -126,11 +126,14 @@ https://www.ekidata.jp/
 
 - 駅候補: 駅の緯度経度を中心に半径検索
 - 市区町村候補: 市区町村の代表座標を中心に半径検索
+- 現在地入力: 端末で取得した緯度経度を中心に半径検索
 - 予算: Hot Pepperのbudget codeへ変換
 - 人数: 店舗候補のranking scoreに利用
 
 一時グループ作成では、自由入力地点による `keyword` 検索は使わない。
 frontendで選択された `location_id` からbackendが地点マスタを引き、緯度経度と設定値の半径をHot Pepper APIへ渡す。
+現在地入力の場合は、frontendが送信した `custom_location` の緯度経度を
+backendが `custom_locations` に保存し、その座標をHot Pepper APIへ渡す。
 
 ### 取得元
 

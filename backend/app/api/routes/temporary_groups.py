@@ -406,6 +406,7 @@ def _to_detail(
         participant_count=group.participant_count,
         location=group.location,
         location_id=group.location_id,
+        custom_location_id=group.custom_location_id,
         budget_min=group.budget_min,
         budget_max=group.budget_max,
         restaurant_search_status=group.restaurant_search_status,

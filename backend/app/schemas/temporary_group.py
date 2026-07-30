@@ -1,8 +1,45 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import AliasChoices, BaseModel, Field
+from pydantic import field_validator
+from pydantic import model_validator
+
+
+class CustomLocationCreate(BaseModel):
+    display_name: str = Field(
+        validation_alias=AliasChoices("display_name", "displayName"),
+        min_length=1,
+        max_length=255,
+        examples=["東京都新宿区付近"],
+    )
+    prefecture_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("prefecture_name", "prefectureName"),
+        max_length=32,
+        examples=["東京都"],
+    )
+    latitude: float = Field(ge=-90, le=90, examples=[35.6895])
+    longitude: float = Field(ge=-180, le=180, examples=[139.6917])
+    accuracy_meters: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("accuracy_meters", "accuracyMeters"),
+        ge=0,
+        examples=[24.5],
+    )
+    source: Literal["current_location", "map_pin"] = Field(
+        default="current_location",
+        examples=["current_location"],
+    )
+
+    @field_validator("display_name")
+    @classmethod
+    def require_display_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("display_name must not be empty")
+        return stripped
 
 
 class TemporaryGroupCreate(BaseModel):
@@ -40,6 +77,11 @@ class TemporaryGroupCreate(BaseModel):
         description="地点検索APIで選択した地点ID。",
         examples=["station:1132005"],
     )
+    custom_location: CustomLocationCreate | None = Field(
+        default=None,
+        validation_alias=AliasChoices("custom_location", "customLocation"),
+        description="現在地や地図ピンなど、地点マスタ外の検索原点。",
+    )
     budget_min: int | None = Field(
         default=None,
         ge=0,
@@ -52,6 +94,12 @@ class TemporaryGroupCreate(BaseModel):
         description="予算上限。",
         examples=[3000],
     )
+
+    @model_validator(mode="after")
+    def validate_location_origin(self) -> "TemporaryGroupCreate":
+        if self.location_id is not None and self.custom_location is not None:
+            raise ValueError("location_id and custom_location cannot be used together")
+        return self
 
 
 class TemporaryGroupJoinRequest(BaseModel):
@@ -96,6 +144,10 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     participant_count: int | None = Field(default=None, description="参加人数。")
     location: str | None = Field(default=None, description="希望場所。")
     location_id: str | None = Field(default=None, description="選択された地点ID。")
+    custom_location_id: UUID | None = Field(
+        default=None,
+        description="現在地や地図ピンから作成した検索原点ID。",
+    )
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
     restaurant_search_status: str = Field(

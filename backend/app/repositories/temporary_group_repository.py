@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.anonymous_user import AnonymousUser
+from app.models.custom_location import CustomLocation
 from app.models.temporary_group import TemporaryGroup
 from app.models.temporary_group_participant import TemporaryGroupParticipant
 from app.models.temporary_group_vote import TemporaryGroupVote
@@ -179,5 +180,13 @@ class TemporaryGroupRepository:
 
     def delete_expired(self, now: datetime) -> int:
         statement = delete(TemporaryGroup).where(TemporaryGroup.expires_at <= now)
+        result = self.db.execute(statement)
+        return result.rowcount or 0
+
+    def delete_expired_custom_locations(self, now: datetime) -> int:
+        statement = delete(CustomLocation).where(
+            CustomLocation.expires_at.is_not(None),
+            CustomLocation.expires_at <= now,
+        )
         result = self.db.execute(statement)
         return result.rowcount or 0
