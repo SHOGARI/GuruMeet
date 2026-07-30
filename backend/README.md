@@ -193,7 +193,8 @@ POST /temporary-groups
 
 ## 地点マスタの投入
 
-地点検索は市区町村と駅を別テーブルに保持し、検索用の `location_search` を再構築する。
+地点検索は `locations` を親テーブルにし、市区町村固有情報を
+`municipality_locations`、駅固有情報を `station_locations` に保持する。
 
 使用データ:
 
@@ -219,7 +220,7 @@ python scripts/import_locations.py \
 
 `--station-lines-csv` は任意。指定すると候補表示に路線名を含める。
 
-import は再実行可能。同じコードの行は更新し、検索用テーブルは毎回再構築する。不正行はログに出して処理を継続する。
+import は再実行可能。同じ地点IDの行は更新する。不正行はログに出して処理を継続する。
 
 一時グループ作成時に地点候補を選択した場合、frontend は表示名ではなく
 `location_id` を送る。
@@ -231,10 +232,10 @@ import は再実行可能。同じコードの行は更新し、検索用テー�
 }
 ```
 
-backend は `location_search` から元データを解決し、`temporary_groups` に地点ID、
-種別、市区町村コード、駅コード、代表座標、検索半径を保存する。駅は代表座標から
-1,000m の半径検索、市区町村は市区町村コードを保持したうえで、Hot Pepper が区域検索に
-対応しないため代表座標から 3,000m の半径検索へ fallback する。
+backend は `locations` から元データを解決し、`temporary_groups` には
+`location_id` だけを保存する。駅は駅座標から半径検索し、市区町村は市区町村コードを
+子テーブルに保持したうえで、Hot Pepper が区域検索に対応しない場合は代表座標からの
+半径検索へ fallback する。
 
 停止:
 

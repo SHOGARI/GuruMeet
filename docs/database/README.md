@@ -12,9 +12,9 @@ DB定義の入口。
 
 現段階のSQLAlchemyモデルとAlembic migrationに基づくER図。
 
-`location_search` は市区町村・駅を統合した検索用テーブルで、`source_id` は
-`municipalities.id` または `stations.id` を指す論理参照です。DB上の物理FKではありません。
-`temporary_groups.location_id` も `location_search.id` を保持する論理参照です。
+地点は `locations` を親テーブルにし、市区町村と駅の固有情報を
+`municipality_locations` / `station_locations` に分ける。
+`temporary_groups` は選択された `locations.id` だけを保持する。
 
 ```mermaid
 erDiagram
@@ -38,16 +38,7 @@ erDiagram
         string creator_id
         int participant_count
         string location
-        string location_id
-        string location_type
-        string location_prefecture_name
-        string location_municipality_name
-        string location_municipality_code
-        string location_station_code
-        string location_station_group_code
-        float location_latitude
-        float location_longitude
-        int location_radius_meters
+        string location_id FK
         int budget_min
         int budget_max
         json restaurant
@@ -75,33 +66,9 @@ erDiagram
         datetime updated_at
     }
 
-    municipalities {
-        int id PK
-        string municipality_code UK
-        string prefecture_name
-        string municipality_name
-        string name_kana
-        float latitude
-        float longitude
-    }
-
-    stations {
-        int id PK
-        string station_code UK
-        string station_group_code
-        string station_name
-        string name_kana
-        string prefecture_name
-        string municipality_name
-        float latitude
-        float longitude
-        string line_name
-    }
-
-    location_search {
+    locations {
         string id PK
         string location_type
-        int source_id
         string name
         string name_kana
         string normalized_name
@@ -111,8 +78,18 @@ erDiagram
         string municipality_name
         float latitude
         float longitude
-        string municipality_code
-        string station_code
+        string source
+        datetime source_updated_at
+    }
+
+    municipality_locations {
+        string location_id PK, FK
+        string municipality_code UK
+    }
+
+    station_locations {
+        string location_id PK, FK
+        string station_code UK
         string station_group_code
         string line_name
     }
@@ -121,7 +98,7 @@ erDiagram
     anonymous_users ||--o{ temporary_group_participants : joins
     temporary_groups ||--o{ temporary_group_votes : has
     anonymous_users ||--o{ temporary_group_votes : casts
-    municipalities ||..o{ location_search : indexed_as
-    stations ||..o{ location_search : indexed_as
-    location_search ||..o{ temporary_groups : selected_by
+    locations ||--o| municipality_locations : has
+    locations ||--o| station_locations : has
+    locations ||--o{ temporary_groups : selected_by
 ```

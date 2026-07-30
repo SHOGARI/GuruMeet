@@ -96,20 +96,6 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     participant_count: int | None = Field(default=None, description="参加人数。")
     location: str | None = Field(default=None, description="希望場所。")
     location_id: str | None = Field(default=None, description="選択された地点ID。")
-    location_type: str | None = Field(
-        default=None,
-        description="地点種別。municipality または station。",
-    )
-    location_radius_meters: int | None = Field(
-        default=None,
-        description="座標検索に利用する半径。市区町村は区域検索不可時のfallback。",
-    )
-    location_municipality_code: str | None = Field(
-        default=None,
-        description="市区町村検索に利用する市区町村コード。",
-    )
-    location_latitude: float | None = Field(default=None, description="地点緯度。")
-    location_longitude: float | None = Field(default=None, description="地点経度。")
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
     restaurant_search_status: str = Field(

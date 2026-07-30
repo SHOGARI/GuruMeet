@@ -95,7 +95,6 @@ class TemporaryGroupService:
         )
         location_entry = self._resolve_location_entry(data.location_id)
         location_value = self._group_location_value(data, location_entry)
-        radius_meters = self._radius_meters_for_location(location_entry)
 
         for _ in range(settings.temporary_group_code_max_attempts):
             group = TemporaryGroup(
@@ -104,25 +103,6 @@ class TemporaryGroupService:
                 participant_count=data.participant_count,
                 location=location_value,
                 location_id=location_entry.id if location_entry else None,
-                location_type=location_entry.location_type if location_entry else None,
-                location_prefecture_name=(
-                    location_entry.prefecture_name if location_entry else None
-                ),
-                location_municipality_name=(
-                    location_entry.municipality_name if location_entry else None
-                ),
-                location_municipality_code=(
-                    location_entry.municipality_code if location_entry else None
-                ),
-                location_station_code=(
-                    location_entry.station_code if location_entry else None
-                ),
-                location_station_group_code=(
-                    location_entry.station_group_code if location_entry else None
-                ),
-                location_latitude=location_entry.latitude if location_entry else None,
-                location_longitude=location_entry.longitude if location_entry else None,
-                location_radius_meters=radius_meters,
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
                 restaurant=restaurant,

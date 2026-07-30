@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -18,11 +18,13 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.db.database import SessionLocal  # noqa: E402
 from app.models.location import (  # noqa: E402
+    LOCATION_SOURCE_EKIDATA,
+    LOCATION_SOURCE_GEOLONIA,
     LOCATION_TYPE_MUNICIPALITY,
     LOCATION_TYPE_STATION,
-    LocationSearchEntry,
-    Municipality,
-    Station,
+    Location,
+    MunicipalityLocation,
+    StationLocation,
 )
 from app.services.location_normalizer import normalize_location_query  # noqa: E402
 
@@ -120,12 +122,10 @@ def main() -> int:
     with SessionLocal() as db:
         municipality_count = upsert_municipalities(db, municipality_rows)
         station_count = upsert_stations(db, station_rows)
-        index_count = rebuild_location_search(db)
         db.commit()
 
     LOGGER.info("municipalities upserted: %s", municipality_count)
     LOGGER.info("stations upserted: %s", station_count)
-    LOGGER.info("location_search rebuilt: %s", index_count)
     return 0
 
 
@@ -282,20 +282,40 @@ def upsert_municipalities(
 ) -> int:
     count = 0
     for row in rows:
+        location_id = f"municipality:{row.municipality_code}"
+        location = db.scalar(select(Location).where(Location.id == location_id))
+        if location is None:
+            location = Location(
+                id=location_id,
+                location_type=LOCATION_TYPE_MUNICIPALITY,
+                source=LOCATION_SOURCE_GEOLONIA,
+            )
+            db.add(location)
+
+        location.name = row.municipality_name
+        location.name_kana = row.name_kana
+        location.normalized_name = normalize_location_query(row.municipality_name)
+        location.normalized_kana = normalize_location_query(row.name_kana or "")
+        location.display_name = f"{row.prefecture_name}{row.municipality_name}"
+        location.prefecture_name = row.prefecture_name
+        location.municipality_name = row.municipality_name
+        location.latitude = row.latitude
+        location.longitude = row.longitude
+        location.source = LOCATION_SOURCE_GEOLONIA
+
         municipality = db.scalar(
-            select(Municipality).where(
-                Municipality.municipality_code == row.municipality_code
+            select(MunicipalityLocation).where(
+                MunicipalityLocation.location_id == location_id
             )
         )
         if municipality is None:
-            municipality = Municipality(municipality_code=row.municipality_code)
+            municipality = MunicipalityLocation(
+                location_id=location_id,
+                municipality_code=row.municipality_code,
+            )
             db.add(municipality)
-
-        municipality.prefecture_name = row.prefecture_name
-        municipality.municipality_name = row.municipality_name
-        municipality.name_kana = row.name_kana
-        municipality.latitude = row.latitude
-        municipality.longitude = row.longitude
+        else:
+            municipality.municipality_code = row.municipality_code
         count += 1
 
     db.flush()
@@ -305,81 +325,41 @@ def upsert_municipalities(
 def upsert_stations(db: Session, rows: list[StationImportRow]) -> int:
     count = 0
     for row in rows:
+        location_id = f"station:{row.station_group_code or row.station_code}"
+        location = db.scalar(select(Location).where(Location.id == location_id))
+        if location is None:
+            location = Location(
+                id=location_id,
+                location_type=LOCATION_TYPE_STATION,
+                source=LOCATION_SOURCE_EKIDATA,
+            )
+            db.add(location)
+
+        municipality = row.municipality_name or ""
+        location.name = row.station_name
+        location.name_kana = row.name_kana
+        location.normalized_name = normalize_location_query(row.station_name)
+        location.normalized_kana = normalize_location_query(row.name_kana or "")
+        location.display_name = f"{row.station_name}・{row.prefecture_name}{municipality}"
+        location.prefecture_name = row.prefecture_name
+        location.municipality_name = row.municipality_name
+        location.latitude = row.latitude
+        location.longitude = row.longitude
+        location.source = LOCATION_SOURCE_EKIDATA
+
         station = db.scalar(
-            select(Station).where(Station.station_code == row.station_code)
+            select(StationLocation).where(StationLocation.location_id == location_id)
         )
         if station is None:
-            station = Station(station_code=row.station_code)
+            station = StationLocation(
+                location_id=location_id,
+                station_code=row.station_code,
+            )
             db.add(station)
 
         station.station_group_code = row.station_group_code
-        station.station_name = row.station_name
-        station.name_kana = row.name_kana
-        station.prefecture_name = row.prefecture_name
-        station.municipality_name = row.municipality_name
-        station.latitude = row.latitude
-        station.longitude = row.longitude
+        station.station_code = row.station_code
         station.line_name = row.line_name
-        count += 1
-
-    db.flush()
-    return count
-
-
-def rebuild_location_search(db: Session) -> int:
-    db.execute(delete(LocationSearchEntry))
-    count = 0
-    location_ids: set[str] = set()
-
-    for municipality in db.scalars(select(Municipality)):
-        db.add(
-            LocationSearchEntry(
-                id=f"municipality:{municipality.municipality_code}",
-                location_type=LOCATION_TYPE_MUNICIPALITY,
-                source_id=municipality.id,
-                name=municipality.municipality_name,
-                name_kana=municipality.name_kana,
-                normalized_name=normalize_location_query(municipality.municipality_name),
-                normalized_kana=normalize_location_query(municipality.name_kana or ""),
-                display_name=(
-                    f"{municipality.prefecture_name}{municipality.municipality_name}"
-                ),
-                prefecture_name=municipality.prefecture_name,
-                municipality_name=municipality.municipality_name,
-                latitude=municipality.latitude,
-                longitude=municipality.longitude,
-                municipality_code=municipality.municipality_code,
-            )
-        )
-        count += 1
-
-    for station in db.scalars(select(Station)):
-        location_id = f"station:{station.station_group_code or station.station_code}"
-        if location_id in location_ids:
-            LOGGER.warning("duplicate station location id skipped: %s", location_id)
-            continue
-        location_ids.add(location_id)
-        municipality = station.municipality_name or ""
-        display_area = f"{station.prefecture_name}{municipality}"
-        db.add(
-            LocationSearchEntry(
-                id=location_id,
-                location_type=LOCATION_TYPE_STATION,
-                source_id=station.id,
-                name=station.station_name,
-                name_kana=station.name_kana,
-                normalized_name=normalize_location_query(station.station_name),
-                normalized_kana=normalize_location_query(station.name_kana or ""),
-                display_name=f"{station.station_name}・{display_area}",
-                prefecture_name=station.prefecture_name,
-                municipality_name=station.municipality_name,
-                latitude=station.latitude,
-                longitude=station.longitude,
-                station_code=station.station_code,
-                station_group_code=station.station_group_code,
-                line_name=station.line_name,
-            )
-        )
         count += 1
 
     db.flush()
