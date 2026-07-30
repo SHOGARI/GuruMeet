@@ -3,11 +3,23 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-21",
   "workers_dev": true,
+  "observability": {
+    "enabled": true,
+  },
   "assets": {
     "directory": "../../../frontend/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/files/*", "/edge/*"],
+    "run_worker_first": ["/api", "/api/*", "/files/*", "/edge/*"],
+  },
+  "secrets": {
+    "required": [
+      "DATABASE_URL",
+      "HOTPEPPER_API_KEY",
+      "PARTICIPANT_TOKEN_HASH_SECRET",
+      "INTERNAL_TASK_SECRET",
+      "DISCORD_ALERT_WEBHOOK_URL",
+    ],
   },
   "containers": [
     {
@@ -31,12 +43,28 @@
       "new_sqlite_classes": ["BackendContainer"],
     },
   ],
+  "triggers": {
+    "crons": ["0 12 * * *"],
+  },
   "env": {
     "staging": {
       "name": "gurumeet-staging",
       "workers_dev": true,
+      "observability": {
+        "enabled": true,
+      },
       "vars": {
         "ENVIRONMENT": "staging",
+        "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+          "INTERNAL_TASK_SECRET",
+          "DISCORD_ALERT_WEBHOOK_URL",
+        ],
       },
       "containers": [
         {
@@ -60,6 +88,9 @@
           "new_sqlite_classes": ["BackendContainer"],
         },
       ],
+      "triggers": {
+        "crons": ["0 12 * * *"],
+      },
       "routes": [
         {
           "pattern": "stg.gurumeet.net",
@@ -76,8 +107,21 @@
     "production": {
       "name": "gurumeet",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+      },
       "vars": {
         "ENVIRONMENT": "production",
+        "GURUMEET_API_ROOT_PATH": "/api",
+      },
+      "secrets": {
+        "required": [
+          "DATABASE_URL",
+          "HOTPEPPER_API_KEY",
+          "PARTICIPANT_TOKEN_HASH_SECRET",
+          "INTERNAL_TASK_SECRET",
+          "DISCORD_ALERT_WEBHOOK_URL",
+        ],
       },
       "containers": [
         {
@@ -101,6 +145,9 @@
           "new_sqlite_classes": ["BackendContainer"],
         },
       ],
+      "triggers": {
+        "crons": ["0 12 * * *"],
+      },
       "routes": [
         {
           "pattern": "gurumeet.net",

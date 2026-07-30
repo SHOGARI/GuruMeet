@@ -61,6 +61,7 @@ openssl rand -hex 32
 ```
 
 この値はfrontendへ渡さず、Gitにもコミットしない。途中で変更すると既存の匿名ユーザーと照合できなくなる。
+staging / production では GitHub Environment secrets の `PARTICIPANT_TOKEN_HASH_SECRET` に登録する。
 
 ## テーブル
 

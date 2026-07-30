@@ -14,6 +14,13 @@ TEMPORARY_GROUP_RESTAURANT_CANDIDATE_LIMIT = 30
 TEMPORARY_GROUP_RESTAURANT_RESULT_LIMIT = 10
 MAX_HOTPEPPER_BUDGET_CODES = 2
 MAX_RESTAURANTS_PER_GENRE = 2
+HOTPEPPER_SEARCH_RANGE_BY_RADIUS_METERS = (
+    (300, 1),
+    (500, 2),
+    (1000, 3),
+    (2000, 4),
+    (3000, 5),
+)
 
 UNKNOWN_GENRE_NAME = "不明"
 
@@ -172,6 +179,48 @@ async def search_restaurants_for_group(
     )
     selected_shops = _select_restaurants_with_genre_limit(ranked_restaurants)
     return _build_temporary_group_restaurant_result(selected_shops)
+
+
+async def search_restaurants_for_group_by_coordinates(
+    latitude: float,
+    longitude: float,
+    radius_meters: int,
+    budget_min: int | None,
+    budget_max: int | None,
+    participant_count: int | None = None,
+) -> dict[str, object]:
+    budget_codes = select_hotpepper_budget_codes(budget_min, budget_max)
+    if (budget_min is not None or budget_max is not None) and not budget_codes:
+        raise HotPepperBudgetRangeError(
+            "requested budget is outside Hot Pepper supported ranges"
+        )
+
+    params: dict[str, object] = {
+        "lat": latitude,
+        "lng": longitude,
+        "range": hotpepper_range_for_radius(radius_meters),
+        "count": TEMPORARY_GROUP_RESTAURANT_CANDIDATE_LIMIT,
+    }
+    if budget_codes:
+        params["budget"] = ",".join(budget_codes)
+
+    shops = await _fetch_hotpepper_shops(params)
+    unique_shops = _deduplicate_shops(shops)
+    ranked_restaurants = _rank_restaurants(
+        unique_shops,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        participant_count=participant_count,
+    )
+    selected_shops = _select_restaurants_with_genre_limit(ranked_restaurants)
+    return _build_temporary_group_restaurant_result(selected_shops)
+
+
+def hotpepper_range_for_radius(radius_meters: int) -> int:
+    for maximum_radius, search_range in HOTPEPPER_SEARCH_RANGE_BY_RADIUS_METERS:
+        if radius_meters <= maximum_radius:
+            return search_range
+    return HOTPEPPER_SEARCH_RANGE_BY_RADIUS_METERS[-1][1]
 
 
 def select_hotpepper_budget_codes(

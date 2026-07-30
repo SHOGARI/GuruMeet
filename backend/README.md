@@ -65,11 +65,13 @@ cp .env.example .env
 ```
 
 通常は `.env.example` の値のままで起動できる。
+Hot Pepper API を実際に叩く場合だけ、`HOTPEPPER_API_KEY` を入れて
+`GURUMEET_ENABLE_MOCK_RESTAURANTS=false` にする。
 
 実際の `backend/.env` に書く値:
 
 ```env
-HOTPEPPER_API_KEY=取得したAPIキー
+HOTPEPPER_API_KEY=
 API_PORT=8000
 
 POSTGRES_DB=gurumeet
@@ -81,7 +83,12 @@ TEMPORARY_GROUP_TTL_MINUTES=1440
 TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
+CORS_ALLOW_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8080","http://127.0.0.1:8080"]'
+GURUMEET_ENABLE_MOCK_RESTAURANTS=true
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS=1000
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS=3000
 PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
+INTERNAL_TASK_SECRET=<openssl rand -hex 32 の出力>
 ```
 
 `PARTICIPANT_TOKEN_HASH_SECRET` は匿名参加者トークンをDB保存用にhash化するときのサーバー秘密値。
@@ -92,7 +99,7 @@ PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 openssl rand -hex 32
 ```
 
-この値はfrontendには渡さない。本番ではGitに置かず、Cloudflare Wrangler secretなどのsecret storeに登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
+この値はfrontendには渡さない。本番ではGitに置かず、GitHub Environment secrets に登録する。途中で変更すると既存の `anonymous_users.participant_token_hash` と照合できなくなる。
 
 通常の local Docker Compose 開発では `DATABASE_URL` は `backend/.env` に書かなくてよい。
 
@@ -111,12 +118,59 @@ FastAPI を Compose の外で直接起動する場合だけ、必要に応じて
 DATABASE_URL=postgresql://gurumeet:change_me@localhost:5432/gurumeet
 ```
 
-staging / production の `DATABASE_URL` は `backend/.env` には書かない。Cloudflare Wrangler secret に登録する。
+staging / production の `DATABASE_URL` は `backend/.env` には書かない。
+GitHub Environment secrets に登録し、deploy workflow から Cloudflare Worker / Container に渡す。
 
-```sh
-cd ../infra/cloudflare/app-worker
-npx wrangler secret put DATABASE_URL --env staging
-npx wrangler secret put DATABASE_URL --env production
+Environment secrets:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+Environment vars:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS
+```
+
+Environment secrets の登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Environment secrets
+  -> Add secret
+```
+
+Environment vars の登録場所:
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+追加値の作り方:
+
+```text
+INTERNAL_TASK_SECRET: openssl rand -hex 32 の出力
+CORS_ALLOW_ORIGINS:
+  staging: https://stg.gurumeet.net
+  production: https://gurumeet.net
+GURUMEET_ENABLE_MOCK_RESTAURANTS: false
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS: 1000
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS: 3000
 ```
 
 `backend` フォルダ内で実行:
@@ -142,6 +196,83 @@ API:
 ```text
 POST /temporary-groups
 ```
+
+## 地点マスタの投入
+
+地点検索は `locations` を親テーブルにし、市区町村固有情報を
+`municipality_locations`、駅固有情報を `station_locations` に保持する。
+
+使用データ:
+
+- 市区町村: Geolonia 住所データ `latest.csv`
+  - https://geolonia.github.io/japanese-addresses/
+  - データ本体は CC BY 4.0
+  - 町丁目・小字レベルのデータを市区町村コード単位に集約して使う
+- 駅: 駅データ.jp の駅CSV
+  - https://www.ekidata.jp/
+  - 利用条件は駅データ.jpの案内に従う
+  - ひらがな・カタカナ検索を本番品質で行う場合は、駅名称カナを含む有料データを前提にする
+
+外部データ/APIのライセンス、料金、運用上の扱いは [External Data And Services](../docs/external-services.md) にまとめる。
+
+CSVはGitに含めず、ローカルまたは運用環境で取得して指定する。
+初回投入の具体的な手順は [Location Data Import](../docs/location-data-import.md) にまとめる。
+
+```sh
+python scripts/import_locations.py \
+  --municipalities-csv /path/to/geolonia/latest.csv \
+  --stations-csv /path/to/ekidata/station.csv \
+  --station-lines-csv /path/to/ekidata/line.csv
+```
+
+`--station-lines-csv` は任意。指定すると候補表示に路線名を含める。
+
+ローカルDocker ComposeのDBへ投入する場合は、駅CSVを
+`backend/data/location-master/ekidata/` に置いたうえで以下を実行する。
+
+```sh
+docker compose up -d --build
+./scripts/import_location_master_local.sh
+```
+
+`docker compose up -d --build ./scripts/import_location_master_local.sh` ではない。
+Compose起動とimport script実行は別コマンドで行う。
+
+apiコンテナに入って確認する場合:
+
+```sh
+docker compose exec api sh
+```
+
+コンテナ内ではbackendディレクトリが `/app` にマウントされている。
+手動importする場合は以下の形になる。
+
+```sh
+python scripts/import_locations.py \
+  --municipalities-csv /app/data/location-master/geolonia/latest.csv \
+  --stations-csv /app/data/location-master/ekidata/station.csv \
+  --station-lines-csv /app/data/location-master/ekidata/line.csv
+```
+
+import は再実行可能。同じ地点IDの行は更新する。不正行はログに出して処理を継続する。
+不正行が多い場合は最初の一部だけ表示し、最後に理由別件数を出す。
+`committing location master import` より前に中断した場合、DBには反映されない。
+
+一時グループ作成時に地点候補を選択した場合、frontend は表示名ではなく
+`location_id` を送る。
+
+```json
+{
+  "location": "北千住駅・東京都足立区",
+  "location_id": "station:1132005"
+}
+```
+
+backend は `locations` から元データを解決し、`temporary_groups` には
+`location_id` だけを保存する。駅は駅座標から半径検索し、市区町村は代表座標から
+半径検索する。検索半径は `GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS` と
+`GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS` で設定する。
+自由入力文字列による Hot Pepper の keyword 検索は一時グループ作成では使わない。
 
 停止:
 
