@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
-from app.api.routes import health, internal, meetings, temporary_groups, users
+from app.api.routes import health, internal, locations, meetings, temporary_groups, users
 from app.core.config import settings
 from app.core.middleware import (
     request_size_limit_middleware,
@@ -36,6 +36,7 @@ app.include_router(health.router)
 app.include_router(users.router, prefix="/users")
 app.include_router(meetings.router, prefix="/meetings")
 app.include_router(temporary_groups.router, prefix="/temporary-groups")
+app.include_router(locations.router, prefix="/locations")
 app.include_router(internal.router)
 
 

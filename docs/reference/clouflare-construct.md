@@ -782,8 +782,9 @@ DB migration
 4. frontend build を作る
 5. Worker の型チェックを通す
 6. DB migration を必要なら実行する
-7. wrangler deploy する
-8. 疎通確認する
+7. 地点マスタが必要なら production/staging DB に投入する
+8. wrangler deploy する
+9. 疎通確認する
 ```
 
 ## 実際に行った staging 初回デプロイ作業
@@ -1238,6 +1239,8 @@ npm run check
 ```
 
 DB migration がある場合は production DB に適用する。
+地点マスタの初回投入・更新が必要な場合は
+[Location Data Import](../location-data-import.md) の本番DB投入手順に従う。
 
 ### deploy
 

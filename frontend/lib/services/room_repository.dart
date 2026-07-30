@@ -53,6 +53,7 @@ abstract class RoomRepository {
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    String? locationId,
   });
 
   Future<GroupCreationDraft> joinRoom({required String code});
@@ -103,12 +104,14 @@ class MockRoomRepository implements RoomRepository {
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    String? locationId,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 180));
     return GroupCreationDraft.createMock(
       peopleCount: peopleCount,
       area: area,
       budget: budget,
+      locationId: locationId,
     );
   }
 
@@ -260,18 +263,21 @@ class ApiRoomRepository implements RoomRepository {
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    String? locationId,
   }) async {
     final participantToken = await _participantToken();
-    final json = await _apiClient.postJson(
-      '/temporary-groups',
-      body: {
-        'participant_token': participantToken,
-        'participant_count': peopleCount,
-        'location': area,
-        'budget_min': budget.minAmount,
-        'budget_max': budget.maxAmount,
-      },
-    );
+    final body = <String, Object?>{
+      'participant_token': participantToken,
+      'participant_count': peopleCount,
+      'location': area,
+      'budget_min': budget.minAmount,
+      'budget_max': budget.maxAmount,
+    };
+    if (locationId != null) {
+      body['location_id'] = locationId;
+    }
+
+    final json = await _apiClient.postJson('/temporary-groups', body: body);
     return GroupCreationDraft.fromApi(
       roomId: json['id'] as String,
       groupId: json['code'] as String,
@@ -279,6 +285,7 @@ class ApiRoomRepository implements RoomRepository {
       area: area,
       budget: budget,
       isHost: true,
+      locationId: locationId,
     );
   }
 
@@ -310,6 +317,7 @@ class ApiRoomRepository implements RoomRepository {
         maxAmount: detail['budget_max'] as int?,
       ),
       isHost: false,
+      locationId: detail['location_id'] as String?,
     );
   }
 

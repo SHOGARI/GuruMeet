@@ -7,6 +7,7 @@ class GroupCreationDraft {
     required this.area,
     required this.budget,
     required this.groupId,
+    this.locationId,
     required this.isHost,
     this.roomId,
   });
@@ -15,6 +16,7 @@ class GroupCreationDraft {
     required int peopleCount,
     required String area,
     required BudgetOption budget,
+    String? locationId,
   }) {
     if (DemoConfig.isDemoMode) {
       return GroupCreationDraft(
@@ -22,6 +24,7 @@ class GroupCreationDraft {
         area: area,
         budget: budget,
         groupId: DemoConfig.roomCode,
+        locationId: locationId,
         isHost: true,
         roomId: null,
       );
@@ -42,6 +45,7 @@ class GroupCreationDraft {
       area: area,
       budget: budget,
       groupId: groupCode,
+      locationId: locationId,
       isHost: true,
       roomId: null,
     );
@@ -53,6 +57,7 @@ class GroupCreationDraft {
       area: '新宿',
       budget: BudgetOption.from2000To3000,
       groupId: groupId.toUpperCase(),
+      locationId: null,
       isHost: false,
       roomId: null,
     );
@@ -65,12 +70,14 @@ class GroupCreationDraft {
     required String area,
     required BudgetOption budget,
     required bool isHost,
+    String? locationId,
   }) {
     return GroupCreationDraft(
       peopleCount: peopleCount,
       area: area,
       budget: budget,
       groupId: groupId.toUpperCase(),
+      locationId: locationId,
       isHost: isHost,
       roomId: roomId,
     );
@@ -80,6 +87,7 @@ class GroupCreationDraft {
   final String area;
   final BudgetOption budget;
   final String groupId;
+  final String? locationId;
   final bool isHost;
   final String? roomId;
 

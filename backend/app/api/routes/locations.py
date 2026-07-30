@@ -1,0 +1,71 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.schemas.location import LocationCandidate, LocationSearchResult
+from app.services.location_service import (
+    DEFAULT_LOCATION_SEARCH_LIMIT,
+    MAX_LOCATION_SEARCH_LIMIT,
+    InvalidLocationIdError,
+    LocationService,
+)
+
+router = APIRouter(tags=["locations"])
+
+
+@router.get(
+    "",
+    response_model=list[LocationCandidate],
+    summary="都道府県内の地点候補を取得する",
+    description=(
+        "都道府県を指定して、市区町村と駅の候補一覧を取得します。"
+        "フロントエンドはこの結果を保持し、入力中の候補絞り込みをローカルで行います。"
+    ),
+)
+def list_locations(
+    prefecture: Annotated[str, Query(min_length=1, max_length=32)],
+    db: Session = Depends(get_db),
+) -> list[LocationCandidate]:
+    service = LocationService(db)
+    return service.list_by_prefecture(prefecture)
+
+
+@router.get(
+    "/search",
+    response_model=list[LocationSearchResult],
+    summary="地点を検索する",
+    description="市区町村と駅を同じ候補一覧として検索します。",
+)
+def search_locations(
+    q: Annotated[str, Query(min_length=0, max_length=128)] = "",
+    prefecture: Annotated[str | None, Query(min_length=1, max_length=32)] = None,
+    limit: Annotated[
+        int,
+        Query(ge=1),
+    ] = DEFAULT_LOCATION_SEARCH_LIMIT,
+    db: Session = Depends(get_db),
+) -> list[LocationSearchResult]:
+    service = LocationService(db)
+    return service.search(q, limit, prefecture)
+
+
+@router.get(
+    "/{location_id:path}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="地点IDの存在を確認する",
+    description="選択後に保持した地点IDが有効な形式か確認します。",
+)
+def validate_location(
+    location_id: str,
+    db: Session = Depends(get_db),
+) -> None:
+    service = LocationService(db)
+    try:
+        service.validate_location_id(location_id)
+    except InvalidLocationIdError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        ) from exc

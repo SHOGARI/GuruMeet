@@ -26,6 +26,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="GURUMEET_ENABLE_MOCK_RESTAURANTS",
     )
+    hotpepper_station_search_radius_meters: int = Field(
+        default=1000,
+        validation_alias="GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS",
+    )
+    hotpepper_municipality_search_radius_meters: int = Field(
+        default=3000,
+        validation_alias="GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS",
+    )
     cors_allow_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
@@ -70,6 +78,16 @@ class Settings(BaseSettings):
     def require_participant_token_hash_secret(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("PARTICIPANT_TOKEN_HASH_SECRET must not be empty")
+        return value
+
+    @field_validator(
+        "hotpepper_station_search_radius_meters",
+        "hotpepper_municipality_search_radius_meters",
+    )
+    @classmethod
+    def require_positive_radius_meters(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Hot Pepper search radius must be positive")
         return value
 
     @model_validator(mode="after")

@@ -1,13 +1,117 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/group_creation_draft.dart';
+import '../models/location_suggestion.dart';
+import '../services/location_repository.dart';
 import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
+
+const _prefectureOptions = <String>[
+  '北海道',
+  '青森県',
+  '岩手県',
+  '宮城県',
+  '秋田県',
+  '山形県',
+  '福島県',
+  '茨城県',
+  '栃木県',
+  '群馬県',
+  '埼玉県',
+  '千葉県',
+  '東京都',
+  '神奈川県',
+  '新潟県',
+  '富山県',
+  '石川県',
+  '福井県',
+  '山梨県',
+  '長野県',
+  '岐阜県',
+  '静岡県',
+  '愛知県',
+  '三重県',
+  '滋賀県',
+  '京都府',
+  '大阪府',
+  '兵庫県',
+  '奈良県',
+  '和歌山県',
+  '鳥取県',
+  '島根県',
+  '岡山県',
+  '広島県',
+  '山口県',
+  '徳島県',
+  '香川県',
+  '愛媛県',
+  '高知県',
+  '福岡県',
+  '佐賀県',
+  '長崎県',
+  '熊本県',
+  '大分県',
+  '宮崎県',
+  '鹿児島県',
+  '沖縄県',
+];
+
+const _prefectureKanaByName = <String, String>{
+  '北海道': 'ほっかいどう',
+  '青森県': 'あおもりけん',
+  '岩手県': 'いわてけん',
+  '宮城県': 'みやぎけん',
+  '秋田県': 'あきたけん',
+  '山形県': 'やまがたけん',
+  '福島県': 'ふくしまけん',
+  '茨城県': 'いばらきけん',
+  '栃木県': 'とちぎけん',
+  '群馬県': 'ぐんまけん',
+  '埼玉県': 'さいたまけん',
+  '千葉県': 'ちばけん',
+  '東京都': 'とうきょうと',
+  '神奈川県': 'かながわけん',
+  '新潟県': 'にいがたけん',
+  '富山県': 'とやまけん',
+  '石川県': 'いしかわけん',
+  '福井県': 'ふくいけん',
+  '山梨県': 'やまなしけん',
+  '長野県': 'ながのけん',
+  '岐阜県': 'ぎふけん',
+  '静岡県': 'しずおかけん',
+  '愛知県': 'あいちけん',
+  '三重県': 'みえけん',
+  '滋賀県': 'しがけん',
+  '京都府': 'きょうとふ',
+  '大阪府': 'おおさかふ',
+  '兵庫県': 'ひょうごけん',
+  '奈良県': 'ならけん',
+  '和歌山県': 'わかやまけん',
+  '鳥取県': 'とっとりけん',
+  '島根県': 'しまねけん',
+  '岡山県': 'おかやまけん',
+  '広島県': 'ひろしまけん',
+  '山口県': 'やまぐちけん',
+  '徳島県': 'とくしまけん',
+  '香川県': 'かがわけん',
+  '愛媛県': 'えひめけん',
+  '高知県': 'こうちけん',
+  '福岡県': 'ふくおかけん',
+  '佐賀県': 'さがけん',
+  '長崎県': 'ながさきけん',
+  '熊本県': 'くまもとけん',
+  '大分県': 'おおいたけん',
+  '宮崎県': 'みやざきけん',
+  '鹿児島県': 'かごしまけん',
+  '沖縄県': 'おきなわけん',
+};
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
@@ -21,9 +125,12 @@ class CreateGroupPage extends StatefulWidget {
 class _CreateGroupPageState extends State<CreateGroupPage> {
   final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
   final _formKey = GlobalKey<FormState>();
+  final _prefectureController = TextEditingController();
   final _areaController = TextEditingController();
   final _areaFocusNode = FocusNode();
 
+  String? _selectedPrefecture;
+  LocationSuggestion? _selectedLocation;
   int _peopleCount = 4;
   BudgetOption? _selectedBudget = BudgetOption.from2000To3000;
   bool _hasTriedSubmit = false;
@@ -32,6 +139,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
   @override
   void dispose() {
+    _prefectureController.dispose();
     _areaController.dispose();
     _areaFocusNode.dispose();
     super.dispose();
@@ -66,8 +174,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     try {
       final draft = await _roomRepository.createRoom(
         peopleCount: _peopleCount,
-        area: _areaController.text.trim(),
+        area: _selectedLocation?.displayName ?? _areaController.text.trim(),
         budget: selectedBudget,
+        locationId: _selectedLocation?.id,
       );
       if (!mounted) {
         return;
@@ -91,6 +200,24 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 
   void _selectBudget(BudgetOption budget) {
     setState(() => _selectedBudget = budget);
+  }
+
+  void _selectLocation(LocationSuggestion? location) {
+    setState(() {
+      _selectedLocation = location;
+      _selectedPrefecture = location?.prefecture ?? _selectedPrefecture;
+    });
+  }
+
+  void _selectPrefecture(String? prefecture) {
+    setState(() {
+      _selectedPrefecture = prefecture;
+      _selectedLocation = null;
+      _areaController.clear();
+    });
+    if (prefecture != null) {
+      _areaFocusNode.requestFocus();
+    }
   }
 
   Future<void> _readAreaFromLocation() async {
@@ -131,9 +258,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       final placemarks = await Geocoding(
         locale: const Locale('ja', 'JP'),
       ).placemarkFromCoordinates(position.latitude, position.longitude);
-      final area = _formatAreaFromPlacemark(
-        placemarks.isEmpty ? null : placemarks.first,
-      );
+      final placemark = placemarks.isEmpty ? null : placemarks.first;
+      final area = _formatAreaFromPlacemark(placemark);
 
       if (area == null) {
         _showLocationSnackBar('現在地の地名を読み取れませんでした');
@@ -143,11 +269,19 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       if (!mounted) {
         return;
       }
+      final administrativeArea = placemark?.administrativeArea?.trim();
+      final prefecture =
+          administrativeArea != null &&
+              _prefectureOptions.contains(administrativeArea)
+          ? administrativeArea
+          : _selectedPrefecture;
       setState(() {
+        _selectedPrefecture = prefecture;
         _areaController.text = area;
+        _selectedLocation = null;
         _hasTriedSubmit = false;
       });
-      _showLocationSnackBar('$area を入力しました');
+      _showLocationSnackBar('$area を入力しました。候補から地点を選んでください');
     } catch (_) {
       _showLocationSnackBar('位置情報を読み取れませんでした');
     } finally {
@@ -235,13 +369,18 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       child: _CreateGroupForm(
                         formKey: _formKey,
+                        prefectureController: _prefectureController,
                         areaController: _areaController,
                         areaFocusNode: _areaFocusNode,
                         hasTriedSubmit: _hasTriedSubmit,
                         peopleCount: _peopleCount,
+                        selectedPrefecture: _selectedPrefecture,
+                        selectedLocation: _selectedLocation,
                         selectedBudget: _selectedBudget,
                         isReadingLocation: _isReadingLocation,
                         onAreaSubmitted: _createGroup,
+                        onPrefectureSelected: _selectPrefecture,
+                        onLocationSelected: _selectLocation,
                         onReadAreaFromLocation: _readAreaFromLocation,
                         onDecreasePeople: _peopleCount > 2
                             ? () => setState(() => _peopleCount--)
@@ -274,13 +413,18 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
 class _CreateGroupForm extends StatelessWidget {
   const _CreateGroupForm({
     required this.formKey,
+    required this.prefectureController,
     required this.areaController,
     required this.areaFocusNode,
     required this.hasTriedSubmit,
     required this.peopleCount,
+    required this.selectedPrefecture,
+    required this.selectedLocation,
     required this.selectedBudget,
     required this.isReadingLocation,
     required this.onAreaSubmitted,
+    required this.onPrefectureSelected,
+    required this.onLocationSelected,
     required this.onReadAreaFromLocation,
     required this.onDecreasePeople,
     required this.onIncreasePeople,
@@ -288,13 +432,18 @@ class _CreateGroupForm extends StatelessWidget {
   });
 
   final GlobalKey<FormState> formKey;
+  final TextEditingController prefectureController;
   final TextEditingController areaController;
   final FocusNode areaFocusNode;
   final bool hasTriedSubmit;
   final int peopleCount;
+  final String? selectedPrefecture;
+  final LocationSuggestion? selectedLocation;
   final BudgetOption? selectedBudget;
   final bool isReadingLocation;
   final VoidCallback onAreaSubmitted;
+  final ValueChanged<String?> onPrefectureSelected;
+  final ValueChanged<LocationSuggestion?> onLocationSelected;
   final VoidCallback onReadAreaFromLocation;
   final VoidCallback? onDecreasePeople;
   final VoidCallback? onIncreasePeople;
@@ -338,21 +487,19 @@ class _CreateGroupForm extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextFormField(
+                _PrefectureField(
+                  controller: prefectureController,
+                  selectedPrefecture: selectedPrefecture,
+                  onSelected: onPrefectureSelected,
+                ),
+                const SizedBox(height: AppSpacing.regular),
+                _LocationSearchField(
                   controller: areaController,
                   focusNode: areaFocusNode,
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => onAreaSubmitted(),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.location_on_outlined),
-                    hintText: '新宿・渋谷・池袋',
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '行きたいエリアを入力してください';
-                    }
-                    return null;
-                  },
+                  selectedPrefecture: selectedPrefecture,
+                  selectedLocation: selectedLocation,
+                  onSubmitted: onAreaSubmitted,
+                  onSelected: onLocationSelected,
                 ),
                 const SizedBox(height: AppSpacing.regular),
                 OutlinedButton.icon(
@@ -393,6 +540,592 @@ class _CreateGroupForm extends StatelessWidget {
           ],
           const SizedBox(height: AppSpacing.section),
         ],
+      ),
+    );
+  }
+}
+
+class _PrefectureField extends StatelessWidget {
+  const _PrefectureField({
+    required this.controller,
+    required this.selectedPrefecture,
+    required this.onSelected,
+  });
+
+  final TextEditingController controller;
+  final String? selectedPrefecture;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SearchablePrefectureField(
+      controller: controller,
+      selectedPrefecture: selectedPrefecture,
+      onSelected: onSelected,
+    );
+  }
+}
+
+class _SearchablePrefectureField extends StatefulWidget {
+  const _SearchablePrefectureField({
+    required this.controller,
+    required this.selectedPrefecture,
+    required this.onSelected,
+  });
+
+  final TextEditingController controller;
+  final String? selectedPrefecture;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  State<_SearchablePrefectureField> createState() =>
+      _SearchablePrefectureFieldState();
+}
+
+class _SearchablePrefectureFieldState
+    extends State<_SearchablePrefectureField> {
+  final _focusNode = FocusNode();
+
+  bool _isApplyingSelection = false;
+  List<String> _filteredPrefectures = _prefectureOptions;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleTextChanged);
+    _focusNode.addListener(_handleFocusChanged);
+    _syncControllerWithSelection();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SearchablePrefectureField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedPrefecture != widget.selectedPrefecture) {
+      _syncControllerWithSelection();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleTextChanged);
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _syncControllerWithSelection() {
+    final selectedPrefecture = widget.selectedPrefecture;
+    if (selectedPrefecture == null ||
+        widget.controller.text == selectedPrefecture) {
+      return;
+    }
+    _isApplyingSelection = true;
+    widget.controller.text = selectedPrefecture;
+    widget.controller.selection = TextSelection.collapsed(
+      offset: selectedPrefecture.length,
+    );
+    _isApplyingSelection = false;
+  }
+
+  void _handleFocusChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    if (_focusNode.hasFocus && widget.selectedPrefecture != null) {
+      _isApplyingSelection = true;
+      widget.controller.clear();
+      _isApplyingSelection = false;
+      widget.onSelected(null);
+      setState(() {
+        _filteredPrefectures = _prefectureOptions;
+      });
+      return;
+    }
+
+    setState(() {
+      _filteredPrefectures = _filterPrefectures(widget.controller.text);
+    });
+  }
+
+  void _handleTextChanged() {
+    if (_isApplyingSelection) {
+      return;
+    }
+
+    final text = widget.controller.text;
+    if (widget.selectedPrefecture != null &&
+        text != widget.selectedPrefecture) {
+      widget.onSelected(null);
+    }
+
+    setState(() {
+      _filteredPrefectures = _filterPrefectures(text);
+    });
+  }
+
+  List<String> _filterPrefectures(String query) {
+    final normalizedQuery = normalizeLocationText(query);
+    if (normalizedQuery.isEmpty) {
+      return _prefectureOptions;
+    }
+    return _prefectureOptions
+        .where(
+          (prefecture) => _prefectureSearchTargets(
+            prefecture,
+          ).any((target) => target.contains(normalizedQuery)),
+        )
+        .toList(growable: false);
+  }
+
+  Iterable<String> _prefectureSearchTargets(String prefecture) sync* {
+    yield normalizeLocationText(prefecture);
+    final kana = _prefectureKanaByName[prefecture];
+    if (kana != null) {
+      yield normalizeLocationText(kana);
+    }
+  }
+
+  void _selectPrefecture(String prefecture) {
+    _isApplyingSelection = true;
+    widget.controller.text = prefecture;
+    widget.controller.selection = TextSelection.collapsed(
+      offset: prefecture.length,
+    );
+    _isApplyingSelection = false;
+    widget.onSelected(prefecture);
+    _focusNode.unfocus();
+    setState(() {
+      _filteredPrefectures = _filterPrefectures(prefecture);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPanel = _focusNode.hasFocus && _filteredPrefectures.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          key: const ValueKey('prefecture-search-field'),
+          controller: widget.controller,
+          focusNode: _focusNode,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.map_outlined),
+            suffixIcon: Icon(Icons.expand_more_rounded),
+            hintText: '都道府県を選択',
+          ),
+          validator: (_) {
+            if (widget.selectedPrefecture == null) {
+              return '都道府県を選択してください';
+            }
+            return null;
+          },
+        ),
+        AnimatedSwitcher(
+          duration: AppMotion.medium,
+          child: hasPanel
+              ? Padding(
+                  key: const ValueKey('prefecture-suggestion-panel'),
+                  padding: const EdgeInsets.only(top: AppSpacing.small),
+                  child: _SuggestionPanel(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _filteredPrefectures.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final prefecture = _filteredPrefectures[index];
+                        return ListTile(
+                          leading: const Icon(Icons.map_outlined),
+                          title: Text(prefecture),
+                          onTap: () => _selectPrefecture(prefecture),
+                        );
+                      },
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey('empty-prefecture-panel')),
+        ),
+      ],
+    );
+  }
+}
+
+class _LocationSearchField extends StatefulWidget {
+  const _LocationSearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.selectedPrefecture,
+    required this.selectedLocation,
+    required this.onSubmitted,
+    required this.onSelected,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String? selectedPrefecture;
+  final LocationSuggestion? selectedLocation;
+  final VoidCallback onSubmitted;
+  final ValueChanged<LocationSuggestion?> onSelected;
+
+  @override
+  State<_LocationSearchField> createState() => _LocationSearchFieldState();
+}
+
+class _LocationSearchFieldState extends State<_LocationSearchField> {
+  final _repository = LocationRepositoryProvider.instance;
+
+  Timer? _debounceTimer;
+  List<LocationSuggestion> _allSuggestions = const [];
+  List<LocationSuggestion> _suggestions = const [];
+  bool _isLoading = false;
+  bool _hasFiltered = false;
+  String? _errorMessage;
+  int _requestSerial = 0;
+  bool _isApplyingSelection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleTextChanged);
+    widget.focusNode.addListener(_handleFocusChanged);
+    final selectedPrefecture = widget.selectedPrefecture;
+    if (selectedPrefecture != null) {
+      _loadPrefectureCandidates(selectedPrefecture);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocationSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_handleFocusChanged);
+      widget.focusNode.addListener(_handleFocusChanged);
+    }
+    if (oldWidget.selectedPrefecture != widget.selectedPrefecture) {
+      _debounceTimer?.cancel();
+      final selectedPrefecture = widget.selectedPrefecture;
+      setState(() {
+        _allSuggestions = const [];
+        _suggestions = const [];
+        _isLoading = selectedPrefecture != null;
+        _hasFiltered = false;
+        _errorMessage = null;
+      });
+      if (selectedPrefecture != null) {
+        _loadPrefectureCandidates(selectedPrefecture);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleTextChanged);
+    widget.focusNode.removeListener(_handleFocusChanged);
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleFocusChanged() {
+    if (!mounted || !widget.focusNode.hasFocus) {
+      return;
+    }
+    if (widget.selectedPrefecture == null) {
+      return;
+    }
+
+    _debounceTimer?.cancel();
+    if (widget.selectedLocation != null) {
+      _isApplyingSelection = true;
+      widget.controller.clear();
+      _isApplyingSelection = false;
+      widget.onSelected(null);
+    }
+
+    setState(() {
+      _suggestions = filterLocationSuggestions(
+        _allSuggestions,
+        widget.controller.text,
+      );
+      _hasFiltered = true;
+      _errorMessage = null;
+    });
+  }
+
+  void _handleTextChanged() {
+    if (_isApplyingSelection) {
+      return;
+    }
+
+    if (widget.selectedLocation != null) {
+      widget.onSelected(null);
+    }
+
+    final query = widget.controller.text.trim();
+    _debounceTimer?.cancel();
+
+    if (query.isEmpty || widget.selectedPrefecture == null) {
+      setState(() {
+        _suggestions = widget.selectedPrefecture == null
+            ? const []
+            : filterLocationSuggestions(_allSuggestions, query);
+        _hasFiltered =
+            widget.selectedPrefecture != null && widget.focusNode.hasFocus;
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _filter(query);
+    });
+  }
+
+  Future<void> _loadPrefectureCandidates(String prefecture) async {
+    final requestSerial = ++_requestSerial;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final suggestions = await _repository.listLocationsByPrefecture(
+        prefecture,
+      );
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _allSuggestions = suggestions;
+        _suggestions = filterLocationSuggestions(
+          suggestions,
+          widget.controller.text,
+        );
+        _isLoading = false;
+        _hasFiltered =
+            widget.controller.text.trim().isNotEmpty ||
+            (widget.focusNode.hasFocus && widget.selectedPrefecture != null);
+      });
+    } on LocationSearchException catch (error) {
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _allSuggestions = const [];
+        _suggestions = const [];
+        _isLoading = false;
+        _hasFiltered = true;
+        _errorMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted || requestSerial != _requestSerial) {
+        return;
+      }
+      setState(() {
+        _allSuggestions = const [];
+        _suggestions = const [];
+        _isLoading = false;
+        _hasFiltered = true;
+        _errorMessage = '地点候補を取得できませんでした';
+      });
+    }
+  }
+
+  void _filter(String query) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _suggestions = filterLocationSuggestions(_allSuggestions, query);
+      _hasFiltered = query.trim().isNotEmpty;
+      _errorMessage = null;
+    });
+  }
+
+  void _selectSuggestion(LocationSuggestion suggestion) {
+    _debounceTimer?.cancel();
+    _isApplyingSelection = true;
+    widget.controller.text = suggestion.displayName;
+    widget.controller.selection = TextSelection.collapsed(
+      offset: widget.controller.text.length,
+    );
+    _isApplyingSelection = false;
+    widget.onSelected(suggestion);
+    setState(() {
+      _suggestions = const [];
+      _isLoading = false;
+      _hasFiltered = false;
+      _errorMessage = null;
+    });
+    widget.focusNode.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPanel =
+        _isLoading ||
+        _errorMessage != null ||
+        _suggestions.isNotEmpty ||
+        _hasFiltered;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          key: const ValueKey('location-search-field'),
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          enabled: widget.selectedPrefecture != null,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => widget.onSubmitted(),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.location_on_outlined),
+            hintText: widget.selectedPrefecture == null
+                ? '先に都道府県を選択'
+                : '駅・市区町村を入力',
+          ),
+          validator: (value) {
+            if (widget.selectedPrefecture == null) {
+              return '先に都道府県を選択してください';
+            }
+            if (value == null || value.trim().isEmpty) {
+              return '行きたいエリアを入力してください';
+            }
+            if (widget.selectedLocation == null) {
+              return '候補から地点を選択してください';
+            }
+            return null;
+          },
+        ),
+        AnimatedSwitcher(
+          duration: AppMotion.medium,
+          child: hasPanel
+              ? Padding(
+                  key: const ValueKey('location-suggestion-panel'),
+                  padding: const EdgeInsets.only(top: AppSpacing.small),
+                  child: _SuggestionPanel(child: _buildPanel(context)),
+                )
+              : const SizedBox.shrink(key: ValueKey('empty-location-panel')),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPanel(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.medium),
+        child: LinearProgressIndicator(),
+      );
+    }
+
+    final errorMessage = _errorMessage;
+    if (errorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Text(
+          errorMessage,
+          style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      final message = _allSuggestions.isEmpty
+          ? 'この都道府県の地点候補が未投入です'
+          : '候補が見つかりません';
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Text(
+          message,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      itemCount: _suggestions.length,
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, color: colors.outlineVariant),
+      itemBuilder: (context, index) {
+        final suggestion = _suggestions[index];
+        final isStation = suggestion.type == LocationSuggestionType.station;
+        return ListTile(
+          leading: Icon(isStation ? Icons.train_rounded : Icons.place_outlined),
+          title: Row(
+            children: [
+              Expanded(child: Text(suggestion.name)),
+              const SizedBox(width: AppSpacing.small),
+              _LocationTypeBadge(label: isStation ? '駅' : '市区町村'),
+            ],
+          ),
+          subtitle: Text(suggestion.supportingText),
+          onTap: () => _selectSuggestion(suggestion),
+        );
+      },
+    );
+  }
+}
+
+class _SuggestionPanel extends StatelessWidget {
+  const _SuggestionPanel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 260),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _LocationTypeBadge extends StatelessWidget {
+  const _LocationTypeBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.small,
+          vertical: AppSpacing.micro,
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colors.onSecondaryContainer,
+          ),
+        ),
       ),
     );
   }

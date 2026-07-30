@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class TemporaryGroupCreate(BaseModel):
@@ -32,6 +32,13 @@ class TemporaryGroupCreate(BaseModel):
         max_length=255,
         description="希望場所。",
         examples=["渋谷"],
+    )
+    location_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("location_id", "locationId"),
+        max_length=40,
+        description="地点検索APIで選択した地点ID。",
+        examples=["station:1132005"],
     )
     budget_min: int | None = Field(
         default=None,
@@ -88,6 +95,7 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     creator_id: str | None = Field(default=None, description="任意の作成者ID。")
     participant_count: int | None = Field(default=None, description="参加人数。")
     location: str | None = Field(default=None, description="希望場所。")
+    location_id: str | None = Field(default=None, description="選択された地点ID。")
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
     restaurant_search_status: str = Field(

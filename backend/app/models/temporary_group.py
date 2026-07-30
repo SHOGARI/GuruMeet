@@ -3,7 +3,7 @@ from datetime import datetime
 
 from typing import Any
 
-from sqlalchemy import CHAR, CheckConstraint, DateTime, Integer, JSON, String
+from sqlalchemy import CHAR, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -39,6 +39,12 @@ class TemporaryGroup(Base):
     creator_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     participant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location_id: Mapped[str | None] = mapped_column(
+        String(40),
+        ForeignKey("locations.id"),
+        nullable=True,
+        index=True,
+    )
     budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     restaurant: Mapped[dict[str, Any] | None] = mapped_column(
