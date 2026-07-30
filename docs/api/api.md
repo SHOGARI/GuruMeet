@@ -12,6 +12,9 @@ backendはFlutter frontendに対してJSON APIを提供する。
 | `GET /temporary-groups/{group_id}` | UUIDから一時グループを取得する | [Temporary Group API](./temporary-group.md) |
 | `POST /temporary-groups/join` | 5桁コードから一時グループを取得する | [Temporary Group API](./temporary-group.md) |
 
+TemporaryGroup作成時のHot Pepper店舗検索と推薦仕様は
+[TemporaryGroup x Restaurant](./temporary-group-restaurant.md) を参照する。
+
 ## 基本方針
 
 backendは、DBに保存する識別子と状態を管理する。frontendの画面URLはfrontend側で組み立てる。
