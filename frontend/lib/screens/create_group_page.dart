@@ -324,8 +324,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       }
       final prefecture =
           locationName.prefecture ??
-          _normalizePrefecture(area) ??
-          _selectedPrefecture;
+          _normalizePrefecture(area);
       _prefectureController.clear();
       _areaController.clear();
       setState(() {
