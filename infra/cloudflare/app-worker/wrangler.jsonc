@@ -15,6 +15,7 @@
       "HOTPEPPER_API_KEY",
       "PARTICIPANT_TOKEN_HASH_SECRET",
       "INTERNAL_TASK_SECRET",
+      "DISCORD_ALERT_WEBHOOK_URL",
     ],
   },
   "containers": [
@@ -40,7 +41,7 @@
     },
   ],
   "triggers": {
-    "crons": ["0 4 * * *"],
+    "crons": ["0 12 * * *"],
   },
   "env": {
     "staging": {
@@ -56,6 +57,7 @@
           "HOTPEPPER_API_KEY",
           "PARTICIPANT_TOKEN_HASH_SECRET",
           "INTERNAL_TASK_SECRET",
+          "DISCORD_ALERT_WEBHOOK_URL",
         ],
       },
       "containers": [
@@ -81,7 +83,7 @@
         },
       ],
       "triggers": {
-        "crons": ["0 4 * * *"],
+        "crons": ["0 12 * * *"],
       },
       "routes": [
         {
@@ -109,6 +111,7 @@
           "HOTPEPPER_API_KEY",
           "PARTICIPANT_TOKEN_HASH_SECRET",
           "INTERNAL_TASK_SECRET",
+          "DISCORD_ALERT_WEBHOOK_URL",
         ],
       },
       "containers": [
@@ -134,7 +137,7 @@
         },
       ],
       "triggers": {
-        "crons": ["0 4 * * *"],
+        "crons": ["0 12 * * *"],
       },
       "routes": [
         {

@@ -20,6 +20,10 @@ from app.schemas.temporary_group import (
     TemporaryGroupVotingResult,
     TemporaryGroupVotingStartRequest,
 )
+from app.services.discord_alert_service import (
+    notify_group_created,
+    notify_voting_result_viewed,
+)
 from app.services.hotpepper_service import (
     HotPepperAPIError,
     HotPepperAPITimeoutError,
@@ -268,7 +272,11 @@ def get_temporary_group_voting_result(
 ) -> TemporaryGroupVotingResult:
     service = TemporaryGroupService(db)
     try:
-        return service.get_voting_result(group_id)
+        result = service.get_voting_result(group_id)
+        group = service.get_active_by_id(group_id)
+        if group is not None:
+            notify_voting_result_viewed(group, result=result)
+        return result
     except TemporaryGroupNotFoundError:
         raise _not_found() from None
     except TemporaryGroupVotingNotStartedError:
@@ -431,7 +439,9 @@ def _create_temporary_group_response(
             restaurant=restaurant,
             restaurant_search_status=restaurant_search_status,
         )
-        return _to_response(group, service)
+        response = _to_response(group, service)
+        notify_group_created(group)
+        return response
 
 
 def _not_found() -> HTTPException:

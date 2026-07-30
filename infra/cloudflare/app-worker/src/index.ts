@@ -1,13 +1,18 @@
 import { Container, getRandom } from "@cloudflare/containers";
 import { env as workerEnv } from "cloudflare:workers";
 
+import { sendDiscordAlert } from "../../../discord/discordWebhook";
+
 const INSTANCE_COUNT = 1;
+const CLEANUP_CRON_UTC_HOUR = 12;
+const CLEANUP_CRON_UTC_MINUTE = 0;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
   HOTPEPPER_API_KEY?: string;
   CORS_ALLOW_ORIGINS?: string;
   PARTICIPANT_TOKEN_HASH_SECRET?: string;
   INTERNAL_TASK_SECRET?: string;
+  DISCORD_ALERT_WEBHOOK_URL?: string;
   GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
   GURUMEET_API_ROOT_PATH?: string;
@@ -34,6 +39,7 @@ export class BackendContainer extends Container {
       runtimeEnv.INTERNAL_TASK_SECRET,
       "INTERNAL_TASK_SECRET",
     ),
+    DISCORD_ALERT_WEBHOOK_URL: runtimeEnv.DISCORD_ALERT_WEBHOOK_URL ?? "",
     GURUMEET_ENABLE_MOCK_RESTAURANTS:
       runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
@@ -50,6 +56,7 @@ interface Env {
   CORS_ALLOW_ORIGINS?: string;
   PARTICIPANT_TOKEN_HASH_SECRET?: string;
   INTERNAL_TASK_SECRET?: string;
+  DISCORD_ALERT_WEBHOOK_URL?: string;
   GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
   GURUMEET_API_ROOT_PATH?: string;
@@ -83,30 +90,96 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env): Promise<void> {
+    if (!isCleanupScheduleWindow(event.scheduledTime)) {
+      console.info(
+        JSON.stringify({
+          event: "cleanup_expired_temporary_groups_skipped",
+          cron: event.cron,
+          scheduled_at: new Date(event.scheduledTime).toISOString(),
+          reason: "outside_cleanup_schedule_window",
+        }),
+      );
+      return;
+    }
+
+    console.info(
+      JSON.stringify({
+        event: "cleanup_expired_temporary_groups_started",
+        cron: event.cron,
+        scheduled_at: new Date(event.scheduledTime).toISOString(),
+      }),
+    );
+
     if (!env.INTERNAL_TASK_SECRET) {
       console.error("INTERNAL_TASK_SECRET is not configured.");
+      await notifyCleanupFailed(env, {
+        status: "missing_internal_task_secret",
+        message: "INTERNAL_TASK_SECRET is not configured.",
+      });
       return;
     }
     const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
     const response = await container.fetch(
-      new Request("http://container/internal/cleanup-expired-temporary-groups", {
-        method: "POST",
-        headers: {
-          "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
+      new Request(
+        "http://container/internal/cleanup-expired-temporary-groups",
+        {
+          method: "POST",
+          headers: {
+            "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
+          },
         },
-      }),
+      ),
     );
     if (!response.ok) {
+      const message = await response.text();
       console.error(
         JSON.stringify({
           event: "cleanup_expired_temporary_groups_failed",
           status: response.status,
         }),
       );
+      await notifyCleanupFailed(env, {
+        status: response.status,
+        message,
+      });
     }
   },
 };
+
+async function notifyCleanupFailed(
+  env: Env,
+  failure: { status: number | string; message: string },
+): Promise<void> {
+  try {
+    await sendDiscordAlert({
+      webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
+      title: "cleanup_failed",
+      level: "critical",
+      fields: {
+        environment: env.ENVIRONMENT ?? "unknown",
+        status: failure.status,
+        message: truncate(failure.message, 500),
+        scheduled_at: formatJst(new Date()),
+      },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "discord_cleanup_failed_alert_failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+function isCleanupScheduleWindow(scheduledTime: number): boolean {
+  const scheduledAt = new Date(scheduledTime);
+  return (
+    scheduledAt.getUTCHours() === CLEANUP_CRON_UTC_HOUR &&
+    scheduledAt.getUTCMinutes() === CLEANUP_CRON_UTC_MINUTE
+  );
+}
 
 function requiredRuntimeEnv(value: string | undefined, name: string): string {
   if (!value?.trim()) {
@@ -132,7 +205,10 @@ async function edgeHealth(env: Env): Promise<Response> {
   return json(checks);
 }
 
-async function handleFileRequest(request: Request, env: Env): Promise<Response> {
+async function handleFileRequest(
+  request: Request,
+  env: Env,
+): Promise<Response> {
   const url = new URL(request.url);
   const key = decodeURIComponent(url.pathname.replace(/^\/files\//, ""));
 
@@ -148,9 +224,10 @@ async function handleFileRequest(request: Request, env: Env): Promise<Response> 
 
   return new Response(object.body, {
     headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Content-Type":
+        object.httpMetadata?.contentType ?? "application/octet-stream",
       "Cache-Control": "public, max-age=3600",
-      "ETag": object.httpEtag,
+      ETag: object.httpEtag,
     },
   });
 }
@@ -171,6 +248,26 @@ function isApiPath(pathname: string): boolean {
 
 function isApiRootPath(pathname: string): boolean {
   return pathname === "/api" || pathname === "/api/";
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function formatJst(value: Date): string {
+  return value.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
