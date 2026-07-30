@@ -77,6 +77,8 @@ import scriptは起動後に別コマンドとして実行する。
 - apiコンテナ内で `scripts/import_locations.py` を実行する
 - 同じ地点IDはinsertではなくupdateする
 - 不正行はログに出し、処理全体は継続する
+  - 不正行が多い場合は最初の一部だけ表示し、最後に理由別件数を出す
+  - `committing location master import` より前に中断した場合、DBには反映されない
 
 ## コンテナに入って確認する
 
@@ -153,6 +155,7 @@ GitHub Environment secrets、Neon Dashboard、または一時的なshell環境�
 - 可能ならNeonのbranch/snapshotなどで復旧点を作る
 - CSVは作業端末または一時的なCI artifactに置き、投入後は不要なら削除する
 - importは再実行可能。同じ `locations.id` / 子テーブルのキーはinsertではなくupdateされる
+- `committing location master import` より前に中断した場合、DBには反映されない
 
 ### 1. CSVを用意する
 

@@ -5,6 +5,7 @@ import argparse
 import csv
 import logging
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
@@ -29,6 +30,7 @@ from app.models.location import (  # noqa: E402
 from app.services.location_normalizer import normalize_location_query  # noqa: E402
 
 LOGGER = logging.getLogger("import_locations")
+INVALID_ROW_LOG_LIMIT = 20
 
 PREFECTURES = (
     "北海道",
@@ -120,8 +122,11 @@ def main() -> int:
     station_rows = load_stations(args.stations_csv, line_names)
 
     with SessionLocal() as db:
+        LOGGER.info("upserting municipalities: %s", len(municipality_rows))
         municipality_count = upsert_municipalities(db, municipality_rows)
+        LOGGER.info("upserting stations: %s", len(station_rows))
         station_count = upsert_stations(db, station_rows)
+        LOGGER.info("committing location master import")
         db.commit()
 
     LOGGER.info("municipalities upserted: %s", municipality_count)
@@ -131,7 +136,7 @@ def main() -> int:
 
 def load_municipalities(path: Path) -> list[MunicipalityImportRow]:
     grouped: dict[str, list[dict[str, str]]] = {}
-    invalid_count = 0
+    invalid_reasons: Counter[str] = Counter()
 
     with path.open(encoding="utf-8-sig", newline="") as file:
         for line_number, row in enumerate(csv.DictReader(file), start=2):
@@ -139,8 +144,12 @@ def load_municipalities(path: Path) -> list[MunicipalityImportRow]:
                 normalized = normalize_geolonia_row(row)
                 grouped.setdefault(normalized["municipality_code"], []).append(normalized)
             except ValueError as exc:
-                invalid_count += 1
-                LOGGER.warning("invalid municipality row %s: %s", line_number, exc)
+                record_invalid_row(
+                    invalid_reasons,
+                    "municipality",
+                    line_number,
+                    str(exc),
+                )
 
     rows: list[MunicipalityImportRow] = []
     for municipality_code, municipality_rows in grouped.items():
@@ -158,7 +167,7 @@ def load_municipalities(path: Path) -> list[MunicipalityImportRow]:
             )
         )
 
-    LOGGER.info("invalid municipality rows skipped: %s", invalid_count)
+    log_invalid_summary("municipality", invalid_reasons)
     return rows
 
 
@@ -198,7 +207,7 @@ def load_line_names(path: Path) -> dict[str, str]:
 
 def load_stations(path: Path, line_names: dict[str, str]) -> list[StationImportRow]:
     grouped: dict[str, list[StationImportRow]] = {}
-    invalid_count = 0
+    invalid_reasons: Counter[str] = Counter()
 
     with path.open(encoding="utf-8-sig", newline="") as file:
         for line_number, row in enumerate(csv.DictReader(file), start=2):
@@ -207,11 +216,10 @@ def load_stations(path: Path, line_names: dict[str, str]) -> list[StationImportR
                 grouping_key = station.station_group_code or station.station_code
                 grouped.setdefault(grouping_key, []).append(station)
             except ValueError as exc:
-                invalid_count += 1
-                LOGGER.warning("invalid station row %s: %s", line_number, exc)
+                record_invalid_row(invalid_reasons, "station", line_number, str(exc))
 
     rows = [merge_station_group(stations) for stations in grouped.values()]
-    LOGGER.info("invalid station rows skipped: %s", invalid_count)
+    log_invalid_summary("station", invalid_reasons)
     return rows
 
 
@@ -280,16 +288,33 @@ def upsert_municipalities(
     db: Session,
     rows: list[MunicipalityImportRow],
 ) -> int:
+    location_ids = [f"municipality:{row.municipality_code}" for row in rows]
+    existing_locations = {
+        location.id: location
+        for location in db.scalars(
+            select(Location).where(Location.id.in_(location_ids))
+        )
+    }
+    existing_municipalities = {
+        municipality.location_id: municipality
+        for municipality in db.scalars(
+            select(MunicipalityLocation).where(
+                MunicipalityLocation.location_id.in_(location_ids)
+            )
+        )
+    }
+
     count = 0
     for row in rows:
         location_id = f"municipality:{row.municipality_code}"
-        location = db.scalar(select(Location).where(Location.id == location_id))
+        location = existing_locations.get(location_id)
         if location is None:
             location = Location(
                 id=location_id,
                 location_type=LOCATION_TYPE_MUNICIPALITY,
                 source=LOCATION_SOURCE_GEOLONIA,
             )
+            existing_locations[location_id] = location
             db.add(location)
 
         location.name = row.municipality_name
@@ -303,16 +328,13 @@ def upsert_municipalities(
         location.longitude = row.longitude
         location.source = LOCATION_SOURCE_GEOLONIA
 
-        municipality = db.scalar(
-            select(MunicipalityLocation).where(
-                MunicipalityLocation.location_id == location_id
-            )
-        )
+        municipality = existing_municipalities.get(location_id)
         if municipality is None:
             municipality = MunicipalityLocation(
                 location_id=location_id,
                 municipality_code=row.municipality_code,
             )
+            existing_municipalities[location_id] = municipality
             db.add(municipality)
         else:
             municipality.municipality_code = row.municipality_code
@@ -323,16 +345,33 @@ def upsert_municipalities(
 
 
 def upsert_stations(db: Session, rows: list[StationImportRow]) -> int:
+    location_ids = [
+        f"station:{row.station_group_code or row.station_code}" for row in rows
+    ]
+    existing_locations = {
+        location.id: location
+        for location in db.scalars(
+            select(Location).where(Location.id.in_(location_ids))
+        )
+    }
+    existing_stations = {
+        station.location_id: station
+        for station in db.scalars(
+            select(StationLocation).where(StationLocation.location_id.in_(location_ids))
+        )
+    }
+
     count = 0
     for row in rows:
         location_id = f"station:{row.station_group_code or row.station_code}"
-        location = db.scalar(select(Location).where(Location.id == location_id))
+        location = existing_locations.get(location_id)
         if location is None:
             location = Location(
                 id=location_id,
                 location_type=LOCATION_TYPE_STATION,
                 source=LOCATION_SOURCE_EKIDATA,
             )
+            existing_locations[location_id] = location
             db.add(location)
 
         municipality = row.municipality_name or ""
@@ -347,14 +386,13 @@ def upsert_stations(db: Session, rows: list[StationImportRow]) -> int:
         location.longitude = row.longitude
         location.source = LOCATION_SOURCE_EKIDATA
 
-        station = db.scalar(
-            select(StationLocation).where(StationLocation.location_id == location_id)
-        )
+        station = existing_stations.get(location_id)
         if station is None:
             station = StationLocation(
                 location_id=location_id,
                 station_code=row.station_code,
             )
+            existing_stations[location_id] = station
             db.add(station)
 
         station.station_group_code = row.station_group_code
@@ -364,6 +402,32 @@ def upsert_stations(db: Session, rows: list[StationImportRow]) -> int:
 
     db.flush()
     return count
+
+
+def record_invalid_row(
+    invalid_reasons: Counter[str],
+    row_type: str,
+    line_number: int,
+    reason: str,
+) -> None:
+    invalid_reasons[reason] += 1
+    if sum(invalid_reasons.values()) <= INVALID_ROW_LOG_LIMIT:
+        LOGGER.warning("invalid %s row %s: %s", row_type, line_number, reason)
+
+
+def log_invalid_summary(row_type: str, invalid_reasons: Counter[str]) -> None:
+    invalid_count = sum(invalid_reasons.values())
+    LOGGER.info("invalid %s rows skipped: %s", row_type, invalid_count)
+    if invalid_count <= INVALID_ROW_LOG_LIMIT:
+        return
+
+    LOGGER.warning(
+        "invalid %s row log truncated after %s rows",
+        row_type,
+        INVALID_ROW_LOG_LIMIT,
+    )
+    for reason, count in invalid_reasons.most_common():
+        LOGGER.warning("invalid %s rows by reason: %s -> %s", row_type, reason, count)
 
 
 def first_present(

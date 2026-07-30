@@ -255,6 +255,8 @@ python scripts/import_locations.py \
 ```
 
 import は再実行可能。同じ地点IDの行は更新する。不正行はログに出して処理を継続する。
+不正行が多い場合は最初の一部だけ表示し、最後に理由別件数を出す。
+`committing location master import` より前に中断した場合、DBには反映されない。
 
 一時グループ作成時に地点候補を選択した場合、frontend は表示名ではなく
 `location_id` を送る。
