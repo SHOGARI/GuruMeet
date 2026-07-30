@@ -8,11 +8,14 @@
 | `code` | `CHAR(5)` | no | 手入力参加用の5桁英数字コード。unique制約あり。 |
 | `creator_id` | `VARCHAR(128)` | yes | 作成者識別子。認証連携前の任意フィールド。 |
 | `participant_count` | `INT` | yes | 参加人数。 |
-| `location` | `VARCHAR(255)` | yes | 希望場所。 |
+| `location` | `VARCHAR(255)` | yes | 希望場所の表示名。 |
+| `location_id` | `VARCHAR(40)` | yes | 駅・市区町村を選択した場合の `locations.id`。 |
+| `custom_location_id` | `UUID` | yes | 現在地・地図ピンから入力した場合の `custom_locations.id`。 |
 | `budget_min` | `INT` | yes | 予算下限。 |
 | `budget_max` | `INT` | yes | 予算上限。 |
 | `restaurant` | `JSONB` | yes | 選択済み、または候補の店舗情報。 |
 | `restaurant_search_status` | `VARCHAR(32)` | no | Hot Pepper店舗検索の状態。`not_requested`, `succeeded`, `no_results` のいずれか。 |
+| `voting_started_at` | `TIMESTAMP WITH TIME ZONE` | yes | 投票開始時刻。未開始の場合はnull。 |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | no | DB側の `now()` で作成日時を保存する。 |
 | `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から24時間後。 |
 
@@ -24,7 +27,23 @@
 | `uq_temporary_groups_code` | `code` | 手入力コードの重複を防ぐ。 |
 | `ck_temporary_groups_restaurant_search_status` | `restaurant_search_status` | Hot Pepper店舗検索状態を許可値に限定する。 |
 | `ix_temporary_groups_code` | `code` | コード参加APIの検索用。 |
+| `ix_temporary_groups_location_id` | `location_id` | 選択地点から作成された一時グループの参照用。 |
+| `ix_temporary_groups_custom_location_id` | `custom_location_id` | 現在地・地図ピンから作成された一時グループの参照用。 |
 | `ix_temporary_groups_expires_at` | `expires_at` | 期限切れ判定と削除処理用。 |
+
+## 場所の保存
+
+`location` は表示名で、Hot Pepper検索の原点は `location_id` または
+`custom_location_id` から解決する。
+
+| input | saved origin | search behavior |
+| --- | --- | --- |
+| 駅・市区町村を選択 | `location_id` | `locations` と子テーブルから緯度経度を取得する。 |
+| 現在地から入力 | `custom_location_id` | `custom_locations` の緯度経度をそのまま使う。 |
+| 場所指定なし | なし | 店舗検索は行わず `not_requested` にする。 |
+
+`location_id` と `custom_location_id` は同時に使わない。
+`location` だけを送る自由入力は、検索原点が解決できないためAPIで400にする。
 
 ## 参加人数
 
@@ -69,6 +88,9 @@ TemporaryGroup.expires_at <= datetime.now(UTC)
 backend/alembic/versions/202607150001_create_temporary_groups.py
 backend/alembic/versions/202607230001_add_temporary_group_details.py
 backend/alembic/versions/202607290001_add_restaurant_search_status.py
+backend/alembic/versions/202607290002_add_temporary_group_voting.py
+backend/alembic/versions/202607300001_create_locations.py
+backend/alembic/versions/202607300002_create_custom_locations.py
 ```
 
 既存DB構成は `feature/setup-db-etc` の方針に合わせ、`POSTGRES_*` 環境変数からDB URLを組み立てる。

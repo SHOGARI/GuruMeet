@@ -23,6 +23,8 @@ GET /locations?prefecture=東京都
 レスポンスには候補表示と選択ID保持に必要な項目だけを返す。
 緯度経度は返さず、Hot Pepper API連携などの後続処理では
 backendが `location_id` からDBを引いて解決する。
+現在地検索はこのAPIとは別物として扱い、frontendが取得した緯度経度を
+`POST /temporary-groups` の `custom_location` として送る。
 
 レスポンス:
 
@@ -137,3 +139,7 @@ GET /locations/search?prefecture=東京都&q=北千住&limit=20
 現行の Hot Pepper 連携では市区町村コードによる区域検索ができないため、
 `temporary_groups.location_id` から `locations` と子テーブルを引き、代表座標から
 半径検索を使う。駅と市区町村の半径は設定値で分ける。
+
+現在地から入力した場合は `location_id` を送らない。
+`POST /temporary-groups` に `custom_location` を送り、backendが
+`custom_locations` に保存した緯度経度を検索原点にする。
