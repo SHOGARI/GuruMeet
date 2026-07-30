@@ -85,11 +85,12 @@ router = APIRouter(
 )
 async def create_temporary_group(
     request_body: TemporaryGroupCreate | None = None,
+    db: Session = Depends(get_db),
 ) -> TemporaryGroupResponse:
     data = request_body or TemporaryGroupCreate()
     try:
         restaurant, restaurant_search_status = (
-            await TemporaryGroupService.search_restaurants_for_create(data)
+            await TemporaryGroupService.search_restaurants_for_create(data, db)
         )
         return await run_in_threadpool(
             _create_temporary_group_response,
@@ -395,6 +396,12 @@ def _to_detail(
         creator_id=group.creator_id,
         participant_count=group.participant_count,
         location=group.location,
+        location_id=group.location_id,
+        location_type=group.location_type,
+        location_radius_meters=group.location_radius_meters,
+        location_municipality_code=group.location_municipality_code,
+        location_latitude=group.location_latitude,
+        location_longitude=group.location_longitude,
         budget_min=group.budget_min,
         budget_max=group.budget_max,
         restaurant_search_status=group.restaurant_search_status,

@@ -167,8 +167,8 @@ def normalize_geolonia_row(row: dict[str, str]) -> dict[str, str]:
     prefecture_name = first_present(row, "都道府県名", "prefecture_name")
     municipality_name = first_present(row, "市区町村名", "city_name")
     name_kana = first_present(row, "市区町村名カナ", "city_name_kana", required=False)
-    latitude = first_present(row, "緯度（代表点）", "latitude", "lat")
-    longitude = first_present(row, "経度（代表点）", "longitude", "lng")
+    latitude = first_present(row, "緯度（代表点）", "緯度", "latitude", "lat")
+    longitude = first_present(row, "経度（代表点）", "経度", "longitude", "lng")
 
     float(latitude)
     float(longitude)

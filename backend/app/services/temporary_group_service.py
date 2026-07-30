@@ -14,6 +14,12 @@ from app.models.temporary_group import (
     RESTAURANT_SEARCH_STATUS_SUCCEEDED,
     TemporaryGroup,
 )
+from app.models.location import (
+    LOCATION_TYPE_MUNICIPALITY,
+    LOCATION_TYPE_STATION,
+    LocationSearchEntry,
+)
+from app.repositories.location_repository import LocationRepository
 from app.models.temporary_group_participant import TemporaryGroupParticipant
 from app.models.temporary_group_vote import TemporaryGroupVote
 from app.repositories.temporary_group_repository import TemporaryGroupRepository
@@ -30,7 +36,11 @@ from app.services.code_generator import generate_temporary_group_code
 from app.services.hotpepper_service import (
     HotPepperBudgetRangeError,
     search_restaurants_for_group,
+    search_restaurants_for_group_by_coordinates,
 )
+
+STATION_SEARCH_RADIUS_METERS = 1000
+MUNICIPALITY_FALLBACK_SEARCH_RADIUS_METERS = 3000
 
 
 class TemporaryGroupCodeCollisionError(RuntimeError):
@@ -83,13 +93,36 @@ class TemporaryGroupService:
         expires_at = self._now() + timedelta(
             minutes=settings.temporary_group_ttl_minutes
         )
+        location_entry = self._resolve_location_entry(data.location_id)
+        location_value = self._group_location_value(data, location_entry)
+        radius_meters = self._radius_meters_for_location(location_entry)
 
         for _ in range(settings.temporary_group_code_max_attempts):
             group = TemporaryGroup(
                 code=generate_temporary_group_code(),
                 creator_id=data.creator_id,
                 participant_count=data.participant_count,
-                location=data.location,
+                location=location_value,
+                location_id=location_entry.id if location_entry else None,
+                location_type=location_entry.location_type if location_entry else None,
+                location_prefecture_name=(
+                    location_entry.prefecture_name if location_entry else None
+                ),
+                location_municipality_name=(
+                    location_entry.municipality_name if location_entry else None
+                ),
+                location_municipality_code=(
+                    location_entry.municipality_code if location_entry else None
+                ),
+                location_station_code=(
+                    location_entry.station_code if location_entry else None
+                ),
+                location_station_group_code=(
+                    location_entry.station_group_code if location_entry else None
+                ),
+                location_latitude=location_entry.latitude if location_entry else None,
+                location_longitude=location_entry.longitude if location_entry else None,
+                location_radius_meters=radius_meters,
                 budget_min=data.budget_min,
                 budget_max=data.budget_max,
                 restaurant=restaurant,
@@ -113,6 +146,7 @@ class TemporaryGroupService:
     @staticmethod
     async def search_restaurants_for_create(
         data: TemporaryGroupCreate,
+        db: Session | None = None,
     ) -> tuple[dict[str, Any] | None, str]:
         if (
             data.budget_min is not None
@@ -122,6 +156,37 @@ class TemporaryGroupService:
             raise TemporaryGroupSearchCriteriaError(
                 "budget_min must not exceed budget_max"
             )
+
+        location_entry = TemporaryGroupService._resolve_location_entry_from_db(
+            data.location_id,
+            db,
+        )
+        if location_entry is not None:
+            radius_meters = TemporaryGroupService._radius_meters_for_location(
+                location_entry
+            )
+            try:
+                if settings.enable_mock_restaurants:
+                    restaurant = TemporaryGroupService._mock_restaurant_search_result(
+                        location_entry.name
+                    )
+                else:
+                    restaurant = await search_restaurants_for_group_by_coordinates(
+                        latitude=location_entry.latitude,
+                        longitude=location_entry.longitude,
+                        radius_meters=radius_meters,
+                        budget_min=data.budget_min,
+                        budget_max=data.budget_max,
+                        participant_count=data.participant_count,
+                    )
+            except HotPepperBudgetRangeError as exc:
+                raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
+
+            restaurants = restaurant.get("restaurants")
+            if isinstance(restaurants, list) and restaurants:
+                return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
+
+            return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
 
         location = data.location.strip() if data.location else ""
         if not location:
@@ -147,6 +212,59 @@ class TemporaryGroupService:
             return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
 
         return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
+
+    def _resolve_location_entry(
+        self,
+        location_id: str | None,
+    ) -> LocationSearchEntry | None:
+        return self._resolve_location_entry_from_db(location_id, self.db)
+
+    @staticmethod
+    def _resolve_location_entry_from_db(
+        location_id: str | None,
+        db: Session | None,
+    ) -> LocationSearchEntry | None:
+        normalized_location_id = location_id.strip() if location_id else ""
+        if not normalized_location_id:
+            return None
+        if db is None:
+            raise TemporaryGroupSearchCriteriaError("location_id requires database")
+
+        location_type, separator, source_key = normalized_location_id.partition(":")
+        if (
+            separator != ":"
+            or location_type not in {LOCATION_TYPE_MUNICIPALITY, LOCATION_TYPE_STATION}
+            or not source_key
+            or ":" in source_key
+        ):
+            raise TemporaryGroupSearchCriteriaError("invalid location_id")
+
+        entry = LocationRepository(db).get_by_location_id(normalized_location_id)
+        if entry is None:
+            raise TemporaryGroupSearchCriteriaError("invalid location_id")
+        return entry
+
+    @staticmethod
+    def _radius_meters_for_location(
+        location_entry: LocationSearchEntry | None,
+    ) -> int | None:
+        if location_entry is None:
+            return None
+        if location_entry.location_type == LOCATION_TYPE_STATION:
+            return STATION_SEARCH_RADIUS_METERS
+        return MUNICIPALITY_FALLBACK_SEARCH_RADIUS_METERS
+
+    @staticmethod
+    def _group_location_value(
+        data: TemporaryGroupCreate,
+        location_entry: LocationSearchEntry | None,
+    ) -> str | None:
+        location = data.location.strip() if data.location else ""
+        if location:
+            return location
+        if location_entry is not None:
+            return location_entry.display_name
+        return None
 
     def get_active_by_id(self, group_id: UUID) -> TemporaryGroup | None:
         return self.repository.get_active_by_id(group_id, self._now())

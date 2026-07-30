@@ -24,22 +24,42 @@ class LocationService:
         self,
         query: str,
         limit: int = DEFAULT_LOCATION_SEARCH_LIMIT,
+        prefecture: str | None = None,
     ) -> list[LocationSearchResult]:
         normalized_query = normalize_location_query(query)
         if len(normalized_query) < MIN_LOCATION_QUERY_LENGTH:
             return []
 
         bounded_limit = min(limit, MAX_LOCATION_SEARCH_LIMIT)
-        entries = self.repository.search(normalized_query, bounded_limit)
+        normalized_prefecture = prefecture.strip() if prefecture else None
+        entries = self.repository.search(
+            normalized_query,
+            bounded_limit,
+            normalized_prefecture,
+        )
         return [self._to_result(entry) for entry in entries]
 
     def validate_location_id(self, location_id: str) -> None:
-        location_type, _, source_key = location_id.partition(":")
-        if location_type not in {"municipality", "station"} or not source_key:
+        self.get_location(location_id)
+
+    def get_location(self, location_id: str) -> LocationSearchEntry:
+        if not self.is_valid_location_id_format(location_id):
             raise InvalidLocationIdError("invalid location id")
 
-        if not self.repository.exists_by_location_id(location_id):
+        entry = self.repository.get_by_location_id(location_id)
+        if entry is None:
             raise InvalidLocationIdError("unknown location id")
+        return entry
+
+    @staticmethod
+    def is_valid_location_id_format(location_id: str) -> bool:
+        location_type, separator, source_key = location_id.partition(":")
+        return (
+            separator == ":"
+            and location_type in {"municipality", "station"}
+            and bool(source_key)
+            and ":" not in source_key
+        )
 
     @staticmethod
     def _to_result(entry: LocationSearchEntry) -> LocationSearchResult:

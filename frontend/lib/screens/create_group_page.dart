@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/api_config.dart';
 import '../models/group_creation_draft.dart';
 import '../models/location_suggestion.dart';
 import '../services/location_repository.dart';
@@ -12,6 +13,56 @@ import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
+
+const _prefectureOptions = <String>[
+  '北海道',
+  '青森県',
+  '岩手県',
+  '宮城県',
+  '秋田県',
+  '山形県',
+  '福島県',
+  '茨城県',
+  '栃木県',
+  '群馬県',
+  '埼玉県',
+  '千葉県',
+  '東京都',
+  '神奈川県',
+  '新潟県',
+  '富山県',
+  '石川県',
+  '福井県',
+  '山梨県',
+  '長野県',
+  '岐阜県',
+  '静岡県',
+  '愛知県',
+  '三重県',
+  '滋賀県',
+  '京都府',
+  '大阪府',
+  '兵庫県',
+  '奈良県',
+  '和歌山県',
+  '鳥取県',
+  '島根県',
+  '岡山県',
+  '広島県',
+  '山口県',
+  '徳島県',
+  '香川県',
+  '愛媛県',
+  '高知県',
+  '福岡県',
+  '佐賀県',
+  '長崎県',
+  '熊本県',
+  '大分県',
+  '宮崎県',
+  '鹿児島県',
+  '沖縄県',
+];
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({super.key});
@@ -28,6 +79,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   final _areaController = TextEditingController();
   final _areaFocusNode = FocusNode();
 
+  String? _selectedPrefecture;
   LocationSuggestion? _selectedLocation;
   int _peopleCount = 4;
   BudgetOption? _selectedBudget = BudgetOption.from2000To3000;
@@ -73,6 +125,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
         peopleCount: _peopleCount,
         area: _selectedLocation?.displayName ?? _areaController.text.trim(),
         budget: selectedBudget,
+        locationId: _selectedLocation?.id,
       );
       if (!mounted) {
         return;
@@ -99,7 +152,21 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   }
 
   void _selectLocation(LocationSuggestion? location) {
-    setState(() => _selectedLocation = location);
+    setState(() {
+      _selectedLocation = location;
+      _selectedPrefecture = location?.prefecture ?? _selectedPrefecture;
+    });
+  }
+
+  void _selectPrefecture(String? prefecture) {
+    setState(() {
+      _selectedPrefecture = prefecture;
+      _selectedLocation = null;
+      _areaController.clear();
+    });
+    if (prefecture != null) {
+      _areaFocusNode.requestFocus();
+    }
   }
 
   Future<void> _readAreaFromLocation() async {
@@ -140,9 +207,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       final placemarks = await Geocoding(
         locale: const Locale('ja', 'JP'),
       ).placemarkFromCoordinates(position.latitude, position.longitude);
-      final area = _formatAreaFromPlacemark(
-        placemarks.isEmpty ? null : placemarks.first,
-      );
+      final placemark = placemarks.isEmpty ? null : placemarks.first;
+      final area = _formatAreaFromPlacemark(placemark);
 
       if (area == null) {
         _showLocationSnackBar('現在地の地名を読み取れませんでした');
@@ -152,12 +218,19 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       if (!mounted) {
         return;
       }
+      final administrativeArea = placemark?.administrativeArea?.trim();
+      final prefecture =
+          administrativeArea != null &&
+              _prefectureOptions.contains(administrativeArea)
+          ? administrativeArea
+          : _selectedPrefecture;
       setState(() {
+        _selectedPrefecture = prefecture;
         _areaController.text = area;
         _selectedLocation = null;
         _hasTriedSubmit = false;
       });
-      _showLocationSnackBar('$area を入力しました');
+      _showLocationSnackBar('$area を入力しました。候補から地点を選んでください');
     } catch (_) {
       _showLocationSnackBar('位置情報を読み取れませんでした');
     } finally {
@@ -249,10 +322,12 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                         areaFocusNode: _areaFocusNode,
                         hasTriedSubmit: _hasTriedSubmit,
                         peopleCount: _peopleCount,
+                        selectedPrefecture: _selectedPrefecture,
                         selectedLocation: _selectedLocation,
                         selectedBudget: _selectedBudget,
                         isReadingLocation: _isReadingLocation,
                         onAreaSubmitted: _createGroup,
+                        onPrefectureSelected: _selectPrefecture,
                         onLocationSelected: _selectLocation,
                         onReadAreaFromLocation: _readAreaFromLocation,
                         onDecreasePeople: _peopleCount > 2
@@ -290,10 +365,12 @@ class _CreateGroupForm extends StatelessWidget {
     required this.areaFocusNode,
     required this.hasTriedSubmit,
     required this.peopleCount,
+    required this.selectedPrefecture,
     required this.selectedLocation,
     required this.selectedBudget,
     required this.isReadingLocation,
     required this.onAreaSubmitted,
+    required this.onPrefectureSelected,
     required this.onLocationSelected,
     required this.onReadAreaFromLocation,
     required this.onDecreasePeople,
@@ -306,10 +383,12 @@ class _CreateGroupForm extends StatelessWidget {
   final FocusNode areaFocusNode;
   final bool hasTriedSubmit;
   final int peopleCount;
+  final String? selectedPrefecture;
   final LocationSuggestion? selectedLocation;
   final BudgetOption? selectedBudget;
   final bool isReadingLocation;
   final VoidCallback onAreaSubmitted;
+  final ValueChanged<String?> onPrefectureSelected;
   final ValueChanged<LocationSuggestion?> onLocationSelected;
   final VoidCallback onReadAreaFromLocation;
   final VoidCallback? onDecreasePeople;
@@ -354,9 +433,15 @@ class _CreateGroupForm extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _PrefectureField(
+                  selectedPrefecture: selectedPrefecture,
+                  onSelected: onPrefectureSelected,
+                ),
+                const SizedBox(height: AppSpacing.regular),
                 _LocationSearchField(
                   controller: areaController,
                   focusNode: areaFocusNode,
+                  selectedPrefecture: selectedPrefecture,
                   selectedLocation: selectedLocation,
                   onSubmitted: onAreaSubmitted,
                   onSelected: onLocationSelected,
@@ -405,10 +490,47 @@ class _CreateGroupForm extends StatelessWidget {
   }
 }
 
+class _PrefectureField extends StatelessWidget {
+  const _PrefectureField({
+    required this.selectedPrefecture,
+    required this.onSelected,
+  });
+
+  final String? selectedPrefecture;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      key: ValueKey(selectedPrefecture),
+      initialValue: selectedPrefecture,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        prefixIcon: Icon(Icons.map_outlined),
+        hintText: '都道府県を選択',
+      ),
+      items: _prefectureOptions.map((prefecture) {
+        return DropdownMenuItem<String>(
+          value: prefecture,
+          child: Text(prefecture),
+        );
+      }).toList(),
+      onChanged: onSelected,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return '都道府県を選択してください';
+        }
+        return null;
+      },
+    );
+  }
+}
+
 class _LocationSearchField extends StatefulWidget {
   const _LocationSearchField({
     required this.controller,
     required this.focusNode,
+    required this.selectedPrefecture,
     required this.selectedLocation,
     required this.onSubmitted,
     required this.onSelected,
@@ -416,6 +538,7 @@ class _LocationSearchField extends StatefulWidget {
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final String? selectedPrefecture;
   final LocationSuggestion? selectedLocation;
   final VoidCallback onSubmitted;
   final ValueChanged<LocationSuggestion?> onSelected;
@@ -430,6 +553,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
   Timer? _debounceTimer;
   List<LocationSuggestion> _suggestions = const [];
   bool _isLoading = false;
+  bool _hasSearched = false;
   String? _errorMessage;
   int _requestSerial = 0;
   bool _isApplyingSelection = false;
@@ -438,6 +562,20 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
   void initState() {
     super.initState();
     widget.controller.addListener(_handleTextChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocationSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedPrefecture != widget.selectedPrefecture) {
+      _debounceTimer?.cancel();
+      setState(() {
+        _suggestions = const [];
+        _isLoading = false;
+        _hasSearched = false;
+        _errorMessage = null;
+      });
+    }
   }
 
   @override
@@ -459,10 +597,11 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     final query = widget.controller.text.trim();
     _debounceTimer?.cancel();
 
-    if (query.isEmpty) {
+    if (query.isEmpty || widget.selectedPrefecture == null) {
       setState(() {
         _suggestions = const [];
         _isLoading = false;
+        _hasSearched = false;
         _errorMessage = null;
       });
       return;
@@ -481,13 +620,17 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     });
 
     try {
-      final suggestions = await _repository.searchLocations(query);
+      final suggestions = await _repository.searchLocations(
+        query,
+        prefecture: widget.selectedPrefecture,
+      );
       if (!mounted || requestSerial != _requestSerial) {
         return;
       }
       setState(() {
         _suggestions = suggestions;
         _isLoading = false;
+        _hasSearched = true;
       });
     } on LocationSearchException catch (error) {
       if (!mounted || requestSerial != _requestSerial) {
@@ -496,6 +639,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
       setState(() {
         _suggestions = const [];
         _isLoading = false;
+        _hasSearched = true;
         _errorMessage = error.message;
       });
     } catch (_) {
@@ -505,6 +649,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
       setState(() {
         _suggestions = const [];
         _isLoading = false;
+        _hasSearched = true;
         _errorMessage = '地点候補を取得できませんでした';
       });
     }
@@ -522,6 +667,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     setState(() {
       _suggestions = const [];
       _isLoading = false;
+      _hasSearched = false;
       _errorMessage = null;
     });
     widget.focusNode.unfocus();
@@ -532,7 +678,10 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final hasPanel =
-        _isLoading || _errorMessage != null || _suggestions.isNotEmpty;
+        _isLoading ||
+        _errorMessage != null ||
+        _suggestions.isNotEmpty ||
+        _hasSearched;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,15 +689,22 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
         TextFormField(
           controller: widget.controller,
           focusNode: widget.focusNode,
+          enabled: widget.selectedPrefecture != null,
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => widget.onSubmitted(),
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.location_on_outlined),
-            hintText: '北千住・足立区・新宿',
+            hintText: '駅・市区町村を入力',
           ),
           validator: (value) {
+            if (widget.selectedPrefecture == null) {
+              return '先に都道府県を選択してください';
+            }
             if (value == null || value.trim().isEmpty) {
               return '行きたいエリアを入力してください';
+            }
+            if (widget.selectedLocation == null && !ApiConfig.enableMocks) {
+              return '候補から地点を選択してください';
             }
             return null;
           },
@@ -596,6 +752,18 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
       );
     }
 
+    if (_suggestions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Text(
+          '候補が見つかりません',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -604,17 +772,51 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
           Divider(height: 1, color: colors.outlineVariant),
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
+        final isStation = suggestion.type == LocationSuggestionType.station;
         return ListTile(
-          leading: Icon(
-            suggestion.type == LocationSuggestionType.station
-                ? Icons.train_rounded
-                : Icons.place_outlined,
+          leading: Icon(isStation ? Icons.train_rounded : Icons.place_outlined),
+          title: Row(
+            children: [
+              Expanded(child: Text(suggestion.name)),
+              const SizedBox(width: AppSpacing.small),
+              _LocationTypeBadge(label: isStation ? '駅' : '市区町村'),
+            ],
           ),
-          title: Text(suggestion.name),
           subtitle: Text(suggestion.supportingText),
           onTap: () => _selectSuggestion(suggestion),
         );
       },
+    );
+  }
+}
+
+class _LocationTypeBadge extends StatelessWidget {
+  const _LocationTypeBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.small,
+          vertical: AppSpacing.micro,
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colors.onSecondaryContainer,
+          ),
+        ),
+      ),
     );
   }
 }

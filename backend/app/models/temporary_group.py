@@ -3,7 +3,7 @@ from datetime import datetime
 
 from typing import Any
 
-from sqlalchemy import CHAR, CheckConstraint, DateTime, Integer, JSON, String
+from sqlalchemy import CHAR, CheckConstraint, DateTime, Float, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -28,6 +28,10 @@ class TemporaryGroup(Base):
             "('not_requested', 'succeeded', 'no_results')",
             name="ck_temporary_groups_restaurant_search_status",
         ),
+        CheckConstraint(
+            "location_type IS NULL OR location_type IN ('municipality', 'station')",
+            name="ck_temporary_groups_location_type",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -39,6 +43,35 @@ class TemporaryGroup(Base):
     creator_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     participant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    location_id: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+        index=True,
+    )
+    location_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    location_prefecture_name: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+    location_municipality_name: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    location_municipality_code: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+    )
+    location_station_code: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+    )
+    location_station_group_code: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+    )
+    location_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_radius_meters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     restaurant: Mapped[dict[str, Any] | None] = mapped_column(

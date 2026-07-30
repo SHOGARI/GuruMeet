@@ -199,10 +199,14 @@ POST /temporary-groups
 
 - 市区町村: Geolonia 住所データ `latest.csv`
   - https://geolonia.github.io/japanese-addresses/
-  - MIT License
+  - データ本体は CC BY 4.0
+  - 町丁目・小字レベルのデータを市区町村コード単位に集約して使う
 - 駅: 駅データ.jp の駅CSV
   - https://www.ekidata.jp/
-  - 利用条件は駅データ.jpの案内に従う。駅コード、駅グループコード、駅名、住所、緯度経度を使用する。
+  - 利用条件は駅データ.jpの案内に従う
+  - ひらがな・カタカナ検索を本番品質で行う場合は、駅名称カナを含む有料データを前提にする
+
+外部データ/APIのライセンス、料金、運用上の扱いは [External Data And Services](../docs/external-services.md) にまとめる。
 
 CSVはGitに含めず、ローカルまたは運用環境で取得して指定する。
 
@@ -216,6 +220,21 @@ python scripts/import_locations.py \
 `--station-lines-csv` は任意。指定すると候補表示に路線名を含める。
 
 import は再実行可能。同じコードの行は更新し、検索用テーブルは毎回再構築する。不正行はログに出して処理を継続する。
+
+一時グループ作成時に地点候補を選択した場合、frontend は表示名ではなく
+`location_id` を送る。
+
+```json
+{
+  "location": "北千住駅・東京都足立区",
+  "location_id": "station:1132005"
+}
+```
+
+backend は `location_search` から元データを解決し、`temporary_groups` に地点ID、
+種別、市区町村コード、駅コード、代表座標、検索半径を保存する。駅は代表座標から
+1,000m の半径検索、市区町村は市区町村コードを保持したうえで、Hot Pepper が区域検索に
+対応しないため代表座標から 3,000m の半径検索へ fallback する。
 
 停止:
 

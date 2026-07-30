@@ -24,7 +24,9 @@ from app.services.hotpepper_service import (
     _normalize_genre_name,
     _rank_restaurants,
     _select_restaurants_with_genre_limit,
+    hotpepper_range_for_radius,
     search_restaurants_for_group,
+    search_restaurants_for_group_by_coordinates,
     select_hotpepper_budget_codes,
 )
 from app.services.temporary_group_service import (
@@ -43,6 +45,16 @@ class TemporaryGroupCreateSchemaTests(unittest.TestCase):
         )
 
         self.assertNotIn("restaurant", request.model_dump())
+
+    def test_location_id_accepts_camel_case_payload(self) -> None:
+        request = TemporaryGroupCreate.model_validate(
+            {
+                "location": "北千住駅・東京都足立区",
+                "locationId": "station:1132005",
+            }
+        )
+
+        self.assertEqual(request.location_id, "station:1132005")
 
 
 class HotPepperBudgetSelectionTests(unittest.TestCase):
@@ -458,6 +470,36 @@ class HotPepperGroupSearchTests(unittest.IsolatedAsyncioTestCase):
 
         fetch_mock.assert_not_awaited()
 
+    async def test_coordinate_search_uses_radius_and_group_criteria(self) -> None:
+        with patch(
+            "app.services.hotpepper_service._fetch_hotpepper_shops",
+            new=AsyncMock(return_value=[]),
+        ) as fetch_mock:
+            result = await search_restaurants_for_group_by_coordinates(
+                latitude=35.7494,
+                longitude=139.805,
+                radius_meters=1000,
+                budget_min=2000,
+                budget_max=3000,
+                participant_count=4,
+            )
+
+        fetch_mock.assert_awaited_once_with(
+            {
+                "lat": 35.7494,
+                "lng": 139.805,
+                "range": 3,
+                "count": TEMPORARY_GROUP_RESTAURANT_CANDIDATE_LIMIT,
+                "budget": "B001,B002",
+            }
+        )
+        self.assertEqual(result["restaurants"], [])
+
+    def test_radius_is_capped_to_hotpepper_ranges(self) -> None:
+        self.assertEqual(hotpepper_range_for_radius(300), 1)
+        self.assertEqual(hotpepper_range_for_radius(1000), 3)
+        self.assertEqual(hotpepper_range_for_radius(999999), 5)
+
 
 class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -499,6 +541,157 @@ class TemporaryGroupRestaurantCreatePersistenceTests(unittest.IsolatedAsyncioTes
         self.assertIs(group.restaurant, search_result)
         self.assertEqual(group.restaurant_search_status, "succeeded")
         self.db.commit.assert_called_once_with()
+
+    async def test_create_group_uses_selected_station_for_coordinate_search(
+        self,
+    ) -> None:
+        location_entry = SimpleNamespace(
+            id="station:1132005",
+            location_type="station",
+            name="北千住駅",
+            display_name="北千住駅・東京都足立区",
+            prefecture_name="東京都",
+            municipality_name="足立区",
+            municipality_code=None,
+            station_code="1132005",
+            station_group_code="1132005",
+            latitude=35.7494,
+            longitude=139.805,
+        )
+        search_result = {
+            "restaurants": [{"id": "NEW"}],
+            "searched_at": "2026-07-25T00:00:00+00:00",
+        }
+
+        with (
+            patch(
+                "app.services.temporary_group_service."
+                "LocationRepository.get_by_location_id",
+                return_value=location_entry,
+            ),
+            patch(
+                "app.services.temporary_group_service."
+                "search_restaurants_for_group_by_coordinates",
+                new=AsyncMock(return_value=search_result),
+            ) as search_mock,
+        ):
+            data = TemporaryGroupCreate(
+                location="北千住駅・東京都足立区",
+                location_id="station:1132005",
+                budget_min=2000,
+                budget_max=3000,
+                participant_count=4,
+            )
+            restaurant, restaurant_search_status = (
+                await TemporaryGroupService.search_restaurants_for_create(
+                    data,
+                    self.db,
+                )
+            )
+            group = self.service.create_group(
+                data,
+                restaurant=restaurant,
+                restaurant_search_status=restaurant_search_status,
+            )
+
+        search_mock.assert_awaited_once_with(
+            latitude=35.7494,
+            longitude=139.805,
+            radius_meters=1000,
+            budget_min=2000,
+            budget_max=3000,
+            participant_count=4,
+        )
+        self.assertIs(group.restaurant, search_result)
+        self.assertEqual(group.location_id, "station:1132005")
+        self.assertEqual(group.location_type, "station")
+        self.assertEqual(group.location_radius_meters, 1000)
+
+    async def test_create_group_keeps_municipality_code_with_coordinate_fallback(
+        self,
+    ) -> None:
+        location_entry = SimpleNamespace(
+            id="municipality:13121",
+            location_type="municipality",
+            name="足立区",
+            display_name="東京都足立区",
+            prefecture_name="東京都",
+            municipality_name="足立区",
+            municipality_code="13121",
+            station_code=None,
+            station_group_code=None,
+            latitude=35.7757,
+            longitude=139.8048,
+        )
+        search_result = {
+            "restaurants": [{"id": "NEW"}],
+            "searched_at": "2026-07-25T00:00:00+00:00",
+        }
+
+        with (
+            patch(
+                "app.services.temporary_group_service."
+                "LocationRepository.get_by_location_id",
+                return_value=location_entry,
+            ),
+            patch(
+                "app.services.temporary_group_service."
+                "search_restaurants_for_group_by_coordinates",
+                new=AsyncMock(return_value=search_result),
+            ) as search_mock,
+        ):
+            data = TemporaryGroupCreate(
+                location_id="municipality:13121",
+                budget_min=2000,
+                budget_max=3000,
+                participant_count=4,
+            )
+            restaurant, restaurant_search_status = (
+                await TemporaryGroupService.search_restaurants_for_create(
+                    data,
+                    self.db,
+                )
+            )
+            group = self.service.create_group(
+                data,
+                restaurant=restaurant,
+                restaurant_search_status=restaurant_search_status,
+            )
+
+        search_mock.assert_awaited_once_with(
+            latitude=35.7757,
+            longitude=139.8048,
+            radius_meters=3000,
+            budget_min=2000,
+            budget_max=3000,
+            participant_count=4,
+        )
+        self.assertEqual(group.location, "東京都足立区")
+        self.assertEqual(group.location_id, "municipality:13121")
+        self.assertEqual(group.location_type, "municipality")
+        self.assertEqual(group.location_municipality_code, "13121")
+        self.assertEqual(group.location_radius_meters, 3000)
+
+    async def test_create_group_rejects_unknown_location_id(self) -> None:
+        with (
+            patch(
+                "app.services.temporary_group_service."
+                "LocationRepository.get_by_location_id",
+                return_value=None,
+            ),
+            patch(
+                "app.services.temporary_group_service."
+                "search_restaurants_for_group_by_coordinates",
+                new=AsyncMock(),
+            ) as search_mock,
+        ):
+            with self.assertRaises(TemporaryGroupSearchCriteriaError):
+                await TemporaryGroupService.search_restaurants_for_create(
+                    TemporaryGroupCreate(location_id="station:does-not-exist"),
+                    self.db,
+                )
+
+        search_mock.assert_not_awaited()
 
     async def test_create_group_marks_no_results_when_search_returns_empty(
         self,
@@ -638,7 +831,17 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
         )
         request = search_mock.await_args.args[0]
         self.assertEqual(request.location, "渋谷")
+        self.assertIs(search_mock.await_args.args[1], self.db)
         create_response.assert_called_once_with(request, restaurant, "succeeded")
+
+    def test_create_rejects_invalid_location_id(self) -> None:
+        response = self.client.post(
+            "/temporary-groups",
+            json={"location": "北千住駅・東京都足立区", "location_id": "station:"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "invalid location_id"})
 
     def test_removed_search_endpoint_returns_not_found(self) -> None:
         response = self.client.post(
@@ -761,6 +964,12 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             budget_max=3000,
             restaurant_search_status="succeeded",
             restaurant=restaurant,
+            location_id=None,
+            location_type=None,
+            location_radius_meters=None,
+            location_municipality_code=None,
+            location_latitude=None,
+            location_longitude=None,
         )
 
     def _response(

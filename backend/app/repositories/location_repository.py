@@ -12,7 +12,12 @@ class LocationRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def search(self, normalized_query: str, limit: int) -> list[LocationSearchEntry]:
+    def search(
+        self,
+        normalized_query: str,
+        limit: int,
+        prefecture: str | None = None,
+    ) -> list[LocationSearchEntry]:
         escaped_query = _escape_like(normalized_query)
         prefix = f"{escaped_query}%"
         contains = f"%{escaped_query}%"
@@ -36,14 +41,18 @@ class LocationRepository:
             else_=2,
         )
 
+        conditions = [
+            or_(
+                name.like(contains, escape="\\"),
+                kana.like(contains, escape="\\"),
+            )
+        ]
+        if prefecture:
+            conditions.append(LocationSearchEntry.prefecture_name == prefecture)
+
         statement = (
             select(LocationSearchEntry)
-            .where(
-                or_(
-                    name.like(contains, escape="\\"),
-                    kana.like(contains, escape="\\"),
-                )
-            )
+            .where(*conditions)
             .order_by(
                 match_rank,
                 type_rank,
@@ -61,6 +70,12 @@ class LocationRepository:
             LocationSearchEntry.id == location_id
         )
         return self.db.scalar(statement) is not None
+
+    def get_by_location_id(self, location_id: str) -> LocationSearchEntry | None:
+        statement = select(LocationSearchEntry).where(
+            LocationSearchEntry.id == location_id
+        )
+        return self.db.scalar(statement)
 
 
 def _escape_like(value: str) -> str:

@@ -49,6 +49,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'グループを作成'));
     await tester.pump();
 
+    expect(find.text('都道府県を選択してください'), findsOneWidget);
     expect(find.text('行きたいエリアを入力してください'), findsOneWidget);
     expect(find.text('エリアを入力するとグループを作成できます'), findsOneWidget);
 
@@ -65,6 +66,11 @@ void main() {
         .onPressed!();
     await tester.pump();
     expect(find.text('4人'), findsOneWidget);
+
+    await tester.tap(find.text('都道府県を選択'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('東京都').last);
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField), '渋谷');
     await tester.pump();

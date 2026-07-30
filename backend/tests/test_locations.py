@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.location import LocationSearchEntry
+from scripts.import_locations import normalize_geolonia_row
 from app.services.location_normalizer import normalize_location_query
 from app.services.location_service import (
     MAX_LOCATION_SEARCH_LIMIT,
@@ -58,6 +59,11 @@ class LocationSearchServiceTests(unittest.TestCase):
         )
         self.assertNotEqual(station_results[0].lineName, station_results[1].lineName)
 
+    def test_search_can_filter_by_prefecture(self) -> None:
+        results = LocationService(self.db).search("高田", prefecture="神奈川県")
+
+        self.assertEqual([result.id for result in results], ["station:9950101"])
+
     def test_blank_query_does_not_return_all_rows(self) -> None:
         self.assertEqual(LocationService(self.db).search("   "), [])
 
@@ -86,6 +92,21 @@ class LocationSearchServiceTests(unittest.TestCase):
             normalize_location_query(" ｷﾀｾﾝｼﾞｭ "),
             normalize_location_query("きたせんじゅ"),
         )
+
+    def test_geolonia_row_accepts_latest_csv_coordinate_columns(self) -> None:
+        row = normalize_geolonia_row(
+            {
+                "市区町村コード": "13121",
+                "都道府県名": "東京都",
+                "市区町村名": "足立区",
+                "市区町村名カナ": "アダチク",
+                "緯度": "35.7757",
+                "経度": "139.8048",
+            }
+        )
+
+        self.assertEqual(row["municipality_code"], "13121")
+        self.assertEqual(row["latitude"], "35.7757")
 
     def _seed(self) -> None:
         self.db.add_all(

@@ -23,6 +23,7 @@ router = APIRouter(tags=["locations"])
 )
 def search_locations(
     q: Annotated[str, Query(min_length=0, max_length=128)] = "",
+    prefecture: Annotated[str | None, Query(min_length=1, max_length=32)] = None,
     limit: Annotated[
         int,
         Query(ge=1),
@@ -30,7 +31,7 @@ def search_locations(
     db: Session = Depends(get_db),
 ) -> list[LocationSearchResult]:
     service = LocationService(db)
-    return service.search(q, limit)
+    return service.search(q, limit, prefecture)
 
 
 @router.get(
