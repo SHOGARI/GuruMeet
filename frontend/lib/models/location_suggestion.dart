@@ -17,8 +17,7 @@ class LocationSuggestion {
     required this.name,
     required this.displayName,
     required this.prefecture,
-    required this.latitude,
-    required this.longitude,
+    this.kana,
     this.municipality,
     this.lineName,
   });
@@ -28,11 +27,10 @@ class LocationSuggestion {
       id: json['id'] as String,
       type: LocationSuggestionType.fromJson(json['type'] as String),
       name: json['name'] as String,
+      kana: json['kana'] as String?,
       displayName: json['displayName'] as String,
       prefecture: json['prefecture'] as String,
       municipality: json['municipality'] as String?,
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
       lineName: json['lineName'] as String?,
     );
   }
@@ -40,11 +38,10 @@ class LocationSuggestion {
   final String id;
   final LocationSuggestionType type;
   final String name;
+  final String? kana;
   final String displayName;
   final String prefecture;
   final String? municipality;
-  final double latitude;
-  final double longitude;
   final String? lineName;
 
   String get supportingText {

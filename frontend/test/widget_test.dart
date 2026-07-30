@@ -67,13 +67,22 @@ void main() {
     await tester.pump();
     expect(find.text('4人'), findsOneWidget);
 
-    await tester.tap(find.text('都道府県を選択'));
+    await tester.enterText(
+      find.byKey(const ValueKey('prefecture-search-field')),
+      '東京',
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('東京都').last);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField), '渋谷');
-    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('location-search-field')),
+      '渋谷',
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('渋谷駅'));
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '3,000〜5,000円'));
     await tester.pumpAndSettle();
@@ -90,7 +99,7 @@ void main() {
     expect(find.text('招待'), findsOneWidget);
     expect(find.text('招待を送ろう'), findsOneWidget);
     expect(find.text('GROUP CODE  |  招待コード'), findsOneWidget);
-    expect(find.text('渋谷'), findsOneWidget);
+    expect(find.text('渋谷駅・東京都渋谷区'), findsOneWidget);
     expect(find.text('3,000〜5,000円'), findsOneWidget);
     expect(
       find.textContaining('http://localhost:3000/#/join/'),
@@ -357,7 +366,7 @@ void main() {
     expect(find.text('何人で行く？'), findsOneWidget);
     expect(find.text('どのあたり？'), findsOneWidget);
     expect(find.text('予算はどれくらい？'), findsOneWidget);
-    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.byType(TextFormField), findsNWidgets(2));
     expect(find.widgetWithText(OutlinedButton, '現在地から入力'), findsOneWidget);
     expect(find.text('4人'), findsOneWidget);
 
