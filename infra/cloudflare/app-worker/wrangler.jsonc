@@ -3,6 +3,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-21",
   "workers_dev": true,
+  "observability": {
+    "enabled": true,
+  },
   "assets": {
     "directory": "../../../frontend/build/web",
     "binding": "ASSETS",
@@ -47,6 +50,9 @@
     "staging": {
       "name": "gurumeet-staging",
       "workers_dev": true,
+      "observability": {
+        "enabled": true,
+      },
       "vars": {
         "ENVIRONMENT": "staging",
         "GURUMEET_API_ROOT_PATH": "/api",
@@ -101,6 +107,9 @@
     "production": {
       "name": "gurumeet",
       "workers_dev": false,
+      "observability": {
+        "enabled": true,
+      },
       "vars": {
         "ENVIRONMENT": "production",
         "GURUMEET_API_ROOT_PATH": "/api",
