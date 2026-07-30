@@ -1,8 +1,11 @@
 COMPOSE = docker compose --env-file .env -f compose.yaml
 
-.PHONY: dev logs down reset-db migrate db-shell cleanup-temporary-groups
+.PHONY: check-env dev logs down reset-db migrate db-shell cleanup-temporary-groups
 
-dev:
+check-env:
+	cd .. && python3 scripts/check_local_env.py --scope backend
+
+dev: check-env
 	$(COMPOSE) up -d --build
 
 logs:
@@ -11,7 +14,7 @@ logs:
 down:
 	$(COMPOSE) down
 
-reset-db:
+reset-db: check-env
 	$(COMPOSE) down -v
 	$(COMPOSE) up -d --build
 

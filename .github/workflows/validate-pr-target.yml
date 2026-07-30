@@ -1,0 +1,45 @@
+name: PR target validation
+
+on: pull_request
+
+concurrency:
+  group: validate-pr-target-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate PR target
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate PR source and target branches
+        shell: bash
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "PR source branch: ${HEAD_BRANCH}"
+          echo "PR target branch: ${BASE_BRANCH}"
+
+          if [[ "$BASE_BRANCH" == "main" ]]; then
+            if [[ "$HEAD_BRANCH" != "develop" ]]; then
+              echo "::error::PRs targeting main are allowed only from develop. Current source is '${HEAD_BRANCH}'."
+              exit 1
+            fi
+
+            echo "Valid PR target: develop -> main."
+            exit 0
+          fi
+
+          if [[ "$HEAD_BRANCH" =~ ^(feature|fix|bugfix|hotfix|chore|docs|refactor|test|tests|ci)/ ]]; then
+            if [[ "$BASE_BRANCH" != "develop" ]]; then
+              echo "::error::Work branches matching feature/*, fix/*, bugfix/*, hotfix/*, chore/*, docs/*, refactor/*, test(s)/*, or ci/* may only target develop. Current target is '${BASE_BRANCH}'."
+              exit 1
+            fi
+
+            echo "Valid PR target: work branch -> develop."
+            exit 0
+          fi
+
+          echo "No PR target restriction matched for source '${HEAD_BRANCH}' and target '${BASE_BRANCH}'."

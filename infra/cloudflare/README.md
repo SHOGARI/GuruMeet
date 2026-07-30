@@ -195,7 +195,7 @@ develop -> main の pull request
   -> backend 構文確認
   -> frontend analyze / test
   -> Worker 型チェック
-  -> staging / production の GitHub Environment secrets 有無確認
+  -> staging / production の GitHub Environment secrets / vars 有無確認
 ```
 
 GitHub Actions に必要な repository secrets:
@@ -211,9 +211,19 @@ Cloudflare Worker / Container に渡す runtime secrets は、GitHub Environment
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+DISCORD_ALERT_WEBHOOK_URL
 ```
 
-deploy workflow は GitHub Environment secrets から `wrangler deploy --secrets-file` へ渡す。
+GitHub Environment vars には、secretではない実行時設定を登録する。
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+deploy workflow は GitHub Environment secrets を `wrangler deploy --secrets-file` へ渡し、
+GitHub Environment vars を `wrangler deploy --var` へ渡す。
 Cloudflare Dashboard や手元の `.env` を本番値の source of truth にしない。
 
 ### GitHub secrets の登録
@@ -256,15 +266,45 @@ GitHub repository
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
 ```
 
-`PARTICIPANT_TOKEN_HASH_SECRET` は環境ごとに別の長いランダム値を使う。
+Environment vars は `staging` / `production` ごとに登録する。
+
+```text
+GitHub repository
+  -> Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+各 environment に登録する値:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は環境ごとに別の長いランダム値を使う。
 
 ```sh
 openssl rand -hex 32
 ```
 
 `staging` と `production` の `DATABASE_URL` は別DBを指す値にする。
+`CORS_ALLOW_ORIGINS` と `GURUMEET_ENABLE_MOCK_RESTAURANTS` は以下を使う。
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 ### Cloudflare API Token の作成
 
@@ -369,8 +409,45 @@ Secret value: Cloudflare account ID
 <Cloudflare account ID>
 ```
 
-`DATABASE_URL` / `HOTPEPPER_API_KEY` / `PARTICIPANT_TOKEN_HASH_SECRET` は GitHub Environment secrets に登録する。
-deploy workflow が `wrangler deploy --secrets-file` で Cloudflare に渡すため、手動で Cloudflare Wrangler secret を更新する運用にはしない。
+アプリ用の実行時 secret は GitHub Environment secrets に登録する。
+deploy workflow が secrets を `wrangler deploy --secrets-file` で、vars を `wrangler deploy --var` で Cloudflare に渡すため、手動で Cloudflare Wrangler secret を更新する運用にはしない。
+
+staging / production それぞれの Environment secrets に登録する値:
+
+```text
+DATABASE_URL
+HOTPEPPER_API_KEY
+PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+DISCORD_ALERT_WEBHOOK_URL
+```
+
+`DISCORD_ALERT_WEBHOOK_URL` は staging / production で別の Discord Incoming Webhook URL を登録する。
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は以下のような長いランダム値を使う。
+
+```sh
+openssl rand -hex 32
+```
+
+staging / production それぞれの Environment vars に登録する値:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+公開時のCORSは `CORS_ALLOW_ORIGINS` で制限する。
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 ## Cloudflare Access
 
@@ -579,4 +656,18 @@ Neon も usage を確認する。
 Compute hours
 Storage
 Branch
+```
+
+## 自動削除とバックアップ
+
+一時グループの期限切れデータは Cloudflare Cron Trigger から毎日13:00 JSTに、
+Backend Container の `/internal/cleanup-expired-temporary-groups` を呼んで削除する。
+
+Neon PostgreSQL のバックアップ / PITR は Neon Dashboard 側で有効化・確認する。
+本番公開前に最低限以下を確認する。
+
+```text
+staging branch と production branch が分離されている
+production branch のバックアップ / restore 手順を確認済み
+復元テスト用 branch を作成して restore できる
 ```

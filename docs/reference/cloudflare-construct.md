@@ -134,7 +134,7 @@ gurumeet/
 
   docs/
     reference/
-      clouflare-construct.md             # [追加] この手順書
+      cloudflare-construct.md            # [追加] この手順書
 ```
 
 Cloudflare 固有の設定は `infra/cloudflare/app-worker/` に寄せる。`backend/app` には Cloudflare の都合を混ぜない。
@@ -622,6 +622,7 @@ Settings
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
 ```
 
 staging / production それぞれに登録する値:
@@ -630,6 +631,7 @@ staging / production それぞれに登録する値:
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
 ```
 
 値の作り方:
@@ -638,10 +640,39 @@ PARTICIPANT_TOKEN_HASH_SECRET
 openssl rand -hex 32
 ```
 
-`PARTICIPANT_TOKEN_HASH_SECRET` は上のような長いランダム値を使う。
-`DATABASE_URL` は各環境の Neon PostgreSQL connection string を使う。
+GitHub Environment vars に登録する値:
 
-deploy workflow が GitHub Environment secrets を `wrangler deploy --secrets-file` で Cloudflare に渡す。Git には残らない。
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
+```
+
+GitHub Environment vars の登録場所:
+
+```text
+Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+`PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は上のような長いランダム値を使う。
+`DATABASE_URL` は各環境の Neon PostgreSQL connection string を使う。
+`CORS_ALLOW_ORIGINS` と `GURUMEET_ENABLE_MOCK_RESTAURANTS` は以下を使う。
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
+
+deploy workflow が GitHub Environment secrets を `wrangler deploy --secrets-file` で、
+GitHub Environment vars を `wrangler deploy --var` で Cloudflare に渡す。Git には残らない。
 
 ### 6. Cloudflare Access
 
@@ -751,8 +782,9 @@ DB migration
 4. frontend build を作る
 5. Worker の型チェックを通す
 6. DB migration を必要なら実行する
-7. wrangler deploy する
-8. 疎通確認する
+7. 地点マスタが必要なら production/staging DB に投入する
+8. wrangler deploy する
+9. 疎通確認する
 ```
 
 ## 実際に行った staging 初回デプロイ作業
@@ -877,6 +909,7 @@ Settings
   -> Environments
   -> staging / production
   -> Environment secrets
+  -> Add secret
 ```
 
 staging / production それぞれに登録する値:
@@ -885,9 +918,37 @@ staging / production それぞれに登録する値:
 DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
+INTERNAL_TASK_SECRET
+```
+
+GitHub Environment vars に登録する値:
+
+```text
+CORS_ALLOW_ORIGINS
+GURUMEET_ENABLE_MOCK_RESTAURANTS
 ```
 
 `DATABASE_URL` は各環境の Neon connection string を使う。
+`INTERNAL_TASK_SECRET` は `openssl rand -hex 32` で生成する。
+GitHub Environment vars は以下に登録する。
+
+```text
+Settings
+  -> Environments
+  -> staging / production
+  -> Variables
+  -> Add variable
+```
+
+```text
+staging:
+  CORS_ALLOW_ORIGINS=https://stg.gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+
+production:
+  CORS_ALLOW_ORIGINS=https://gurumeet.net
+  GURUMEET_ENABLE_MOCK_RESTAURANTS=false
+```
 
 ### 7. Cloudflare Access を staging に設定
 
@@ -961,13 +1022,18 @@ vars
 Wrangler の environment では top-level containers / durable_objects が期待通り継承されないため
 ```
 
-Container には GitHub Environment secrets から deploy 時に渡された `DATABASE_URL` を環境変数として渡す。
+Container には GitHub Environment secrets / vars から deploy 時に渡された実行時設定を環境変数として渡す。
 
 ```ts
 import { env as workerEnv } from "cloudflare:workers";
 
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
+  HOTPEPPER_API_KEY?: string;
+  CORS_ALLOW_ORIGINS?: string;
+  PARTICIPANT_TOKEN_HASH_SECRET?: string;
+  INTERNAL_TASK_SECRET?: string;
+  GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
 };
 
@@ -976,6 +1042,12 @@ export class BackendContainer extends Container {
   sleepAfter = "5m";
   envVars = {
     DATABASE_URL: runtimeEnv.DATABASE_URL,
+    HOTPEPPER_API_KEY: runtimeEnv.HOTPEPPER_API_KEY,
+    CORS_ALLOW_ORIGINS: runtimeEnv.CORS_ALLOW_ORIGINS,
+    PARTICIPANT_TOKEN_HASH_SECRET: runtimeEnv.PARTICIPANT_TOKEN_HASH_SECRET,
+    INTERNAL_TASK_SECRET: runtimeEnv.INTERNAL_TASK_SECRET,
+    GURUMEET_ENABLE_MOCK_RESTAURANTS:
+      runtimeEnv.GURUMEET_ENABLE_MOCK_RESTAURANTS ?? "false",
     ENVIRONMENT: runtimeEnv.ENVIRONMENT ?? "production",
   };
 }
@@ -1076,6 +1148,10 @@ GitHub Environment secrets: staging
   DATABASE_URL
   HOTPEPPER_API_KEY
   PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+GitHub Environment vars: staging
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
 Access:          stg.gurumeet.net
 ```
 
@@ -1143,6 +1219,10 @@ GitHub Environment secrets: production
   DATABASE_URL
   HOTPEPPER_API_KEY
   PARTICIPANT_TOKEN_HASH_SECRET
+  INTERNAL_TASK_SECRET
+GitHub Environment vars: production
+  CORS_ALLOW_ORIGINS
+  GURUMEET_ENABLE_MOCK_RESTAURANTS
 Access:          初期公開前は gurumeet.net にもかけてよい。一般公開時に外す
 ```
 
@@ -1159,6 +1239,8 @@ npm run check
 ```
 
 DB migration がある場合は production DB に適用する。
+地点マスタの初回投入・更新が必要な場合は
+[Location Data Import](./location-data-import.md) の本番DB投入手順に従う。
 
 ### deploy
 
@@ -1223,6 +1305,10 @@ infra/cloudflare/app-worker/.dev.vars
 ```env
 FRONTEND_PORT=3000
 GURUMEET_API_BASE_URL=http://localhost:8000
+GURUMEET_INVITE_BASE_URL=http://localhost:3000
+GURUMEET_ENABLE_MOCKS=true
+DEMO_MODE=true
+DEMO_ROOM_CODE=G7M24
 ```
 
 frontend は `frontend/` で `make dev` を実行すると、`FRONTEND_PORT` のポートで起動する。
@@ -1482,7 +1568,7 @@ infra/cloudflare/app-worker/tsconfig.json
 infra/cloudflare/app-worker/wrangler.jsonc
 infra/cloudflare/app-worker/src/index.ts
 infra/cloudflare/app-worker/.dev.vars.sample
-docs/reference/clouflare-construct.md
+docs/reference/cloudflare-construct.md
 ```
 
 まだやらなくてよい:

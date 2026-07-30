@@ -94,7 +94,14 @@ A7K2F
 
 backendは共有URLを返さない。共有URLはfrontendのroute設計に依存するため、backendは `id` と `code` の発行に責務を絞る。
 
-希望場所が指定されている場合は、作成時にHot Pepper APIで店舗候補を検索し、`temporary_groups.restaurant` に保存する。frontendは作成後に検索APIを実行せず、必要な表示データを `GET /temporary-groups/{group_id}` で取得する。検索状態は `restaurant_search_status` に保存する。
+`location_id` が指定されている場合は、backendが地点マスタから緯度経度を解決する。
+`custom_location` が指定されている場合は、現在地や地図ピンの緯度経度を
+`custom_locations` に保存し、その座標を検索原点にする。
+どちらの場合も作成時にHot Pepper APIで店舗候補を半径検索して
+`temporary_groups.restaurant` に保存する。
+frontendは作成後に検索APIを実行せず、必要な表示データを
+`GET /temporary-groups/{group_id}` で取得する。検索状態は
+`restaurant_search_status` に保存する。
 
 ### Request
 
@@ -104,29 +111,56 @@ bodyなしでも作成可能。
 {}
 ```
 
-作成者を渡す場合:
+選択場所から作成する場合:
 
 ```json
 {
   "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a",
   "creator_id": "user_123",
   "participant_count": 4,
-  "location": "渋谷",
+  "location": "渋谷駅・東京都渋谷区",
+  "location_id": "station:1130205",
   "budget_min": 2000,
   "budget_max": 3000
 }
 ```
+
+現在地から作成する場合:
+
+```json
+{
+  "participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a",
+  "participant_count": 4,
+  "location": "東京都新宿区付近",
+  "custom_location": {
+    "display_name": "東京都新宿区付近",
+    "prefecture_name": "東京都",
+    "latitude": 35.6895,
+    "longitude": 139.6917,
+    "accuracy_meters": 24.5,
+    "source": "current_location"
+  },
+  "budget_min": 2000,
+  "budget_max": 3000
+}
+```
+
+`location_id` と `custom_location` は同時に指定できない。
 
 ### Processing
 
 1. `id` にUUID v4を発行する。
 2. `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` から5文字の `code` を生成する。
 3. リクエストに希望条件があれば保存する。
-4. `location` が空でなければ、作成前にHot Pepper APIで店舗候補を検索する。
-5. 検索結果を `restaurant` に保存し、`restaurant_search_status` を更新する。
-6. `participant_token` があれば作成者を参加者として登録する。
-7. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
-8. `code` のunique制約に衝突した場合はrollbackして再生成する。
+4. `location_id` があれば、地点マスタの緯度経度と設定値の半径でHot Pepper APIを検索する。
+5. `custom_location` があれば、`custom_locations` に保存した緯度経度と設定値の半径でHot Pepper APIを検索する。
+6. 検索結果を `restaurant` に保存し、`restaurant_search_status` を更新する。
+7. `participant_token` があれば作成者を参加者として登録する。
+8. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
+9. `code` のunique制約に衝突した場合はrollbackして再生成する。
+
+`location` だけが指定され、`location_id` も `custom_location` もない場合は400を返す。
+自由入力地点によるHot Pepperのkeyword検索は行わない。
 
 作成成功レスポンスは作成結果だけを返す。店舗候補や希望条件は、返却された `id` を使って `GET /temporary-groups/{group_id}` で取得する。
 
@@ -193,7 +227,9 @@ UUIDは推測困難なので、SNS共有やリンク共有ではこのAPIを使�
   "created_at": "2026-07-15T12:00:00Z",
   "creator_id": "user_123",
   "participant_count": 4,
-  "location": "渋谷",
+  "location": "渋谷駅・東京都渋谷区",
+  "location_id": "station:1130205",
+  "custom_location_id": null,
   "budget_min": 2000,
   "budget_max": 3000,
   "restaurant_search_status": "succeeded",

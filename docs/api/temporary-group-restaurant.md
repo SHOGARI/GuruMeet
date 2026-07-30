@@ -10,7 +10,7 @@ TemporaryGroup作成APIに希望条件を送信する。店舗検索専用APIは
 
 ---
 
-# 実装目的
+## 実装目的
 
 従来はHotPepper APIの検索結果をそのまま返却するだけで、
 店舗情報はDBへ保存されていなかった。
@@ -29,7 +29,7 @@ TemporaryGroup作成時に店舗検索を行い、取得した店舗情報をTem
 
 ---
 
-# 処理フロー
+## 処理フロー
 
 ① TemporaryGroup作成
 
@@ -41,6 +41,8 @@ POST /temporary-groups
 
 - participant_count
 - location
+- location_id
+- custom_location
 - budget_min
 - budget_max
 - 招待コード
@@ -50,11 +52,15 @@ POST /temporary-groups
 
 ② リクエストの
 
-- location
+- location_id
+- custom_location
 - budget_min
 - budget_max
 
-を利用
+を利用。`location_id` がある場合はbackendが地点マスタを引き、
+`custom_location` がある場合は `custom_locations` に保存した緯度経度を使う。
+解決した緯度経度と設定値の半径をHot Pepper APIへ渡す。
+自由入力地点によるkeyword検索は使わない。
 
 ↓
 
@@ -78,9 +84,9 @@ POST /temporary-groups
 
 ---
 
-# API
+## API
 
-## グループ作成
+### グループ作成
 
 ```
 POST /temporary-groups
@@ -92,7 +98,7 @@ TemporaryGroupを作成し、希望場所があれば店舗候補も検索して
 
 ---
 
-## グループ取得
+### グループ取得
 
 ```
 GET /temporary-groups/{group_id}
@@ -104,7 +110,7 @@ TemporaryGroup情報と保存済み店舗情報を取得する。
 
 ---
 
-# restaurantカラム
+## restaurantカラム
 
 restaurantはフロントから送信されるデータではない。
 
@@ -114,7 +120,7 @@ restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラ�
 
 | value | meaning |
 | --- | --- |
-| `not_requested` | locationが空で検索していない。 |
+| `not_requested` | `location_id` / `custom_location` が空で検索していない。 |
 | `succeeded` | Hot Pepperから1件以上の店舗候補を取得した。 |
 | `no_results` | Hot Pepper検索は成功したが候補が0件だった。 |
 
@@ -140,20 +146,25 @@ restaurant_search_statusはHot Pepper店舗検索の状態を保存するカラ�
 
 ---
 
-# HotPepper検索条件
+## HotPepper検索条件
 
 使用する項目
 
-- location
+- location_id
+- custom_location
 - budget_min
 - budget_max
 
-participant_countは現在HotPepper APIに対応する検索条件が存在しないため、
-検索条件には利用していない。
+`location_id` からbackendが地点マスタを引き、緯度経度と設定値の半径をHot Pepper APIへ渡す。
+現在地から入力された場合は、`custom_location` を `custom_locations` に保存し、
+その緯度経度と設定値の半径をHot Pepper APIへ渡す。
+自由入力地点によるkeyword検索は使わない。
+
+participant_countはHotPepper APIの検索条件には利用せず、取得後の候補ranking scoreに利用する。
 
 ---
 
-# 予算検索
+## 予算検索
 
 HotPepperは予算コードで検索する仕様のため、
 
@@ -181,7 +192,7 @@ B002
 
 ---
 
-# 保存・詳細取得で扱う店舗情報
+## 保存・詳細取得で扱う店舗情報
 
 以下の項目のみ保存し、詳細取得APIで返却する。
 
@@ -198,7 +209,7 @@ B002
 
 ---
 
-# 保存仕様
+## 保存仕様
 
 - 最大10件取得
 - 店舗IDで重複除外
@@ -208,7 +219,7 @@ B002
 
 ---
 
-# エラー処理
+## エラー処理
 
 400
 
@@ -236,7 +247,7 @@ DB保存失敗時
 
 ---
 
-# 実装して確認済み
+## 実装して確認済み
 
 - TemporaryGroup作成
 - 作成時の店舗検索
@@ -252,7 +263,7 @@ DB保存失敗時
 
 ---
 
-# 今後の拡張
+## 今後の拡張
 
 restaurantに保存された店舗情報を利用して、
 
@@ -265,7 +276,7 @@ restaurantに保存された店舗情報を利用して、
 
 ---
 
-# 店舗推薦アルゴリズム仕様書
+## 店舗推薦アルゴリズム仕様書
 
 ## 概要
 
@@ -274,7 +285,7 @@ TemporaryGroupの店舗検索では、Hot Pepper APIの取得順をそのまま�
 
 ---
 
-# 全体フロー
+### 全体フロー
 
 ```text
 TemporaryGroup取得
@@ -303,9 +314,9 @@ Hot Pepper APIから30件取得
 
 ---
 
-# スコアリング
+### スコアリング
 
-## 1. 予算スコア（70点）
+#### 1. 予算スコア（70点）
 
 グループの希望予算と店舗予算の中央値を比較する。
 
@@ -328,7 +339,7 @@ Hot Pepper APIから30件取得
 
 ---
 
-## 2. 席数スコア（30点）
+#### 2. 席数スコア（30点）
 
 グループ人数と店舗の総席数（`capacity`）から採点する。
 
@@ -344,7 +355,7 @@ Hot Pepper APIから30件取得
 
 ---
 
-# 総合スコア
+### 総合スコア
 
 ```text
 total_score = budget_score + capacity_score
@@ -361,16 +372,16 @@ total_score = budget_score + capacity_score
 
 ---
 
-# ジャンル分散
+### ジャンル分散
 
 ランキング後にジャンルの偏りを抑える。
 
-## 第1段階
+#### 第1段階
 
 - 同一ジャンルは最大2店舗まで採用
 - スコア順に選出
 
-## 第2段階
+#### 第2段階
 
 10店舗に満たない場合のみ、
 
@@ -386,7 +397,7 @@ total_score = budget_score + capacity_score
 
 ---
 
-# 取得件数
+### 取得件数
 
 | 内容 | 件数 |
 |---|---:|
@@ -397,7 +408,7 @@ total_score = budget_score + capacity_score
 
 ---
 
-# 実装上のポイント
+### 実装上のポイント
 
 - 店舗ID重複はスコア計算前に除外
 - スコアは内部処理のみ利用
@@ -407,7 +418,7 @@ total_score = budget_score + capacity_score
 
 ---
 
-# このアルゴリズムを採用した理由
+### このアルゴリズムを採用した理由
 
 - 希望予算に近い店舗を優先できる
 - 人数に対して余裕のある店舗を評価できる
