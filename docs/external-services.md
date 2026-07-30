@@ -123,11 +123,13 @@ https://www.ekidata.jp/
 
 検索条件:
 
-- 自由入力地点: `keyword`
 - 駅候補: 駅の緯度経度を中心に半径検索
-- 市区町村候補: 市区町村コードを保存しつつ、現行連携では代表座標を中心に半径検索へfallback
+- 市区町村候補: 市区町村の代表座標を中心に半径検索
 - 予算: Hot Pepperのbudget codeへ変換
 - 人数: 店舗候補のranking scoreに利用
+
+一時グループ作成では、自由入力地点による `keyword` 検索は使わない。
+frontendで選択された `location_id` からbackendが地点マスタを引き、緯度経度と設定値の半径をHot Pepper APIへ渡す。
 
 ### 取得元
 

@@ -85,6 +85,8 @@ JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60
 CORS_ALLOW_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8080","http://127.0.0.1:8080"]'
 GURUMEET_ENABLE_MOCK_RESTAURANTS=true
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS=1000
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS=3000
 PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 INTERNAL_TASK_SECRET=<openssl rand -hex 32 の出力>
 ```
@@ -133,6 +135,8 @@ Environment vars:
 ```text
 CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS
 ```
 
 Environment secrets の登録場所:
@@ -165,6 +169,8 @@ CORS_ALLOW_ORIGINS:
   staging: https://stg.gurumeet.net
   production: https://gurumeet.net
 GURUMEET_ENABLE_MOCK_RESTAURANTS: false
+GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS: 1000
+GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS: 3000
 ```
 
 `backend` フォルダ内で実行:
@@ -233,9 +239,10 @@ import は再実行可能。同じ地点IDの行は更新する。不正行は�
 ```
 
 backend は `locations` から元データを解決し、`temporary_groups` には
-`location_id` だけを保存する。駅は駅座標から半径検索し、市区町村は市区町村コードを
-子テーブルに保持したうえで、Hot Pepper が区域検索に対応しない場合は代表座標からの
-半径検索へ fallback する。
+`location_id` だけを保存する。駅は駅座標から半径検索し、市区町村は代表座標から
+半径検索する。検索半径は `GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS` と
+`GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS` で設定する。
+自由入力文字列による Hot Pepper の keyword 検索は一時グループ作成では使わない。
 
 停止:
 

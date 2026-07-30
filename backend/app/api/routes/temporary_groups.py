@@ -54,7 +54,7 @@ router = APIRouter(
     summary="一時グループを作成する",
     description=(
         "一時グループを作成し、UUIDと手入力参加用の5桁コードを発行します。"
-        "希望場所がある場合は、同時に店舗候補を検索して保存します。"
+        "location_idがある場合は、地点マスタの緯度経度から店舗候補を検索して保存します。"
         "共有URLはbackendでは作らず、返却されたUUIDを使ってfrontend側で組み立てます。"
     ),
     responses={
@@ -144,7 +144,8 @@ async def create_temporary_group(
                         "created_at": "2026-07-15T12:00:00Z",
                         "creator_id": "user_123",
                         "participant_count": 4,
-                        "location": "渋谷",
+                        "location": "渋谷駅・東京都渋谷区",
+                        "location_id": "station:1130205",
                         "budget_min": 2000,
                         "budget_max": 3000,
                         "restaurant_search_status": "succeeded",

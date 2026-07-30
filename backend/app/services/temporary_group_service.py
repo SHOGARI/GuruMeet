@@ -35,12 +35,8 @@ from app.schemas.temporary_group import (
 from app.services.code_generator import generate_temporary_group_code
 from app.services.hotpepper_service import (
     HotPepperBudgetRangeError,
-    search_restaurants_for_group,
     search_restaurants_for_group_by_coordinates,
 )
-
-STATION_SEARCH_RADIUS_METERS = 1000
-MUNICIPALITY_FALLBACK_SEARCH_RADIUS_METERS = 3000
 
 
 class TemporaryGroupCodeCollisionError(RuntimeError):
@@ -168,30 +164,12 @@ class TemporaryGroupService:
 
             return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
 
-        location = data.location.strip() if data.location else ""
-        if not location:
+        if data.location is None or not data.location.strip():
             return None, RESTAURANT_SEARCH_STATUS_NOT_REQUESTED
 
-        try:
-            if settings.enable_mock_restaurants:
-                restaurant = TemporaryGroupService._mock_restaurant_search_result(
-                    location
-                )
-            else:
-                restaurant = await search_restaurants_for_group(
-                    location=location,
-                    budget_min=data.budget_min,
-                    budget_max=data.budget_max,
-                    participant_count=data.participant_count,
-                )
-        except HotPepperBudgetRangeError as exc:
-            raise TemporaryGroupSearchCriteriaError(str(exc)) from exc
-
-        restaurants = restaurant.get("restaurants")
-        if isinstance(restaurants, list) and restaurants:
-            return restaurant, RESTAURANT_SEARCH_STATUS_SUCCEEDED
-
-        return restaurant, RESTAURANT_SEARCH_STATUS_NO_RESULTS
+        raise TemporaryGroupSearchCriteriaError(
+            "location_id is required for restaurant search"
+        )
 
     def _resolve_location_entry(
         self,
@@ -226,13 +204,11 @@ class TemporaryGroupService:
 
     @staticmethod
     def _radius_meters_for_location(
-        location_entry: Location | None,
-    ) -> int | None:
-        if location_entry is None:
-            return None
+        location_entry: Location,
+    ) -> int:
         if location_entry.location_type == LOCATION_TYPE_STATION:
-            return STATION_SEARCH_RADIUS_METERS
-        return MUNICIPALITY_FALLBACK_SEARCH_RADIUS_METERS
+            return settings.hotpepper_station_search_radius_meters
+        return settings.hotpepper_municipality_search_radius_meters
 
     @staticmethod
     def _group_location_value(
