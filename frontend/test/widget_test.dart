@@ -50,7 +50,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('都道府県を選択してください'), findsOneWidget);
-    expect(find.text('行きたいエリアを入力してください'), findsOneWidget);
+    expect(find.text('先に都道府県を選択してください'), findsOneWidget);
     expect(find.text('エリアを入力するとグループを作成できます'), findsOneWidget);
 
     tester

@@ -1085,18 +1085,16 @@ class _SuggestionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+    return Material(
+      color: colors.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(color: colors.outlineVariant),
+        side: BorderSide(color: colors.outlineVariant),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 260),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: child,
-        ),
+        child: child,
       ),
     );
   }
