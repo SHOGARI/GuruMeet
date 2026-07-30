@@ -8,4 +8,5 @@
 - [Database](./database/)
 - [Designs](./designs/)
 - [External Data And Services](./external-services.md)
+- [Location Data Import](./location-data-import.md)
 - [Migration](./migration/)

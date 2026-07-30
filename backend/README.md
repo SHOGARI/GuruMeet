@@ -216,6 +216,7 @@ POST /temporary-groups
 外部データ/APIのライセンス、料金、運用上の扱いは [External Data And Services](../docs/external-services.md) にまとめる。
 
 CSVはGitに含めず、ローカルまたは運用環境で取得して指定する。
+初回投入の具体的な手順は [Location Data Import](../docs/location-data-import.md) にまとめる。
 
 ```sh
 python scripts/import_locations.py \
@@ -225,6 +226,33 @@ python scripts/import_locations.py \
 ```
 
 `--station-lines-csv` は任意。指定すると候補表示に路線名を含める。
+
+ローカルDocker ComposeのDBへ投入する場合は、駅CSVを
+`backend/data/location-master/ekidata/` に置いたうえで以下を実行する。
+
+```sh
+docker compose up -d --build
+./scripts/import_location_master_local.sh
+```
+
+`docker compose up -d --build ./scripts/import_location_master_local.sh` ではない。
+Compose起動とimport script実行は別コマンドで行う。
+
+apiコンテナに入って確認する場合:
+
+```sh
+docker compose exec api sh
+```
+
+コンテナ内ではbackendディレクトリが `/app` にマウントされている。
+手動importする場合は以下の形になる。
+
+```sh
+python scripts/import_locations.py \
+  --municipalities-csv /app/data/location-master/geolonia/latest.csv \
+  --stations-csv /app/data/location-master/ekidata/station.csv \
+  --station-lines-csv /app/data/location-master/ekidata/line.csv
+```
 
 import は再実行可能。同じ地点IDの行は更新する。不正行はログに出して処理を継続する。
 
