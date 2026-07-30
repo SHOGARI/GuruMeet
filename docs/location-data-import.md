@@ -140,6 +140,140 @@ LOCATION_IMPORT_RUNNER=host ./scripts/import_location_master_local.sh
 
 通常のローカル開発ではDocker実行を使う。
 
+## 本番DBへ投入
+
+本番DBはNeon PostgreSQLを前提にする。
+CSV本体と本番 `DATABASE_URL` はGitに置かない。`backend/.env` にも本番値は書かず、
+GitHub Environment secrets、Neon Dashboard、または一時的なshell環境変数だけで扱う。
+
+基本方針:
+
+- stagingで同じ手順を先に試す
+- production DBへ投入する前にDB migrationを適用する
+- 可能ならNeonのbranch/snapshotなどで復旧点を作る
+- CSVは作業端末または一時的なCI artifactに置き、投入後は不要なら削除する
+- importは再実行可能。同じ `locations.id` / 子テーブルのキーはinsertではなくupdateされる
+
+### 1. CSVを用意する
+
+作業端末の `backend/data/location-master/` にローカル投入と同じ配置で置く。
+
+```text
+backend/data/location-master/
+  geolonia/latest.csv
+  ekidata/station.csv
+  ekidata/line.csv
+```
+
+Geoloniaは以下の `curl` で取得できる。
+駅データ.jpは取得済みCSVを配置する。
+
+```sh
+cd backend
+mkdir -p data/location-master/geolonia
+mkdir -p data/location-master/ekidata
+curl -fL \
+  https://raw.githubusercontent.com/geolonia/japanese-addresses/master/data/latest.csv \
+  -o data/location-master/geolonia/latest.csv
+cp /path/to/ekidata/station.csv data/location-master/ekidata/station.csv
+cp /path/to/ekidata/line.csv data/location-master/ekidata/line.csv
+```
+
+### 2. 本番DB接続文字列を一時的に渡す
+
+Neonのproduction branchのconnection stringを使う。
+bulk importではpooler経由よりdirect connectionを使う方が無難。
+
+```sh
+export PRODUCTION_DATABASE_URL='postgresql://...'
+```
+
+この値はshell historyやログに残さない。作業後は必ず消す。
+
+```sh
+unset PRODUCTION_DATABASE_URL
+```
+
+### 3. migrationを本番DBへ適用する
+
+deploy pipelineでmigrationを実行済みなら不要。
+手動で行う場合は、ローカルDocker imageを使ってproduction DBへ接続する。
+imageをまだ作っていない場合は先に `docker compose build api` を実行する。
+
+```sh
+cd backend
+docker compose run --rm --no-deps \
+  -e DATABASE_URL="$PRODUCTION_DATABASE_URL" \
+  api alembic upgrade head
+```
+
+### 4. importを実行する
+
+hostにPython依存を入れず、ローカルDocker imageからproduction DBへ接続して投入する。
+`--no-deps` を付けることで、ローカルDBコンテナを起動せず本番DBだけへ接続する。
+imageをまだ作っていない場合は先に `docker compose build api` を実行する。
+
+```sh
+cd backend
+docker compose run --rm --no-deps \
+  -e DATABASE_URL="$PRODUCTION_DATABASE_URL" \
+  api python scripts/import_locations.py \
+    --municipalities-csv /app/data/location-master/geolonia/latest.csv \
+    --stations-csv /app/data/location-master/ekidata/station.csv \
+    --station-lines-csv /app/data/location-master/ekidata/line.csv
+```
+
+`line.csv` がない場合:
+
+```sh
+docker compose run --rm --no-deps \
+  -e DATABASE_URL="$PRODUCTION_DATABASE_URL" \
+  api python scripts/import_locations.py \
+    --municipalities-csv /app/data/location-master/geolonia/latest.csv \
+    --stations-csv /app/data/location-master/ekidata/station.csv
+```
+
+hostのPythonで実行する場合:
+
+```sh
+cd backend
+DATABASE_URL="$PRODUCTION_DATABASE_URL" \
+LOCATION_IMPORT_RUNNER=host \
+REFRESH_GEOLONIA=1 \
+./scripts/import_location_master_local.sh
+```
+
+### 5. 投入後確認
+
+production APIで候補が返ることを確認する。
+
+```sh
+curl 'https://gurumeet.net/api/locations?prefecture=東京都'
+```
+
+Cloudflare Accessをかけている環境では通常の `curl` では確認できない場合がある。
+その場合はブラウザで確認するか、Access service tokenを使う。
+
+DB側で件数を見る場合は、Neon SQL Editorまたは `psql` で確認する。
+
+```sql
+select location_type, count(*)
+from locations
+group by location_type
+order by location_type;
+```
+
+投入したデータの取得日、checksum、件数は
+[Location Data Versions](./location-data-versions.md) に記録する。
+
+### 6. 作業後
+
+```sh
+unset PRODUCTION_DATABASE_URL
+```
+
+CSV本体はGit管理しない。作業端末に残す場合も、取得元・取得日・ライセンスを分かる形で管理する。
+
 ## 件数確認
 
 ```sh

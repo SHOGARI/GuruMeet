@@ -57,7 +57,7 @@ Geolonia住所データを市区町村コード単位に集約し、代表座標
 
 - CSV本体はGitに含めない。
 - 初期投入、更新投入は `backend/scripts/import_locations.py` で行う。
-- 取得日と取得元URLを運用ログに残す。
+- 取得日と取得元URLを [Location Data Versions](./location-data-versions.md) に残す。
 - データ更新時は同じscriptを再実行し、既存データをupsertする。
 
 ## 駅データ.jp
@@ -113,6 +113,7 @@ https://www.ekidata.jp/
 - CSV本体はGitに含めない。
 - 駅データ.jpから `station.csv` と `line.csv` を取得し、import scriptへ渡す。
 - 自動取得は前提にしない。会員ログインや購入が絡むため、取得済みCSVを運用環境に配置して投入する。
+- 取得日、無料/有料の種別、checksumを [Location Data Versions](./location-data-versions.md) に残す。
 - データ更新時は同じscriptを再実行し、既存データをupsertする。
 
 ## Hot Pepper Gourmet API
