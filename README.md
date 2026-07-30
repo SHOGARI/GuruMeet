@@ -19,44 +19,39 @@
 
 ## Overview
 
-GuruMeet は、複数人で飲食店を決めるための一時グループアプリです。
+GuruMeet は、人数・場所・予算から飲食店候補を出し、参加者がスワイプ投票で店を決める一時グループアプリです。
 
-幹事が人数・場所・予算を入れてグループを作成し、参加者は共有URLから入室します。
-backend は地点情報と Hot Pepper Gourmet API を使って店舗候補を取得し、
-frontend は候補をスワイプして投票・結果表示までを担当します。
+招待URL / 5桁コードで参加でき、駅・市区町村・現在地を検索原点にできます。
+店舗候補は Hot Pepper Gourmet API から取得し、候補の並びは予算・人数・ジャンル分散を見ながら推薦します。
 
 ```text
-グループ作成
-  -> 招待URLを共有
-  -> 参加者が入室
-  -> 店舗候補をスワイプ
-  -> 投票結果から店を決定
-  -> 店舗詳細 / Google Maps を確認
+Create group -> Share invite -> Swipe restaurants -> Vote -> Decide
 ```
 
 ## Features
 
 | feature | status |
 | --- | --- |
-| 🔗 招待URL / 5桁コードによる一時グループ参加 | ✅ implemented |
-| 👤 匿名参加者トークンによる参加者識別 | ✅ implemented |
-| 🗾 都道府県別の駅・市区町村候補検索 | ✅ implemented |
-| 📍 現在地からの店舗検索 | ✅ implemented |
-| 🍽️ Hot Pepper Gourmet API による店舗候補取得 | ✅ implemented |
-| 👆 スワイプ投票と結果表示 | ✅ implemented |
-| 🧹 期限切れ一時グループの cleanup | ✅ implemented |
-| ☁️ Cloudflare Workers / Containers デプロイ | ✅ implemented |
+| 🔗 招待URL / 5桁コード参加 | ✅ |
+| 👤 匿名参加者トークン | ✅ |
+| 🗾 駅・市区町村検索 | ✅ |
+| 📍 現在地検索 | ✅ |
+| 🍽️ Hot Pepper 店舗候補取得 | ✅ |
+| 👆 スワイプ投票 / 結果表示 | ✅ |
+| 🧹 期限切れ cleanup | ✅ |
+| ☁️ Cloudflare Workers Containers deploy | ✅ |
 
 ## Tech Stack
 
-| layer             | technology                                                  |
-| ----------------- | ----------------------------------------------------------- |
-| Frontend          | Flutter, Dart, Material 3                                   |
-| Backend           | FastAPI, Pydantic, SQLAlchemy                               |
-| Database          | PostgreSQL, Alembic                                         |
-| Location master   | Geolonia 住所データ, 駅データ.jp                            |
-| Restaurant search | Hot Pepper Gourmet API                                      |
-| Infrastructure    | Cloudflare Workers, Workers Containers, R2, Neon PostgreSQL |
+| layer | technology |
+| --- | --- |
+| Frontend | Flutter, Dart, Material 3 |
+| Backend | FastAPI, Pydantic, SQLAlchemy |
+| Database | PostgreSQL, Alembic |
+| Recommendation | Budget score, capacity score, genre diversity |
+| Location | Geolonia 住所データ, 駅データ.jp, current location |
+| Infra | Cloudflare Workers, Workers Containers, R2, Neon PostgreSQL, GitHub Actions |
+| Ops | Discord webhook alerts, scheduled cleanup |
 
 ## Frontend
 
@@ -66,21 +61,14 @@ frontend は候補をスワイプして投票・結果表示までを担当し�
   </a>
 </div>
 
-`frontend/` は Flutter アプリです。
-グループ作成、招待URL表示、参加、待機室、店舗候補のスワイプ、投票結果、店舗詳細表示を担当します。
+シンプルに使えること、そして店選びがちゃんと美味しそうに見えることを重視しています。
+暖色、写真中心のカード、迷わない導線で、食事会らしい温度感を出しています。
 
-使い心地はシンプルに保ちつつ、店選びの画面がちゃんと美味しそうに見えることを重視しています。
-暖色を中心にした配色、写真が主役になるカード、迷わず次の操作へ進める導線で、食事会らしい温度感を出しています。
-
-| area                      | files                                          |
-| ------------------------- | ---------------------------------------------- |
-| Screens                   | `frontend/lib/screens/`                        |
-| API client / repositories | `frontend/lib/services/`                       |
-| Models                    | `frontend/lib/models/`                         |
-| Theme / shared widgets    | `frontend/lib/theme/`, `frontend/lib/widgets/` |
-
-ローカルでは `frontend/.env` の値を `--dart-define` として渡します。
-UI確認だけなら mock mode、backend とつなぐ場合は `GURUMEET_ENABLE_MOCKS=false` にします。
+```text
+frontend/lib/screens   UI screens
+frontend/lib/services  API clients
+frontend/lib/theme     colors / tokens
+```
 
 ## Backend
 
@@ -90,22 +78,15 @@ UI確認だけなら mock mode、backend とつなぐ場合は `GURUMEET_ENABLE_
   </a>
 </div>
 
-`backend/` は FastAPI アプリです。
-一時グループ、匿名参加者、地点検索、店舗候補取得、投票、期限切れ cleanup を担当します。
+FastAPI + PostgreSQL で、一時グループ、匿名参加、地点検索、店舗推薦、投票を扱います。
+レコメンドはただの取得順ではなく、予算・人数・候補の偏りを見て並べる設計です。
 
-backend では、ただ店舗を並べるだけでなく、予算・人数・候補の偏りを考慮したレコメンドアルゴリズムを重視しています。
-DB は一時グループ、参加者、投票、地点マスタを素直に扱えるように、PostgreSQL と SQLAlchemy / Alembic を前提に設計しています。
-
-| area            | files                                 |
-| --------------- | ------------------------------------- |
-| API routes      | `backend/app/api/routes/`             |
-| Schemas         | `backend/app/schemas/`                |
-| Models          | `backend/app/models/`                 |
-| Services        | `backend/app/services/`               |
-| DB / migrations | `backend/app/db/`, `backend/alembic/` |
-
-店舗検索はグループ作成時に実行します。
-選択地点は `locations`、現在地や地図ピンは `custom_locations` を検索原点として扱います。
+```text
+backend/app/api/routes  endpoints
+backend/app/services    recommendation / business logic
+backend/app/models      SQLAlchemy models
+backend/alembic         migrations
+```
 
 ## Infra
 
@@ -115,24 +96,17 @@ DB は一時グループ、参加者、投票、地点マスタを素直に扱�
   </a>
 </div>
 
-`infra/` は Cloudflare と周辺運用の設定を置きます。
-Flutter Web を Worker Static Assets で配信し、`/api/*` を Workers Container 上の FastAPI に流す構成です。
+「楽に開発する」と「Cloudflare を使い倒す」を意識した構成です。
+Flutter Web は Worker Static Assets、API は Workers Container 上の FastAPI、DB は Neon PostgreSQL。
+Discord webhook でリアルな利用感と障害兆候を拾えるようにしています。
 
-infra は「楽に開発する」と「Cloudflare を使い倒す」を意識しています。
-deploy、環境変数、staging / production の分離を整えつつ、Discord webhook で実際に使われている感覚や障害の兆候を拾える運用にしています。
-
-| area                  | files                          |
-| --------------------- | ------------------------------ |
-| Cloudflare Worker     | `infra/cloudflare/app-worker/` |
-| Deploy commands       | `infra/cloudflare/Makefile`    |
-| Cloudflare operations | `infra/cloudflare/README.md`   |
-| Discord alerts        | `infra/discord/`               |
-
-staging / production の secret 実値は Git に置かず、GitHub Environment secrets から deploy workflow 経由で渡します。
+```text
+infra/cloudflare/app-worker  Worker entrypoint
+infra/cloudflare/Makefile    deploy commands
+infra/discord                webhook integration
+```
 
 ## Quick Start
-
-### Backend
 
 ```sh
 cd backend
@@ -141,18 +115,6 @@ make dev
 make migrate
 ```
 
-API:
-
-```text
-http://localhost:8000
-http://localhost:8000/docs
-```
-
-Hot Pepper API を使わずにローカル確認する場合は、`backend/.env` の
-`GURUMEET_ENABLE_MOCK_RESTAURANTS=true` を使います。
-
-### Frontend
-
 ```sh
 cd frontend
 cp .env.example .env
@@ -160,115 +122,31 @@ make install
 make dev
 ```
 
-Chrome で起動する場合:
-
-```sh
-cd frontend
-make dev-chrome
-```
-
-## Environment Check
-
-ローカル起動前に、必要な環境変数が空でないか確認できます。
-値そのものは表示しません。
-
-```sh
-cd backend
-make check-env
-
-cd ../frontend
-make check-env
-```
-
-本番・staging の secret 実値は Git に書きません。
-GitHub Actions / Cloudflare / Neon の設定は [infra/cloudflare/README.md](./infra/cloudflare/README.md) を参照してください。
-
-## Location Master
-
-地点検索は `locations` を親テーブルにし、駅と市区町村の固有情報を分けて保存します。
-CSV本体や有料データは Git 管理しません。
-
-```sh
-cd backend
-./scripts/import_location_master_local.sh
-```
-
-詳細:
-
-- [External Data And Services](./docs/reference/external-services.md)
-- [Location Data Import](./docs/reference/location-data-import.md)
-- [Location Data Versions](./docs/reference/location-data-versions.md)
-
 ## Project Layout
 
 ```text
 gurumeet/
-├── frontend/                     # Flutter app
-│   ├── lib/
-│   │   ├── screens/              # 画面
-│   │   ├── services/             # API client / repositories
-│   │   ├── models/               # UI/API models
-│   │   ├── theme/                # 色・余白・Typography
-│   │   └── widgets/              # 共通UI
-│   ├── android/                  # Android project
-│   ├── ios/                      # iOS project
-│   └── web/                      # Web assets
-│
-├── backend/                      # FastAPI app
-│   ├── app/
-│   │   ├── api/routes/           # API endpoints
-│   │   ├── schemas/              # request / response
-│   │   ├── models/               # SQLAlchemy models
-│   │   ├── services/             # business logic
-│   │   ├── repositories/         # DB access
-│   │   └── db/                   # DB session / base
-│   ├── alembic/                  # migrations
-│   ├── scripts/                  # location import scripts
-│   └── tests/                    # backend tests
-│
-├── infra/                        # deploy / operations
-│   ├── cloudflare/
-│   │   └── app-worker/           # Worker entrypoint
-│   └── discord/                  # Discord webhook integration
-│
-├── docs/                         # specs / design / reference
-│   ├── api/                      # API specs
-│   ├── database/                 # ER diagram and table docs
-│   ├── designs/                  # design decisions
-│   ├── reference/                # setup guides / external services
-│   └── assets/                   # README / docs images
-│
-├── scripts/                      # repo-level helper scripts
-└── README.md
+├── frontend/              Flutter app
+│   ├── lib/screens/       screens
+│   ├── lib/services/      API clients
+│   └── lib/theme/         design tokens
+├── backend/               FastAPI app
+│   ├── app/api/routes/    endpoints
+│   ├── app/services/      business logic
+│   ├── app/models/        SQLAlchemy models
+│   └── alembic/           migrations
+├── infra/                 Cloudflare / Discord operations
+│   ├── cloudflare/        Worker deploy
+│   └── discord/           webhook alerts
+├── docs/                  specs, designs, references
+└── scripts/               repo helper scripts
 ```
 
-## Documentation
+## Docs
 
 - [Docs Index](./docs/README.md)
 - [API](./docs/api/)
 - [Database](./docs/database/)
 - [Designs](./docs/designs/)
 - [Reference](./docs/reference/)
-- [Backend README](./backend/README.md)
-- [Frontend README](./frontend/README.md)
-- [Cloudflare README](./infra/cloudflare/README.md)
-
-## Quality Checks
-
-Backend:
-
-```sh
-cd backend
-python -m unittest discover -s tests
-```
-
-Frontend:
-
-```sh
-cd frontend
-make format
-make analyze
-make test
-```
-
-backend tests は Python 依存を入れた環境で実行してください。
+- [Cloudflare Ops](./infra/cloudflare/README.md)
