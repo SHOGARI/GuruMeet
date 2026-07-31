@@ -179,8 +179,15 @@ void main() {
       }
     }
 
+    expect(find.text('これで全部完了しますか？'), findsOneWidget);
+    expect(find.text('投票を完了する'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, '投票を完了する'));
+    await tester.pumpAndSettle();
+
     expect(find.text('投票完了'), findsOneWidget);
     expect(find.text('みんなの投票を待っています'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsNothing);
     expect(find.text('1 / 4人 完了'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 4600));
     await tester.pumpAndSettle();
