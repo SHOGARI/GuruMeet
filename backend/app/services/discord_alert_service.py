@@ -85,7 +85,7 @@ def notify_voting_completed(
             "1位候補": (
                 top_restaurant.name if top_restaurant is not None else "(none)"
             ),
-            "完了まで": _elapsed_minutes(group.created_at),
+            "完了まで": _elapsed_duration(group.created_at),
             "完了時刻": (
                 _format_jst(group.voting_completed_at)
                 if group.voting_completed_at is not None
@@ -151,11 +151,12 @@ def _format_jst(value: datetime) -> str:
     return value.astimezone(DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S JST")
 
 
-def _elapsed_minutes(started_at: datetime) -> str:
+def _elapsed_duration(started_at: datetime) -> str:
     started_at_utc = started_at.astimezone(UTC)
     elapsed_seconds = (datetime.now(UTC) - started_at_utc).total_seconds()
-    elapsed_minutes = max(0, round(elapsed_seconds / 60))
-    return f"{elapsed_minutes}分"
+    total_seconds = max(0, round(elapsed_seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes}m{seconds:02d}s"
 
 
 def _field_value(value: object) -> str:
