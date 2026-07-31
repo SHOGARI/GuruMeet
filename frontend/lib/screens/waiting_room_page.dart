@@ -9,6 +9,7 @@ import '../models/room_member.dart';
 import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import 'swipe_page.dart';
 
@@ -82,6 +83,11 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       if ((_isHost && _isRoomReady) || (!_isHost && votingStarted)) {
         _joinTimer?.cancel();
       }
+      if (!_isHost && votingStarted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('投票が始まりました')));
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -105,7 +111,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       }
       await Navigator.of(
         context,
-      ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+      ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
     } catch (error) {
       if (!mounted) {
         return;
@@ -127,7 +133,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     setState(() => _isNavigating = true);
     await Navigator.of(
       context,
-    ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+    ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
     if (mounted) {
       setState(() => _isNavigating = false);
     }
@@ -151,7 +157,10 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         : AppSpacing.xLarge;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('メンバー待機')),
+      appBar: AppBar(
+        title: const Text('メンバー待機'),
+        actions: [GroupCodeBadge(code: widget.draft.groupId)],
+      ),
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(

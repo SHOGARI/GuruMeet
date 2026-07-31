@@ -4,6 +4,7 @@ import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
@@ -26,7 +27,10 @@ class RestaurantDetailPage extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return AppShell(
-      appBar: AppBar(title: const Text('店舗詳細')),
+      appBar: AppBar(
+        title: const Text('店舗詳細'),
+        actions: [GroupCodeBadge(code: draft.groupId)],
+      ),
       maxContentWidth: AppSizes.homeMaxWidth,
       bottomBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -89,11 +93,6 @@ class RestaurantDetailPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xLarge),
           Text(restaurant.description, style: theme.textTheme.bodyLarge),
           const SizedBox(height: AppSpacing.section),
-          _DetailRow(label: 'グループID', value: draft.groupId),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),
-            child: Divider(),
-          ),
           _DetailRow(label: '人数', value: '${draft.peopleCount}人'),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),

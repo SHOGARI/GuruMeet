@@ -34,6 +34,8 @@ from app.services.hotpepper_service import (
     select_hotpepper_budget_codes,
 )
 from app.services.temporary_group_service import (
+    TemporaryGroupHostRequiredError,
+    TemporaryGroupNotFoundError,
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
 )
@@ -969,6 +971,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
                 "expires_at",
                 "joined_participant_count",
                 "is_full",
+                "phase",
             },
         )
         request = search_mock.await_args.args[0]
@@ -1060,6 +1063,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
                 "expires_at",
                 "joined_participant_count",
                 "is_full",
+                "phase",
             },
         )
 
@@ -1091,7 +1095,65 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
                 "expires_at",
                 "joined_participant_count",
                 "is_full",
+                "phase",
             },
+        )
+
+    def test_dissolve_endpoint_expires_group(self) -> None:
+        group = self._group(restaurant={"restaurants": [{"id": "J0001"}]})
+
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service = service_class.return_value
+            service.dissolve_group.return_value = group
+            service.count_participants.return_value = 1
+            service.is_full.return_value = False
+
+            response = self.client.post(
+                f"/temporary-groups/{self.group_id}/dissolve",
+                json={"participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], str(self.group_id))
+        service.dissolve_group.assert_called_once_with(
+            self.group_id,
+            "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a",
+        )
+
+    def test_dissolve_endpoint_returns_not_found_for_expired_group(self) -> None:
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service_class.return_value.dissolve_group.side_effect = (
+                TemporaryGroupNotFoundError
+            )
+
+            response = self.client.post(
+                f"/temporary-groups/{self.group_id}/dissolve",
+                json={"participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_dissolve_endpoint_requires_host(self) -> None:
+        with patch(
+            "app.api.routes.temporary_groups.TemporaryGroupService"
+        ) as service_class:
+            service_class.return_value.dissolve_group.side_effect = (
+                TemporaryGroupHostRequiredError
+            )
+
+            response = self.client.post(
+                f"/temporary-groups/{self.group_id}/dissolve",
+                json={"participant_token": "8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json(),
+            {"detail": "この一時グループを解散できるのは作成者だけです。"},
         )
 
     def _group(self, restaurant: dict[str, object]) -> SimpleNamespace:
@@ -1100,6 +1162,8 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             code="A7K2F",
             expires_at=datetime(2026, 7, 26, 0, 0, tzinfo=UTC),
             created_at=datetime(2026, 7, 25, 0, 0, tzinfo=UTC),
+            voting_started_at=None,
+            voting_completed_at=None,
             creator_id="user_123",
             participant_count=4,
             location="渋谷",
@@ -1121,6 +1185,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             expires_at=group.expires_at,
             joined_participant_count=joined_participant_count,
             is_full=False,
+            phase="waiting",
         )
 
 

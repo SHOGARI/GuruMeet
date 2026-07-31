@@ -81,6 +81,10 @@ class TemporaryGroupParticipantNotFoundError(RuntimeError):
     pass
 
 
+class TemporaryGroupHostRequiredError(RuntimeError):
+    pass
+
+
 class TemporaryGroupRestaurantNotFoundError(ValueError):
     pass
 
@@ -329,6 +333,28 @@ class TemporaryGroupService:
             return None
 
         self._join_group(group, participant_token)
+        self.db.commit()
+        self.db.refresh(group)
+        return group
+
+    def dissolve_group(
+        self,
+        group_id: UUID,
+        participant_token: str,
+    ) -> TemporaryGroup:
+        now = self._now()
+        group = self.repository.get_active_by_id_for_update(group_id, now)
+        if group is None:
+            raise TemporaryGroupNotFoundError
+
+        participant = self._require_participant(group.id, participant_token)
+        if (
+            group.creator_id is not None
+            and str(participant.anonymous_user_id) != group.creator_id
+        ):
+            raise TemporaryGroupHostRequiredError
+
+        self.repository.expire(group, now)
         self.db.commit()
         self.db.refresh(group)
         return group

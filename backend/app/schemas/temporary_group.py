@@ -6,6 +6,8 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+TemporaryGroupPhase = Literal["waiting", "swiping", "result"]
+
 
 class CustomLocationCreate(BaseModel):
     display_name: str = Field(
@@ -126,12 +128,25 @@ class TemporaryGroupParticipantJoinRequest(BaseModel):
     )
 
 
+class TemporaryGroupDissolveRequest(BaseModel):
+    participant_token: str = Field(
+        min_length=16,
+        max_length=256,
+        description="グループを解散する作成者の匿名参加者トークン。",
+        examples=["8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"],
+    )
+
+
 class TemporaryGroupResponse(BaseModel):
     id: UUID = Field(description="一時グループのUUID。frontend側で共有URLを組み立てるために使う。")
     code: str = Field(description="手入力参加用の5桁コード。", examples=["A7K2F"])
     expires_at: datetime = Field(description="この時刻を過ぎると取得・参加できない。")
     joined_participant_count: int = Field(description="現在参加済みの人数。")
     is_full: bool = Field(description="参加人数が上限に達しているか。")
+    phase: TemporaryGroupPhase = Field(
+        description="一時グループの進行状態。waiting, swiping, result のいずれか。",
+        examples=["waiting"],
+    )
 
 
 class TemporaryGroupDetail(TemporaryGroupResponse):

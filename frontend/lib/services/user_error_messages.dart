@@ -29,6 +29,16 @@ String roomCreateErrorMessage(Object error) {
   return 'グループ作成に失敗しました。通信状態を確認して再試行してください。';
 }
 
+String roomDissolveErrorMessage(Object error) {
+  if (error case ApiException(statusCode: 403)) {
+    return 'このグループを解散できるのは作成者だけです。';
+  }
+  if (error case ApiException(statusCode: 404)) {
+    return 'グループが見つかりません。すでに解散または期限切れの可能性があります。';
+  }
+  return 'グループの解散に失敗しました。通信状態を確認して再試行してください。';
+}
+
 String votingErrorMessage(Object error) {
   if (error case ApiException(statusCode: 400, message: final message)) {
     return message;

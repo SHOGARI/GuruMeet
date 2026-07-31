@@ -92,6 +92,8 @@ abstract class RoomRepository {
 
   Future<RoomInvitePreview> getInvitePreview({required String inviteToken});
 
+  Future<void> dissolveRoom(GroupCreationDraft draft);
+
   Future<List<RoomMember>> getMembers(GroupCreationDraft draft);
 
   Future<void> startVoting(GroupCreationDraft draft);
@@ -170,6 +172,11 @@ class MockRoomRepository implements RoomRepository {
       budget: BudgetOption.from2000To3000,
       isFull: false,
     );
+  }
+
+  @override
+  Future<void> dissolveRoom(GroupCreationDraft draft) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
   @override
@@ -324,6 +331,7 @@ class ApiRoomRepository implements RoomRepository {
       budget: budget,
       isHost: true,
       locationId: locationId,
+      phase: GroupPhase.fromApi(json['phase']),
     );
   }
 
@@ -356,6 +364,7 @@ class ApiRoomRepository implements RoomRepository {
       ),
       isHost: false,
       locationId: detail['location_id'] as String?,
+      phase: GroupPhase.fromApi(detail['phase'] ?? json['phase']),
     );
   }
 
@@ -363,6 +372,19 @@ class ApiRoomRepository implements RoomRepository {
     return RegExp(
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
     ).hasMatch(value);
+  }
+
+  @override
+  Future<void> dissolveRoom(GroupCreationDraft draft) async {
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.dissolveRoom(draft);
+    }
+    final participantToken = await _participantToken();
+    await _apiClient.postJson(
+      '/temporary-groups/$roomId/dissolve',
+      body: {'participant_token': participantToken},
+    );
   }
 
   @override

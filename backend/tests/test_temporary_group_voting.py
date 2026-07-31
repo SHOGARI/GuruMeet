@@ -15,6 +15,7 @@ from app.services.temporary_group_service import (
     TemporaryGroupParticipantNotFoundError,
     TemporaryGroupRestaurantNotFoundError,
     TemporaryGroupService,
+    TemporaryGroupHostRequiredError,
     TemporaryGroupVotingCandidatesError,
     TemporaryGroupVotingCompleteError,
     TemporaryGroupVotingNotCompleteError,
@@ -65,6 +66,10 @@ class FakeTemporaryGroupRepository:
 
     def complete_voting(self, group, completed_at):
         group.voting_completed_at = group.voting_completed_at or completed_at
+        return group
+
+    def expire(self, group, expired_at):
+        group.expires_at = expired_at
         return group
 
     def get_vote(self, group_id, anonymous_user_id, restaurant_id):
@@ -123,6 +128,7 @@ def make_group(
         },
         voting_started_at=voting_started_at,
         voting_completed_at=voting_completed_at,
+        creator_id=None,
     )
 
 
@@ -143,6 +149,31 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertEqual(progress.candidate_count, 2)
         self.assertEqual(progress.joined_participant_count, 1)
         self.assertFalse(progress.is_complete)
+
+    def test_dissolve_group_sets_expires_at_to_now(self) -> None:
+        group = make_group()
+        service, _ = self.make_service(group)
+        before = datetime.now(UTC)
+
+        dissolved = service.dissolve_group(group.id, TOKEN)
+
+        self.assertIs(dissolved, group)
+        self.assertGreaterEqual(group.expires_at, before)
+        self.assertLessEqual(group.expires_at, datetime.now(UTC))
+
+    def test_dissolve_group_requires_host_when_creator_is_set(self) -> None:
+        group = make_group()
+        service, repository = self.make_service(group)
+        group.creator_id = str(uuid4())
+
+        with self.assertRaises(TemporaryGroupHostRequiredError):
+            service.dissolve_group(group.id, TOKEN)
+
+        self.assertGreater(group.expires_at, datetime.now(UTC))
+
+        group.creator_id = str(repository.user.id)
+        service.dissolve_group(group.id, TOKEN)
+        self.assertLessEqual(group.expires_at, datetime.now(UTC))
 
     def test_start_voting_allows_missing_restaurant_candidates(self) -> None:
         group = make_group(restaurant={"restaurants": []})

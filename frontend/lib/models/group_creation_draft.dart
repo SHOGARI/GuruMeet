@@ -10,6 +10,7 @@ class GroupCreationDraft {
     this.locationId,
     required this.isHost,
     this.roomId,
+    this.phase = GroupPhase.waiting,
   });
 
   factory GroupCreationDraft.createMock({
@@ -27,6 +28,7 @@ class GroupCreationDraft {
         locationId: locationId,
         isHost: true,
         roomId: null,
+        phase: GroupPhase.waiting,
       );
     }
 
@@ -48,6 +50,7 @@ class GroupCreationDraft {
       locationId: locationId,
       isHost: true,
       roomId: null,
+      phase: GroupPhase.waiting,
     );
   }
 
@@ -60,6 +63,7 @@ class GroupCreationDraft {
       locationId: null,
       isHost: false,
       roomId: null,
+      phase: GroupPhase.waiting,
     );
   }
 
@@ -71,6 +75,7 @@ class GroupCreationDraft {
     required BudgetOption budget,
     required bool isHost,
     String? locationId,
+    GroupPhase phase = GroupPhase.waiting,
   }) {
     return GroupCreationDraft(
       peopleCount: peopleCount,
@@ -80,6 +85,7 @@ class GroupCreationDraft {
       locationId: locationId,
       isHost: isHost,
       roomId: roomId,
+      phase: phase,
     );
   }
 
@@ -90,9 +96,24 @@ class GroupCreationDraft {
   final String? locationId;
   final bool isHost;
   final String? roomId;
+  final GroupPhase phase;
 
   String get inviteToken => roomId ?? groupId;
   String get inviteUrl => '${InviteConfig.baseUrl}/#/join/$inviteToken';
+}
+
+enum GroupPhase {
+  waiting,
+  swiping,
+  result;
+
+  factory GroupPhase.fromApi(Object? value) {
+    return switch (value) {
+      'swiping' => GroupPhase.swiping,
+      'result' => GroupPhase.result,
+      _ => GroupPhase.waiting,
+    };
+  }
 }
 
 enum BudgetOption {
