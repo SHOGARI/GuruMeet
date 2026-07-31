@@ -589,6 +589,10 @@ class _MemberTile extends StatelessWidget {
                       const SizedBox(width: AppSpacing.small),
                       const _MemberBadge(label: 'ホスト'),
                     ],
+                    if (activeMember?.isMe ?? false) ...[
+                      const SizedBox(width: AppSpacing.small),
+                      const _MemberBadge(label: 'あなた'),
+                    ],
                   ],
                 ),
                 const SizedBox(height: AppSpacing.micro),

@@ -4,6 +4,7 @@ class RoomMember {
     required this.name,
     required this.avatarUrl,
     required this.isHost,
+    required this.isMe,
     required this.isReady,
     required this.hasCompletedVoting,
   });
@@ -12,6 +13,7 @@ class RoomMember {
   final String name;
   final String? avatarUrl;
   final bool isHost;
+  final bool isMe;
   final bool isReady;
   final bool hasCompletedVoting;
 
@@ -20,6 +22,7 @@ class RoomMember {
     String? name,
     String? avatarUrl,
     bool? isHost,
+    bool? isMe,
     bool? isReady,
     bool? hasCompletedVoting,
   }) {
@@ -28,6 +31,7 @@ class RoomMember {
       name: name ?? this.name,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isHost: isHost ?? this.isHost,
+      isMe: isMe ?? this.isMe,
       isReady: isReady ?? this.isReady,
       hasCompletedVoting: hasCompletedVoting ?? this.hasCompletedVoting,
     );

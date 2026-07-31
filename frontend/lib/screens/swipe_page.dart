@@ -851,6 +851,10 @@ class _VotingMemberTile extends StatelessWidget {
                   const SizedBox(width: AppSpacing.small),
                   _TinyStatusPill(label: 'ホスト', completed: completed),
                 ],
+                if (member.isMe) ...[
+                  const SizedBox(width: AppSpacing.small),
+                  _TinyStatusPill(label: 'あなた', completed: completed),
+                ],
               ],
             ),
           ),

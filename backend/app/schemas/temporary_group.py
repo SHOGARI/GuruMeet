@@ -202,6 +202,8 @@ class TemporaryGroupParticipantVotingProgress(BaseModel):
     anonymous_user_id: UUID
     completed_vote_count: int
     is_complete: bool
+    is_me: bool = False
+    is_host: bool = False
 
 
 class TemporaryGroupVotingProgress(BaseModel):

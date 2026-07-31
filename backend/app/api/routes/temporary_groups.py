@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -253,11 +253,12 @@ def submit_temporary_group_vote(
 )
 def get_temporary_group_voting_progress(
     group_id: UUID,
+    participant_token: str | None = Query(default=None, min_length=16, max_length=256),
     db: Session = Depends(get_db),
 ) -> TemporaryGroupVotingProgress:
     service = TemporaryGroupService(db)
     try:
-        return service.get_voting_progress(group_id)
+        return service.get_voting_progress(group_id, participant_token)
     except TemporaryGroupNotFoundError:
         raise _not_found() from None
     except TemporaryGroupVotingCandidatesError as exc:

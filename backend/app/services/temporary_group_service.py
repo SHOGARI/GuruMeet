@@ -129,7 +129,10 @@ class TemporaryGroupService:
                     self.db.flush()
                 self.repository.add(group)
                 if data.participant_token is not None:
-                    self._join_group(group, data.participant_token)
+                    participant = self._join_group(group, data.participant_token)
+                    if group.creator_id is None:
+                        group.creator_id = str(participant.anonymous_user_id)
+                        self.db.flush()
                 self.db.commit()
                 self.db.refresh(group)
                 return group
@@ -359,7 +362,7 @@ class TemporaryGroupService:
         self.repository.start_voting(group, self._now())
         self.db.commit()
         self.db.refresh(group)
-        return self.get_voting_progress(group.id)
+        return self.get_voting_progress(group.id, participant_token)
 
     def submit_vote(
         self,
@@ -389,7 +392,10 @@ class TemporaryGroupService:
                 return TemporaryGroupVoteSubmitResponse(
                     restaurant_id=restaurant_id,
                     liked=liked,
-                    progress=self._build_voting_progress(group),
+                    progress=self._build_voting_progress(
+                        group,
+                        current_anonymous_user_id=participant.anonymous_user_id,
+                    ),
                 )
             raise TemporaryGroupVotingCompleteError
 
@@ -406,7 +412,10 @@ class TemporaryGroupService:
             vote.liked = liked
             self.db.flush()
 
-        progress = self._build_voting_progress(group)
+        progress = self._build_voting_progress(
+            group,
+            current_anonymous_user_id=participant.anonymous_user_id,
+        )
         should_notify_completion = False
         if progress.is_complete and group.voting_completed_at is None:
             self.repository.complete_voting(group, self._now())
@@ -414,7 +423,10 @@ class TemporaryGroupService:
 
         self.db.commit()
         self.db.refresh(group)
-        progress = self._build_voting_progress(group)
+        progress = self._build_voting_progress(
+            group,
+            current_anonymous_user_id=participant.anonymous_user_id,
+        )
         if should_notify_completion:
             notify_voting_completed(group, result=self.get_voting_result(group.id))
 
@@ -424,16 +436,33 @@ class TemporaryGroupService:
             progress=progress,
         )
 
-    def get_voting_progress(self, group_id: UUID) -> TemporaryGroupVotingProgress:
+    def get_voting_progress(
+        self,
+        group_id: UUID,
+        participant_token: str | None = None,
+    ) -> TemporaryGroupVotingProgress:
         group = self.get_active_by_id(group_id)
         if group is None:
             raise TemporaryGroupNotFoundError
 
-        return self._build_voting_progress(group)
+        current_anonymous_user_id = None
+        if participant_token is not None:
+            user = self.repository.get_anonymous_user_by_token_hash(
+                self._hash_participant_token(participant_token)
+            )
+            if user is not None:
+                current_anonymous_user_id = user.id
+
+        return self._build_voting_progress(
+            group,
+            current_anonymous_user_id=current_anonymous_user_id,
+        )
 
     def _build_voting_progress(
         self,
         group: TemporaryGroup,
+        *,
+        current_anonymous_user_id: UUID | None = None,
     ) -> TemporaryGroupVotingProgress:
         candidate_count = len(self._candidate_restaurants(group, required=False))
         participants = self.repository.list_participants(group.id)
@@ -457,6 +486,8 @@ class TemporaryGroupService:
                     and completed_vote_counts[participant.anonymous_user_id]
                     >= candidate_count
                 ),
+                is_me=participant.anonymous_user_id == current_anonymous_user_id,
+                is_host=str(participant.anonymous_user_id) == group.creator_id,
             )
             for participant in participants
         ]

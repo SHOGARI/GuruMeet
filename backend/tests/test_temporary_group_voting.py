@@ -224,6 +224,16 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         with self.assertRaises(TemporaryGroupVotingCompleteError):
             service.submit_vote(group.id, TOKEN, "shop-b", True)
 
+    def test_progress_marks_current_participant_and_host(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, repository = self.make_service(group)
+        group.creator_id = str(repository.user.id)
+
+        progress = service.get_voting_progress(group.id, TOKEN)
+
+        self.assertTrue(progress.participants[0].is_me)
+        self.assertTrue(progress.participants[0].is_host)
+
     def test_result_returns_ranking_and_tie_detection(self) -> None:
         group = make_group(voting_started_at=datetime.now(UTC))
         service, _ = self.make_service(group)

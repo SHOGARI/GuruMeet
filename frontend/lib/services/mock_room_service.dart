@@ -53,14 +53,13 @@ class MockRoomService {
   }
 
   List<RoomMember> _demoMembers(int peopleCount) {
-    const names = ['あなた', 'みなみ', 'けん', 'あおい', 'りく', 'さき', 'ゆう', 'まい'];
     return List.generate(peopleCount, (index) {
-      final name = index < names.length ? names[index] : '参加者 ${index + 1}';
       return RoomMember(
         id: index == 0 ? 'host' : 'member-$index',
-        name: name,
+        name: '参加者 ${index + 1}',
         avatarUrl: null,
         isHost: index == 0,
+        isMe: index == 0,
         isReady: false,
         hasCompletedVoting: false,
       );
