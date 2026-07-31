@@ -1,11 +1,13 @@
+from datetime import UTC, datetime
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.core.config import Settings, settings
 from app.main import app
+from app.services.temporary_group_cleanup_service import TemporaryGroupCleanupService
 
 
 class OperationalReadinessTests(unittest.TestCase):
@@ -72,6 +74,30 @@ class OperationalReadinessTests(unittest.TestCase):
             response.json(),
             {"deleted_expired_temporary_groups": 3},
         )
+
+    def test_cleanup_continues_when_summary_fails(self) -> None:
+        db = MagicMock()
+        service = TemporaryGroupCleanupService(db)
+        service.repository = MagicMock()
+        service.repository.expired_summary.side_effect = RuntimeError("summary failed")
+        service.repository.delete_expired.return_value = 2
+        service.repository.delete_expired_custom_locations.return_value = 1
+
+        with patch(
+            "app.services.temporary_group_cleanup_service.datetime"
+        ) as datetime_mock:
+            datetime_mock.now.return_value = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+            with patch(
+                "app.services.temporary_group_cleanup_service.notify_cleanup_completed"
+            ) as notify:
+                deleted_count = service.delete_expired_groups()
+
+        self.assertEqual(deleted_count, 2)
+        db.rollback.assert_called_once()
+        service.repository.delete_expired.assert_called_once()
+        service.repository.delete_expired_custom_locations.assert_called_once()
+        db.commit.assert_called_once()
+        notify.assert_called_once()
 
     def test_cors_origins_accept_json_or_comma_separated_values(self) -> None:
         json_settings = Settings(
