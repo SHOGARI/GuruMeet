@@ -244,6 +244,29 @@ void main() {
     expect(find.text('GuruMeet'), findsOneWidget);
   });
 
+  testWidgets('group created prompts dissolve when restaurants are empty', (
+    tester,
+  ) async {
+    final draft = GroupCreationDraft.fromApi(
+      roomId: '00000000-0000-0000-0000-000000000001',
+      groupId: 'A7K2F',
+      peopleCount: 4,
+      area: '北千住駅・東京都足立区',
+      budget: BudgetOption.from2000To3000,
+      isHost: true,
+      restaurantSearchStatus: RestaurantSearchStatus.noResults,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: GroupCreatedPage(draft: draft)));
+
+    expect(find.text('候補の店舗がありません'), findsOneWidget);
+    expect(find.textContaining('このグループでは投票を始められません'), findsOneWidget);
+    expect(find.textContaining('このグループを解散して作り直してください'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '解散して作り直す'), findsOneWidget);
+    expect(find.text('GROUP CODE  |  招待コード'), findsNothing);
+    expect(find.text('招待URL'), findsNothing);
+  });
+
   testWidgets('invite link route renders join screen', (tester) async {
     await tester.pumpWidget(const GuruMeetApp());
     tester

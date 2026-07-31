@@ -7,6 +7,7 @@ from pydantic import field_validator
 from pydantic import model_validator
 
 TemporaryGroupPhase = Literal["waiting", "swiping", "result"]
+RestaurantSearchStatus = Literal["not_requested", "succeeded", "no_results"]
 
 
 class CustomLocationCreate(BaseModel):
@@ -147,6 +148,12 @@ class TemporaryGroupResponse(BaseModel):
         description="一時グループの進行状態。waiting, swiping, result のいずれか。",
         examples=["waiting"],
     )
+    restaurant_search_status: RestaurantSearchStatus = Field(
+        description=(
+            "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
+        ),
+        examples=["succeeded"],
+    )
 
 
 class TemporaryGroupDetail(TemporaryGroupResponse):
@@ -169,7 +176,7 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     )
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
-    restaurant_search_status: str = Field(
+    restaurant_search_status: RestaurantSearchStatus = Field(
         description=(
             "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
         )

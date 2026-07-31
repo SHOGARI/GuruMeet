@@ -332,6 +332,9 @@ class ApiRoomRepository implements RoomRepository {
       isHost: true,
       locationId: locationId,
       phase: GroupPhase.fromApi(json['phase']),
+      restaurantSearchStatus: RestaurantSearchStatus.fromApi(
+        json['restaurant_search_status'],
+      ),
     );
   }
 
@@ -365,6 +368,9 @@ class ApiRoomRepository implements RoomRepository {
       isHost: false,
       locationId: detail['location_id'] as String?,
       phase: GroupPhase.fromApi(detail['phase'] ?? json['phase']),
+      restaurantSearchStatus: RestaurantSearchStatus.fromApi(
+        detail['restaurant_search_status'],
+      ),
     );
   }
 
