@@ -93,11 +93,6 @@ class RestaurantDetailPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xLarge),
           Text(restaurant.description, style: theme.textTheme.bodyLarge),
           const SizedBox(height: AppSpacing.section),
-          _DetailRow(label: 'グループID', value: draft.groupId),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),
-            child: Divider(),
-          ),
           _DetailRow(label: '人数', value: '${draft.peopleCount}人'),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),

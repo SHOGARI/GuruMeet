@@ -21,9 +21,8 @@ class GroupCodeBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.control),
           onTap: () => _copyCode(context),
           child: Container(
-            height: 36,
-            constraints: const BoxConstraints(minWidth: 88),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.small),
             decoration: BoxDecoration(
               color: colors.primaryContainer,
               borderRadius: BorderRadius.circular(AppRadius.control),
@@ -32,14 +31,12 @@ class GroupCodeBadge extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.tag_rounded, size: 16, color: colors.primary),
-                const SizedBox(width: AppSpacing.micro),
                 Text(
                   code,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: colors.onPrimaryContainer,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: AppSizes.groupCodeLetterSpacing,
+                    letterSpacing: AppSizes.codeLabelLetterSpacing,
                   ),
                 ),
               ],

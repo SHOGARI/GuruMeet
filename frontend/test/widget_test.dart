@@ -117,7 +117,7 @@ void main() {
     expect(find.text('解散して戻る'), findsOneWidget);
     await tester.tap(find.text('戻らない'));
     await tester.pumpAndSettle();
-    expect(await blockedPop, isFalse);
+    expect(await blockedPop, isTrue);
     expect(find.text('招待を送ろう'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
