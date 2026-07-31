@@ -38,6 +38,7 @@ from app.services.hotpepper_service import (
     HotPepperBudgetRangeError,
     search_restaurants_for_group_by_coordinates,
 )
+from app.services.discord_alert_service import notify_voting_completed
 
 
 class TemporaryGroupCodeCollisionError(RuntimeError):
@@ -61,6 +62,14 @@ class TemporaryGroupVotingCandidatesError(ValueError):
 
 
 class TemporaryGroupVotingNotStartedError(RuntimeError):
+    pass
+
+
+class TemporaryGroupVotingNotCompleteError(RuntimeError):
+    pass
+
+
+class TemporaryGroupVotingCompleteError(RuntimeError):
     pass
 
 
@@ -375,6 +384,15 @@ class TemporaryGroupService:
             participant.anonymous_user_id,
             restaurant_id,
         )
+        if group.voting_completed_at is not None:
+            if vote is not None and vote.liked == liked:
+                return TemporaryGroupVoteSubmitResponse(
+                    restaurant_id=restaurant_id,
+                    liked=liked,
+                    progress=self._build_voting_progress(group),
+                )
+            raise TemporaryGroupVotingCompleteError
+
         if vote is None:
             self.repository.add_vote(
                 TemporaryGroupVote(
@@ -388,11 +406,22 @@ class TemporaryGroupService:
             vote.liked = liked
             self.db.flush()
 
+        progress = self._build_voting_progress(group)
+        should_notify_completion = False
+        if progress.is_complete and group.voting_completed_at is None:
+            self.repository.complete_voting(group, self._now())
+            should_notify_completion = True
+
         self.db.commit()
+        self.db.refresh(group)
+        progress = self._build_voting_progress(group)
+        if should_notify_completion:
+            notify_voting_completed(group, result=self.get_voting_result(group.id))
+
         return TemporaryGroupVoteSubmitResponse(
             restaurant_id=restaurant_id,
             liked=liked,
-            progress=self.get_voting_progress(group.id),
+            progress=progress,
         )
 
     def get_voting_progress(self, group_id: UUID) -> TemporaryGroupVotingProgress:
@@ -400,6 +429,12 @@ class TemporaryGroupService:
         if group is None:
             raise TemporaryGroupNotFoundError
 
+        return self._build_voting_progress(group)
+
+    def _build_voting_progress(
+        self,
+        group: TemporaryGroup,
+    ) -> TemporaryGroupVotingProgress:
         candidate_count = len(self._candidate_restaurants(group, required=False))
         participants = self.repository.list_participants(group.id)
         votes = self.repository.list_votes(group.id)
@@ -432,6 +467,7 @@ class TemporaryGroupService:
 
         return TemporaryGroupVotingProgress(
             voting_started_at=group.voting_started_at,
+            voting_completed_at=group.voting_completed_at,
             candidate_count=candidate_count,
             participant_count=group.participant_count,
             joined_participant_count=joined_participant_count,
@@ -449,6 +485,8 @@ class TemporaryGroupService:
             raise TemporaryGroupNotFoundError
         if group.voting_started_at is None:
             raise TemporaryGroupVotingNotStartedError
+        if group.voting_completed_at is None:
+            raise TemporaryGroupVotingNotCompleteError
 
         restaurants = self._candidate_restaurants(group)
         progress = self.get_voting_progress(group.id)
@@ -500,6 +538,7 @@ class TemporaryGroupService:
 
         return TemporaryGroupVotingResult(
             voting_started_at=group.voting_started_at,
+            voting_completed_at=group.voting_completed_at,
             candidate_count=progress.candidate_count,
             joined_participant_count=progress.joined_participant_count,
             completed_participant_count=progress.completed_participant_count,

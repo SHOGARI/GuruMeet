@@ -140,6 +140,10 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
         default=None,
         description="投票開始時刻。未開始の場合はnull。",
     )
+    voting_completed_at: datetime | None = Field(
+        default=None,
+        description="グループ全員の投票完了時刻。未完了の場合はnull。",
+    )
     creator_id: str | None = Field(default=None, description="任意の作成者ID。")
     participant_count: int | None = Field(default=None, description="参加人数。")
     location: str | None = Field(default=None, description="希望場所。")
@@ -202,6 +206,7 @@ class TemporaryGroupParticipantVotingProgress(BaseModel):
 
 class TemporaryGroupVotingProgress(BaseModel):
     voting_started_at: datetime | None
+    voting_completed_at: datetime | None
     candidate_count: int
     participant_count: int | None
     joined_participant_count: int
@@ -227,6 +232,7 @@ class TemporaryGroupRestaurantResult(BaseModel):
 
 class TemporaryGroupVotingResult(BaseModel):
     voting_started_at: datetime | None
+    voting_completed_at: datetime | None
     candidate_count: int
     joined_participant_count: int
     completed_participant_count: int

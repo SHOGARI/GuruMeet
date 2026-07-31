@@ -41,6 +41,16 @@ class TemporaryGroupRepository:
             self.db.flush()
         return group
 
+    def complete_voting(
+        self,
+        group: TemporaryGroup,
+        completed_at: datetime,
+    ) -> TemporaryGroup:
+        if group.voting_completed_at is None:
+            group.voting_completed_at = completed_at
+            self.db.flush()
+        return group
+
     def get_active_by_id(
         self,
         group_id: UUID,
