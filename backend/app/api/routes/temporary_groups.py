@@ -22,7 +22,6 @@ from app.schemas.temporary_group import (
 )
 from app.services.discord_alert_service import (
     notify_group_created,
-    notify_voting_result_viewed,
 )
 from app.services.hotpepper_service import (
     HotPepperAPIError,
@@ -37,6 +36,8 @@ from app.services.temporary_group_service import (
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
+    TemporaryGroupVotingCompleteError,
+    TemporaryGroupVotingNotCompleteError,
     TemporaryGroupVotingNotReadyError,
     TemporaryGroupVotingNotStartedError,
 )
@@ -226,6 +227,11 @@ def submit_temporary_group_vote(
         raise _not_found() from None
     except TemporaryGroupVotingNotStartedError:
         raise _voting_not_started() from None
+    except TemporaryGroupVotingCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="投票はすでに完了しています。",
+        ) from None
     except TemporaryGroupParticipantNotFoundError:
         raise _participant_not_found() from None
     except TemporaryGroupRestaurantNotFoundError as exc:
@@ -272,15 +278,16 @@ def get_temporary_group_voting_result(
 ) -> TemporaryGroupVotingResult:
     service = TemporaryGroupService(db)
     try:
-        result = service.get_voting_result(group_id)
-        group = service.get_active_by_id(group_id)
-        if group is not None:
-            notify_voting_result_viewed(group, result=result)
-        return result
+        return service.get_voting_result(group_id)
     except TemporaryGroupNotFoundError:
         raise _not_found() from None
     except TemporaryGroupVotingNotStartedError:
         raise _voting_not_started() from None
+    except TemporaryGroupVotingNotCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="全員の投票が完了するまで結果を表示できません。",
+        ) from None
     except TemporaryGroupVotingCandidatesError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -402,6 +409,7 @@ def _to_detail(
         is_full=service.is_full(group, joined_participant_count),
         created_at=group.created_at,
         voting_started_at=group.voting_started_at,
+        voting_completed_at=group.voting_completed_at,
         creator_id=group.creator_id,
         participant_count=group.participant_count,
         location=group.location,

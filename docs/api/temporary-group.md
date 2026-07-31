@@ -156,7 +156,7 @@ bodyなしでも作成可能。
 5. `custom_location` があれば、`custom_locations` に保存した緯度経度と設定値の半径でHot Pepper APIを検索する。
 6. 検索結果を `restaurant` に保存し、`restaurant_search_status` を更新する。
 7. `participant_token` があれば作成者を参加者として登録する。
-8. `expires_at` に作成時刻 + `TEMPORARY_GROUP_TTL_MINUTES` を保存する。
+8. `expires_at` に作成時刻 + アプリ設定の一時グループTTLを保存する。
 9. `code` のunique制約に衝突した場合はrollbackして再生成する。
 
 `location` だけが指定され、`location_id` も `custom_location` もない場合は400を返す。
@@ -406,7 +406,6 @@ PARTICIPANT_TOKEN_HASH_SECRET=change_me_to_a_long_random_value
 ## Environment Variables
 
 ```env
-TEMPORARY_GROUP_TTL_MINUTES=1440
 TEMPORARY_GROUP_CODE_MAX_ATTEMPTS=20
 JOIN_RATE_LIMIT_REQUESTS=10
 JOIN_RATE_LIMIT_WINDOW_SECONDS=60

@@ -16,6 +16,8 @@ from app.services.temporary_group_service import (
     TemporaryGroupRestaurantNotFoundError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
+    TemporaryGroupVotingCompleteError,
+    TemporaryGroupVotingNotCompleteError,
     TemporaryGroupVotingNotReadyError,
     TemporaryGroupVotingNotStartedError,
 )
@@ -61,6 +63,10 @@ class FakeTemporaryGroupRepository:
         group.voting_started_at = group.voting_started_at or started_at
         return group
 
+    def complete_voting(self, group, completed_at):
+        group.voting_completed_at = group.voting_completed_at or completed_at
+        return group
+
     def get_vote(self, group_id, anonymous_user_id, restaurant_id):
         for vote in self.votes:
             if (
@@ -79,7 +85,12 @@ class FakeTemporaryGroupRepository:
         return [vote for vote in self.votes if vote.temporary_group_id == group_id]
 
 
-def make_group(*, restaurant=None, voting_started_at=None) -> SimpleNamespace:
+def make_group(
+    *,
+    restaurant=None,
+    voting_started_at=None,
+    voting_completed_at=None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid4(),
         expires_at=datetime.now(UTC) + timedelta(hours=1),
@@ -111,6 +122,7 @@ def make_group(*, restaurant=None, voting_started_at=None) -> SimpleNamespace:
             ]
         },
         voting_started_at=voting_started_at,
+        voting_completed_at=voting_completed_at,
     )
 
 
@@ -182,6 +194,35 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertFalse(repository.votes[0].liked)
         self.assertTrue(response.progress.is_complete)
         self.assertEqual(response.progress.completed_participant_count, 1)
+        self.assertIsNotNone(group.voting_completed_at)
+
+    def test_submit_vote_notifies_once_when_group_completes(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, _ = self.make_service(group)
+
+        with patch(
+            "app.services.temporary_group_service.notify_voting_completed"
+        ) as notify:
+            service.submit_vote(group.id, TOKEN, "shop-a", True)
+            notify.assert_not_called()
+
+            service.submit_vote(group.id, TOKEN, "shop-b", False)
+            notify.assert_called_once()
+
+            service.submit_vote(group.id, TOKEN, "shop-a", False)
+            notify.assert_called_once()
+
+    def test_submit_vote_rejects_changes_after_group_completion(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, _ = self.make_service(group)
+        service.submit_vote(group.id, TOKEN, "shop-a", True)
+        service.submit_vote(group.id, TOKEN, "shop-b", False)
+
+        response = service.submit_vote(group.id, TOKEN, "shop-b", False)
+        self.assertTrue(response.progress.is_complete)
+
+        with self.assertRaises(TemporaryGroupVotingCompleteError):
+            service.submit_vote(group.id, TOKEN, "shop-b", True)
 
     def test_result_returns_ranking_and_tie_detection(self) -> None:
         group = make_group(voting_started_at=datetime.now(UTC))
@@ -196,6 +237,14 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertEqual([item.rank for item in result.results], [1, 1])
         self.assertEqual([item.like_count for item in result.results], [1, 1])
 
+    def test_result_requires_group_completion(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, _ = self.make_service(group)
+        service.submit_vote(group.id, TOKEN, "shop-a", True)
+
+        with self.assertRaises(TemporaryGroupVotingNotCompleteError):
+            service.get_voting_result(group.id)
+
 
 class TemporaryGroupVotingRouteTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -205,6 +254,7 @@ class TemporaryGroupVotingRouteTests(unittest.TestCase):
     def test_start_endpoint_returns_progress(self) -> None:
         progress = TemporaryGroupVotingProgress(
             voting_started_at=datetime.now(UTC),
+            voting_completed_at=None,
             candidate_count=2,
             participant_count=1,
             joined_participant_count=1,
