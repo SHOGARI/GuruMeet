@@ -11,6 +11,7 @@ import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/restaurant_image.dart';
+import 'home_page.dart';
 import 'match_page.dart';
 
 class SwipePage extends StatefulWidget {
@@ -336,125 +337,136 @@ class _SwipePageState extends State<SwipePage> {
     final colors = theme.colorScheme;
     final pendingFinalChoice = _pendingFinalChoice;
 
-    return AppShell(
-      appBar: AppBar(title: const Text('お店を選ぶ')),
-      maxContentWidth: AppSizes.homeMaxWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('食べたい？', style: theme.textTheme.headlineMedium),
-              ),
-              if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
-                _RemainingBadge(
-                  remainingCount: _remainingCount,
-                  totalCount: _restaurants.length,
+    return PopScope<void>(
+      canPop: false,
+      child: AppShell(
+        appBar: AppBar(
+          title: const Text('お店を選ぶ'),
+          automaticallyImplyLeading: false,
+        ),
+        maxContentWidth: AppSizes.homeMaxWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('食べたい？', style: theme.textTheme.headlineMedium),
                 ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.small),
-          if (_isLoadingRestaurants)
-            const LinearProgressIndicator()
-          else if (_restaurants.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-              child: LinearProgressIndicator(
-                minHeight: AppSizes.progressIndicatorHeight,
-                value: _isComplete
-                    ? 1
-                    : _isConfirmingFinalChoice
-                    ? 1
-                    : (_currentIndex + 1) / _restaurants.length,
-                backgroundColor: colors.surfaceContainerHigh,
-              ),
+                if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
+                  _RemainingBadge(
+                    remainingCount: _remainingCount,
+                    totalCount: _restaurants.length,
+                  ),
+              ],
             ),
-          const SizedBox(height: AppSpacing.regular),
-          const _SwipeHelpText(),
-          const SizedBox(height: AppSpacing.regular),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppSizes.restaurantCardMaxWidth,
+            const SizedBox(height: AppSpacing.small),
+            if (_isLoadingRestaurants)
+              const LinearProgressIndicator()
+            else if (_restaurants.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: LinearProgressIndicator(
+                  minHeight: AppSizes.progressIndicatorHeight,
+                  value: _isComplete
+                      ? 1
+                      : _isConfirmingFinalChoice
+                      ? 1
+                      : (_currentIndex + 1) / _restaurants.length,
+                  backgroundColor: colors.surfaceContainerHigh,
+                ),
               ),
-              child: AnimatedSwitcher(
-                duration: AppMotion.medium,
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: _isLoadingRestaurants
-                    ? const _SwipeNoticeCard(
-                        key: ValueKey('restaurant-loading'),
-                        icon: Icons.restaurant_menu_rounded,
-                        title: '店舗候補を探しています',
-                        message: '条件に合うお店を読み込んでいます。',
-                      )
-                    : _restaurantLoadError != null
-                    ? _SwipeNoticeCard(
-                        key: const ValueKey('restaurant-error'),
-                        icon: Icons.error_outline_rounded,
-                        title: '読み込みに失敗しました',
-                        message: _restaurantLoadError!,
-                        actionLabel: '再読み込み',
-                        onAction: () => unawaited(_loadRestaurants()),
-                      )
-                    : _restaurants.isEmpty
-                    ? _SwipeNoticeCard(
-                        key: ValueKey('restaurant-empty'),
-                        icon: Icons.search_off_rounded,
-                        title: '候補が見つかりませんでした',
-                        message: 'エリアや予算を変えてもう一度作成してください。',
-                        actionLabel: '戻る',
-                        onAction: () => Navigator.of(context).maybePop(),
-                      )
-                    : _isComplete
-                    ? _CompletionCard(
-                        key: const ValueKey('swipe-complete'),
-                        members: _votingMembers,
-                        onOpenResult: _isOpeningResult || !_isAllVotingComplete
-                            ? null
-                            : () => unawaited(_openResult()),
-                      )
-                    : pendingFinalChoice != null
-                    ? _FinalConfirmCard(
-                        key: const ValueKey('swipe-final-confirm'),
-                        isSubmitting: _isResolvingChoice,
-                        onConfirm: () => unawaited(_confirmFinalChoice()),
-                        onEdit: _editFinalChoice,
-                      )
-                    : _SwipeCard(
-                        key: ValueKey(_currentRestaurant.id),
-                        restaurant: _currentRestaurant,
-                        initialPhotoIndex: _restoredPhotoIndex,
-                        isResolvingChoice: _isResolvingChoice,
-                        onShowDetails: () =>
-                            _showRestaurantDetails(_currentRestaurant),
-                        onSelected: (liked, photoIndex) => _chooseRestaurant(
-                          liked: liked,
-                          photoIndex: photoIndex,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-          if (!_isComplete && !_isConfirmingFinalChoice) ...[
+            const SizedBox(height: AppSpacing.regular),
+            const _SwipeHelpText(),
             const SizedBox(height: AppSpacing.regular),
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   maxWidth: AppSizes.restaurantCardMaxWidth,
                 ),
-                child: _SwipeFooterActions(
-                  canUndo:
-                      _lastChoice != null &&
-                      !_isResolvingChoice &&
-                      !_isOpeningResult,
-                  onUndo: _undoLastChoice,
+                child: AnimatedSwitcher(
+                  duration: AppMotion.medium,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  child: _isLoadingRestaurants
+                      ? const _SwipeNoticeCard(
+                          key: ValueKey('restaurant-loading'),
+                          icon: Icons.restaurant_menu_rounded,
+                          title: '店舗候補を探しています',
+                          message: '条件に合うお店を読み込んでいます。',
+                        )
+                      : _restaurantLoadError != null
+                      ? _SwipeNoticeCard(
+                          key: const ValueKey('restaurant-error'),
+                          icon: Icons.error_outline_rounded,
+                          title: '読み込みに失敗しました',
+                          message: _restaurantLoadError!,
+                          actionLabel: '再読み込み',
+                          onAction: () => unawaited(_loadRestaurants()),
+                        )
+                      : _restaurants.isEmpty
+                      ? _SwipeNoticeCard(
+                          key: ValueKey('restaurant-empty'),
+                          icon: Icons.search_off_rounded,
+                          title: '候補が見つかりませんでした',
+                          message: 'エリアや予算を変えてもう一度作成してください。',
+                          actionLabel: '戻る',
+                          onAction: () =>
+                              Navigator.of(context).pushNamedAndRemoveUntil(
+                                HomePage.routeName,
+                                (route) => false,
+                              ),
+                        )
+                      : _isComplete
+                      ? _CompletionCard(
+                          key: const ValueKey('swipe-complete'),
+                          members: _votingMembers,
+                          onOpenResult:
+                              _isOpeningResult || !_isAllVotingComplete
+                              ? null
+                              : () => unawaited(_openResult()),
+                        )
+                      : pendingFinalChoice != null
+                      ? _FinalConfirmCard(
+                          key: const ValueKey('swipe-final-confirm'),
+                          isSubmitting: _isResolvingChoice,
+                          onConfirm: () => unawaited(_confirmFinalChoice()),
+                          onEdit: _editFinalChoice,
+                        )
+                      : _SwipeCard(
+                          key: ValueKey(_currentRestaurant.id),
+                          restaurant: _currentRestaurant,
+                          initialPhotoIndex: _restoredPhotoIndex,
+                          isResolvingChoice: _isResolvingChoice,
+                          onShowDetails: () =>
+                              _showRestaurantDetails(_currentRestaurant),
+                          onSelected: (liked, photoIndex) => _chooseRestaurant(
+                            liked: liked,
+                            photoIndex: photoIndex,
+                          ),
+                        ),
                 ),
               ),
             ),
+            if (!_isComplete && !_isConfirmingFinalChoice) ...[
+              const SizedBox(height: AppSpacing.regular),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppSizes.restaurantCardMaxWidth,
+                  ),
+                  child: _SwipeFooterActions(
+                    canUndo:
+                        _lastChoice != null &&
+                        !_isResolvingChoice &&
+                        !_isOpeningResult,
+                    onUndo: _undoLastChoice,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

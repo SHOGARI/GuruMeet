@@ -51,6 +51,15 @@ class TemporaryGroupRepository:
             self.db.flush()
         return group
 
+    def expire(
+        self,
+        group: TemporaryGroup,
+        expired_at: datetime,
+    ) -> TemporaryGroup:
+        group.expires_at = expired_at
+        self.db.flush()
+        return group
+
     def get_active_by_id(
         self,
         group_id: UUID,

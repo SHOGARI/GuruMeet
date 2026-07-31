@@ -11,6 +11,7 @@ from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
     TemporaryGroupCreate,
     TemporaryGroupDetail,
+    TemporaryGroupDissolveRequest,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
     TemporaryGroupResponse,
@@ -30,6 +31,7 @@ from app.services.hotpepper_service import (
 from app.services.temporary_group_service import (
     TemporaryGroupCodeCollisionError,
     TemporaryGroupFullError,
+    TemporaryGroupHostRequiredError,
     TemporaryGroupNotFoundError,
     TemporaryGroupParticipantNotFoundError,
     TemporaryGroupRestaurantNotFoundError,
@@ -174,6 +176,36 @@ def get_temporary_group(
         raise _not_found()
 
     return _to_detail(group, service)
+
+
+@router.post(
+    "/{group_id}/dissolve",
+    response_model=TemporaryGroupResponse,
+    summary="一時グループを解散する",
+    description=(
+        "作成者が一時グループを解散します。物理削除はせず、expires_atをリクエスト時刻へ更新し、"
+        "以後は期限切れグループとして扱います。"
+    ),
+)
+def dissolve_temporary_group(
+    group_id: UUID,
+    request_body: TemporaryGroupDissolveRequest,
+    db: Session = Depends(get_db),
+) -> TemporaryGroupResponse:
+    service = TemporaryGroupService(db)
+    try:
+        group = service.dissolve_group(group_id, request_body.participant_token)
+    except TemporaryGroupNotFoundError:
+        raise _not_found() from None
+    except TemporaryGroupParticipantNotFoundError:
+        raise _participant_not_found() from None
+    except TemporaryGroupHostRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="この一時グループを解散できるのは作成者だけです。",
+        ) from None
+
+    return _to_response(group, service)
 
 
 @router.post(
@@ -408,6 +440,7 @@ def _to_detail(
         expires_at=group.expires_at,
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
+        phase=_group_phase(group),
         created_at=group.created_at,
         voting_started_at=group.voting_started_at,
         voting_completed_at=group.voting_completed_at,
@@ -434,7 +467,16 @@ def _to_response(
         expires_at=group.expires_at,
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
+        phase=_group_phase(group),
     )
+
+
+def _group_phase(group: TemporaryGroup) -> str:
+    if group.voting_completed_at is not None:
+        return "result"
+    if group.voting_started_at is not None:
+        return "swiping"
+    return "waiting"
 
 
 def _create_temporary_group_response(

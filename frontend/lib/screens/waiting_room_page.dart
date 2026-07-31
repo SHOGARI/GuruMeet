@@ -82,6 +82,11 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       if ((_isHost && _isRoomReady) || (!_isHost && votingStarted)) {
         _joinTimer?.cancel();
       }
+      if (!_isHost && votingStarted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('投票が始まりました')));
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -105,7 +110,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       }
       await Navigator.of(
         context,
-      ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+      ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
     } catch (error) {
       if (!mounted) {
         return;
@@ -127,7 +132,7 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     setState(() => _isNavigating = true);
     await Navigator.of(
       context,
-    ).pushNamed(SwipePage.routeName, arguments: widget.draft);
+    ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
     if (mounted) {
       setState(() => _isNavigating = false);
     }

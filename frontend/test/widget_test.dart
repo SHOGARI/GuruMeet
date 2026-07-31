@@ -109,6 +109,17 @@ void main() {
     expect(find.byType(QrImageView), findsOneWidget);
     expect(tester.getTopLeft(find.text('招待を送ろう')).dy, greaterThan(0));
 
+    final blockedPop = tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .maybePop();
+    await tester.pumpAndSettle();
+    expect(find.text('グループを解散しますか？'), findsOneWidget);
+    expect(find.text('解散して戻る'), findsOneWidget);
+    await tester.tap(find.text('戻らない'));
+    await tester.pumpAndSettle();
+    expect(await blockedPop, isFalse);
+    expect(find.text('招待を送ろう'), findsOneWidget);
+
     await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
     await tester.pumpAndSettle();
 
@@ -143,6 +154,10 @@ void main() {
     expect(find.text('食べたい？'), findsOneWidget);
     expect(find.text('残り 5 / 5'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsOneWidget);
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).automaticallyImplyLeading,
+      isFalse,
+    );
     expect(
       tester
           .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'ひとつ戻す'))
@@ -189,6 +204,10 @@ void main() {
     expect(find.text('みんなの投票を待っています'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsNothing);
     expect(find.text('1 / 4人 完了'), findsOneWidget);
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).automaticallyImplyLeading,
+      isFalse,
+    );
     await tester.pump(const Duration(milliseconds: 4600));
     await tester.pumpAndSettle();
     expect(find.text('4 / 4人 完了'), findsOneWidget);
@@ -205,6 +224,10 @@ void main() {
     expect(find.text('この店に決定'), findsAtLeastNWidgets(1));
     expect(find.text('もう一度選ぶ'), findsOneWidget);
     expect(find.text('店舗詳細を見る'), findsOneWidget);
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).automaticallyImplyLeading,
+      isFalse,
+    );
 
     await tester.ensureVisible(find.widgetWithText(OutlinedButton, '店舗詳細を見る'));
     await tester.pumpAndSettle();

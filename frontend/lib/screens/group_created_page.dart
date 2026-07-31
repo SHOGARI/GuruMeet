@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/group_creation_draft.dart';
+import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'waiting_room_page.dart';
@@ -20,7 +24,12 @@ class GroupCreatedPage extends StatefulWidget {
 }
 
 class _GroupCreatedPageState extends State<GroupCreatedPage> {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
+
   String? _copyFeedback;
+  bool _isExitAllowed = false;
+  bool _isExitDialogOpen = false;
+  bool _isDissolving = false;
 
   void _showCopySuccess(String message) {
     setState(() => _copyFeedback = message);
@@ -40,117 +49,180 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
         ? AppSpacing.medium
         : AppSpacing.xLarge;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('招待')),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  AppSpacing.xLarge,
-                  horizontalPadding,
-                  AppSpacing.xLarge,
-                ),
-                children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: AppSizes.contentMaxWidth,
-                      ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const _SuccessMark(),
-                            const SizedBox(height: AppSpacing.medium),
-                            Text(
-                              '招待を送ろう',
-                              style: theme.textTheme.headlineMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.small),
-                            Text(
-                              'ルームコードかURLを共有して、参加者を待ちます。',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colors.onSurfaceVariant,
+    return PopScope<void>(
+      canPop: _isExitAllowed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_confirmExit());
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('招待')),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.xLarge,
+                    horizontalPadding,
+                    AppSpacing.xLarge,
+                  ),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: AppSizes.contentMaxWidth,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _SuccessMark(),
+                              const SizedBox(height: AppSpacing.medium),
+                              Text(
+                                '招待を送ろう',
+                                style: theme.textTheme.headlineMedium,
                               ),
-                            ),
-                            const SizedBox(height: AppSpacing.xLarge),
-                            _InvitationPanel(
-                              draft: widget.draft,
-                              onCopyUrl: () => _copyUrl(context),
-                              onCopyCode: () => _copyCode(context),
-                              onShare: () => _shareInvite(context),
-                            ),
-                            const SizedBox(height: AppSpacing.large),
-                            AnimatedSwitcher(
-                              duration: AppMotion.medium,
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: Tween<double>(
-                                      begin: 0.96,
-                                      end: 1,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _copyFeedback == null
-                                  ? const SizedBox.shrink()
-                                  : _CopySuccessBanner(
-                                      key: ValueKey(_copyFeedback),
-                                      message: _copyFeedback!,
+                              const SizedBox(height: AppSpacing.small),
+                              Text(
+                                'ルームコードかURLを共有して、参加者を待ちます。',
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xLarge),
+                              _InvitationPanel(
+                                draft: widget.draft,
+                                onCopyUrl: () => _copyUrl(context),
+                                onCopyCode: () => _copyCode(context),
+                                onShare: () => _shareInvite(context),
+                              ),
+                              const SizedBox(height: AppSpacing.large),
+                              AnimatedSwitcher(
+                                duration: AppMotion.medium,
+                                transitionBuilder: (child, animation) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: ScaleTransition(
+                                      scale: Tween<double>(
+                                        begin: 0.96,
+                                        end: 1,
+                                      ).animate(animation),
+                                      child: child,
                                     ),
-                            ),
-                            const SizedBox(height: AppSpacing.xLarge),
-                            _GroupSummary(draft: widget.draft),
-                          ],
+                                  );
+                                },
+                                child: _copyFeedback == null
+                                    ? const SizedBox.shrink()
+                                    : _CopySuccessBanner(
+                                        key: ValueKey(_copyFeedback),
+                                        message: _copyFeedback!,
+                                      ),
+                              ),
+                              const SizedBox(height: AppSpacing.xLarge),
+                              _GroupSummary(draft: widget.draft),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  AppSpacing.small,
-                  horizontalPadding,
-                  AppSpacing.large,
+                  ],
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: AppSizes.actionMaxWidth,
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.small,
+                    horizontalPadding,
+                    AppSpacing.large,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: PrimaryActionButton(
-                      label: '待機画面へ進む',
-                      onPressed: () {
-                        Navigator.of(context).pushNamed(
-                          WaitingRoomPage.routeName,
-                          arguments: widget.draft,
-                        );
-                      },
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: AppSizes.actionMaxWidth,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: PrimaryActionButton(
+                        label: '待機画面へ進む',
+                        onPressed: () {
+                          Navigator.of(context).pushNamed(
+                            WaitingRoomPage.routeName,
+                            arguments: widget.draft,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmExit() async {
+    if (_isExitDialogOpen || _isDissolving) {
+      return;
+    }
+    _isExitDialogOpen = true;
+    final shouldExit =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('グループを解散しますか？'),
+            content: const Text(
+              '解散すると招待URLとルームコードは使えなくなります。招待を続ける場合はこのまま進んでください。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('戻らない'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('解散して戻る'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    _isExitDialogOpen = false;
+    if (!mounted || !shouldExit) {
+      return;
+    }
+
+    setState(() => _isDissolving = true);
+    try {
+      await _roomRepository.dissolveRoom(widget.draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isDissolving = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(roomDissolveErrorMessage(error))),
+        );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isExitAllowed = true);
+    Navigator.of(context).pop();
   }
 
   Future<void> _copyUrl(BuildContext context) async {
