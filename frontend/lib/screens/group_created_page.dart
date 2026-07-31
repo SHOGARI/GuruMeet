@@ -9,6 +9,7 @@ import '../models/group_creation_draft.dart';
 import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import 'waiting_room_page.dart';
 
@@ -58,7 +59,10 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
         unawaited(_confirmExit());
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('招待')),
+        appBar: AppBar(
+          title: const Text('招待'),
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
+        ),
         body: SafeArea(
           top: false,
           child: Column(

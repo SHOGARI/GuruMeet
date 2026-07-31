@@ -9,6 +9,7 @@ import '../models/room_member.dart';
 import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import 'swipe_page.dart';
 
@@ -156,7 +157,10 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         : AppSpacing.xLarge;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('メンバー待機')),
+      appBar: AppBar(
+        title: const Text('メンバー待機'),
+        actions: [GroupCodeBadge(code: widget.draft.groupId)],
+      ),
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(

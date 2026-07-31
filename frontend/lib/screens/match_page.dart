@@ -11,6 +11,7 @@ import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
 import 'restaurant_detail_page.dart';
@@ -150,6 +151,7 @@ class _MatchPageState extends State<MatchPage>
         appBar: AppBar(
           title: const Text('結果'),
           automaticallyImplyLeading: false,
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
         ),
         maxContentWidth: AppSizes.homeMaxWidth,
         child: Stack(

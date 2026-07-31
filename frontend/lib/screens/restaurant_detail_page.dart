@@ -4,6 +4,7 @@ import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
@@ -26,7 +27,10 @@ class RestaurantDetailPage extends StatelessWidget {
     final colors = theme.colorScheme;
 
     return AppShell(
-      appBar: AppBar(title: const Text('店舗詳細')),
+      appBar: AppBar(
+        title: const Text('店舗詳細'),
+        actions: [GroupCodeBadge(code: draft.groupId)],
+      ),
       maxContentWidth: AppSizes.homeMaxWidth,
       bottomBar: Column(
         mainAxisSize: MainAxisSize.min,

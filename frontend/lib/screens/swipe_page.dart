@@ -10,6 +10,7 @@ import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
 import 'match_page.dart';
@@ -343,6 +344,7 @@ class _SwipePageState extends State<SwipePage> {
         appBar: AppBar(
           title: const Text('お店を選ぶ'),
           automaticallyImplyLeading: false,
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
         ),
         maxContentWidth: AppSizes.homeMaxWidth,
         child: Column(
