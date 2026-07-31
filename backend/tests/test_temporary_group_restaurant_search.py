@@ -1186,6 +1186,7 @@ class TemporaryGroupRestaurantCreateRouteTests(unittest.TestCase):
             joined_participant_count=joined_participant_count,
             is_full=False,
             phase="waiting",
+            restaurant_search_status=group.restaurant_search_status,
         )
 
 

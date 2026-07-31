@@ -468,6 +468,7 @@ def _to_response(
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
         phase=_group_phase(group),
+        restaurant_search_status=group.restaurant_search_status,
     )
 
 

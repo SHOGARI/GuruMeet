@@ -11,6 +11,7 @@ class GroupCreationDraft {
     required this.isHost,
     this.roomId,
     this.phase = GroupPhase.waiting,
+    this.restaurantSearchStatus = RestaurantSearchStatus.succeeded,
   });
 
   factory GroupCreationDraft.createMock({
@@ -29,6 +30,7 @@ class GroupCreationDraft {
         isHost: true,
         roomId: null,
         phase: GroupPhase.waiting,
+        restaurantSearchStatus: RestaurantSearchStatus.succeeded,
       );
     }
 
@@ -51,6 +53,7 @@ class GroupCreationDraft {
       isHost: true,
       roomId: null,
       phase: GroupPhase.waiting,
+      restaurantSearchStatus: RestaurantSearchStatus.succeeded,
     );
   }
 
@@ -64,6 +67,7 @@ class GroupCreationDraft {
       isHost: false,
       roomId: null,
       phase: GroupPhase.waiting,
+      restaurantSearchStatus: RestaurantSearchStatus.succeeded,
     );
   }
 
@@ -76,6 +80,8 @@ class GroupCreationDraft {
     required bool isHost,
     String? locationId,
     GroupPhase phase = GroupPhase.waiting,
+    RestaurantSearchStatus restaurantSearchStatus =
+        RestaurantSearchStatus.succeeded,
   }) {
     return GroupCreationDraft(
       peopleCount: peopleCount,
@@ -86,6 +92,7 @@ class GroupCreationDraft {
       isHost: isHost,
       roomId: roomId,
       phase: phase,
+      restaurantSearchStatus: restaurantSearchStatus,
     );
   }
 
@@ -97,6 +104,7 @@ class GroupCreationDraft {
   final bool isHost;
   final String? roomId;
   final GroupPhase phase;
+  final RestaurantSearchStatus restaurantSearchStatus;
 
   String get inviteToken => roomId ?? groupId;
   String get inviteUrl => '${InviteConfig.baseUrl}/#/join/$inviteToken';
@@ -112,6 +120,20 @@ enum GroupPhase {
       'swiping' => GroupPhase.swiping,
       'result' => GroupPhase.result,
       _ => GroupPhase.waiting,
+    };
+  }
+}
+
+enum RestaurantSearchStatus {
+  notRequested,
+  succeeded,
+  noResults;
+
+  factory RestaurantSearchStatus.fromApi(Object? value) {
+    return switch (value) {
+      'not_requested' => RestaurantSearchStatus.notRequested,
+      'no_results' => RestaurantSearchStatus.noResults,
+      _ => RestaurantSearchStatus.succeeded,
     };
   }
 }
