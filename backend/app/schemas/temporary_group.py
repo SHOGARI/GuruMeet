@@ -6,6 +6,9 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+TemporaryGroupPhase = Literal["waiting", "swiping", "result"]
+RestaurantSearchStatus = Literal["not_requested", "succeeded", "no_results"]
+
 
 class CustomLocationCreate(BaseModel):
     display_name: str = Field(
@@ -126,12 +129,31 @@ class TemporaryGroupParticipantJoinRequest(BaseModel):
     )
 
 
+class TemporaryGroupDissolveRequest(BaseModel):
+    participant_token: str = Field(
+        min_length=16,
+        max_length=256,
+        description="グループを解散する作成者の匿名参加者トークン。",
+        examples=["8f4d9e5a-13f5-4b67-9c3d-7c3a0e0c1b2a"],
+    )
+
+
 class TemporaryGroupResponse(BaseModel):
     id: UUID = Field(description="一時グループのUUID。frontend側で共有URLを組み立てるために使う。")
     code: str = Field(description="手入力参加用の5桁コード。", examples=["A7K2F"])
     expires_at: datetime = Field(description="この時刻を過ぎると取得・参加できない。")
     joined_participant_count: int = Field(description="現在参加済みの人数。")
     is_full: bool = Field(description="参加人数が上限に達しているか。")
+    phase: TemporaryGroupPhase = Field(
+        description="一時グループの進行状態。waiting, swiping, result のいずれか。",
+        examples=["waiting"],
+    )
+    restaurant_search_status: RestaurantSearchStatus = Field(
+        description=(
+            "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
+        ),
+        examples=["succeeded"],
+    )
 
 
 class TemporaryGroupDetail(TemporaryGroupResponse):
@@ -139,6 +161,10 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     voting_started_at: datetime | None = Field(
         default=None,
         description="投票開始時刻。未開始の場合はnull。",
+    )
+    voting_completed_at: datetime | None = Field(
+        default=None,
+        description="グループ全員の投票完了時刻。未完了の場合はnull。",
     )
     creator_id: str | None = Field(default=None, description="任意の作成者ID。")
     participant_count: int | None = Field(default=None, description="参加人数。")
@@ -150,7 +176,7 @@ class TemporaryGroupDetail(TemporaryGroupResponse):
     )
     budget_min: int | None = Field(default=None, description="予算下限。")
     budget_max: int | None = Field(default=None, description="予算上限。")
-    restaurant_search_status: str = Field(
+    restaurant_search_status: RestaurantSearchStatus = Field(
         description=(
             "Hot Pepper店舗検索の状態。not_requested, succeeded, no_results のいずれか。"
         )
@@ -198,10 +224,13 @@ class TemporaryGroupParticipantVotingProgress(BaseModel):
     anonymous_user_id: UUID
     completed_vote_count: int
     is_complete: bool
+    is_me: bool = False
+    is_host: bool = False
 
 
 class TemporaryGroupVotingProgress(BaseModel):
     voting_started_at: datetime | None
+    voting_completed_at: datetime | None
     candidate_count: int
     participant_count: int | None
     joined_participant_count: int
@@ -227,6 +256,7 @@ class TemporaryGroupRestaurantResult(BaseModel):
 
 class TemporaryGroupVotingResult(BaseModel):
     voting_started_at: datetime | None
+    voting_completed_at: datetime | None
     candidate_count: int
     joined_participant_count: int
     completed_participant_count: int

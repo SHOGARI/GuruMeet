@@ -54,7 +54,6 @@ def check_backend_env() -> bool:
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",
         "POSTGRES_PORT",
-        "TEMPORARY_GROUP_TTL_MINUTES",
         "TEMPORARY_GROUP_CODE_MAX_ATTEMPTS",
         "JOIN_RATE_LIMIT_REQUESTS",
         "JOIN_RATE_LIMIT_WINDOW_SECONDS",

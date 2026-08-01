@@ -10,6 +10,8 @@ import '../models/restaurant_preview.dart';
 import '../models/room_member.dart';
 import 'api_client.dart';
 import 'mock_room_service.dart';
+import 'participant_token_cookie_stub.dart'
+    if (dart.library.html) 'participant_token_cookie_web.dart';
 
 class VoteChoice {
   const VoteChoice({required this.restaurantId, required this.liked});
@@ -90,6 +92,8 @@ abstract class RoomRepository {
 
   Future<RoomInvitePreview> getInvitePreview({required String inviteToken});
 
+  Future<void> dissolveRoom(GroupCreationDraft draft);
+
   Future<List<RoomMember>> getMembers(GroupCreationDraft draft);
 
   Future<void> startVoting(GroupCreationDraft draft);
@@ -168,6 +172,11 @@ class MockRoomRepository implements RoomRepository {
       budget: BudgetOption.from2000To3000,
       isFull: false,
     );
+  }
+
+  @override
+  Future<void> dissolveRoom(GroupCreationDraft draft) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
   @override
@@ -288,6 +297,7 @@ class ApiRoomRepository implements RoomRepository {
   final ApiClient _apiClient;
   final RoomRepository _fallback;
   Future<String>? _participantTokenFuture;
+  static const _participantTokenStorageKey = 'gurumeet_participant_token';
 
   @override
   Future<GroupCreationDraft> createRoom({
@@ -321,6 +331,10 @@ class ApiRoomRepository implements RoomRepository {
       budget: budget,
       isHost: true,
       locationId: locationId,
+      phase: GroupPhase.fromApi(json['phase']),
+      restaurantSearchStatus: RestaurantSearchStatus.fromApi(
+        json['restaurant_search_status'],
+      ),
     );
   }
 
@@ -353,6 +367,10 @@ class ApiRoomRepository implements RoomRepository {
       ),
       isHost: false,
       locationId: detail['location_id'] as String?,
+      phase: GroupPhase.fromApi(detail['phase'] ?? json['phase']),
+      restaurantSearchStatus: RestaurantSearchStatus.fromApi(
+        detail['restaurant_search_status'],
+      ),
     );
   }
 
@@ -360,6 +378,19 @@ class ApiRoomRepository implements RoomRepository {
     return RegExp(
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
     ).hasMatch(value);
+  }
+
+  @override
+  Future<void> dissolveRoom(GroupCreationDraft draft) async {
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.dissolveRoom(draft);
+    }
+    final participantToken = await _participantToken();
+    await _apiClient.postJson(
+      '/temporary-groups/$roomId/dissolve',
+      body: {'participant_token': participantToken},
+    );
   }
 
   @override
@@ -380,7 +411,17 @@ class ApiRoomRepository implements RoomRepository {
     if (roomId == null) {
       return _fallback.getMembers(draft);
     }
-    final json = await _apiClient.getJson('/temporary-groups/$roomId');
+    final participantToken = await _participantToken();
+    final json = await _apiClient.getJson(
+      '/temporary-groups/$roomId/voting/progress',
+      queryParameters: {'participant_token': participantToken},
+    );
+    final participants = json['participants'];
+    if (participants is List && participants.isNotEmpty) {
+      return _membersFromProgress(
+        participants.whereType<Map<String, dynamic>>().toList(),
+      );
+    }
     final joinedCount =
         json['joined_participant_count'] as int? ?? draft.peopleCount;
     return _membersFromCount(
@@ -465,9 +506,19 @@ class ApiRoomRepository implements RoomRepository {
     if (roomId == null) {
       return _fallback.getVotingStatus(draft);
     }
+    final participantToken = await _participantToken();
     final json = await _apiClient.getJson(
       '/temporary-groups/$roomId/voting/progress',
+      queryParameters: {'participant_token': participantToken},
     );
+    final participants = json['participants'];
+    if (participants is List && participants.isNotEmpty) {
+      return VotingStatus(
+        members: _membersFromProgress(
+          participants.whereType<Map<String, dynamic>>().toList(),
+        ),
+      );
+    }
     final joinedCount =
         json['joined_participant_count'] as int? ?? draft.peopleCount;
     final completedCount = json['completed_participant_count'] as int? ?? 0;
@@ -619,13 +670,33 @@ class ApiRoomRepository implements RoomRepository {
     return List.generate(count, (index) {
       return RoomMember(
         id: index == 0 ? 'host' : 'member-$index',
-        name: index == 0 ? 'あなた' : '参加者 ${index + 1}',
+        name: '参加者 ${index + 1}',
         avatarUrl: null,
         isHost: index == 0,
+        isMe: index == 0,
         isReady: true,
         hasCompletedVoting: index < completedVotingCount,
       );
     });
+  }
+
+  List<RoomMember> _membersFromProgress(
+    List<Map<String, dynamic>> participants,
+  ) {
+    return [
+      for (var index = 0; index < participants.length; index++)
+        RoomMember(
+          id:
+              participants[index]['anonymous_user_id'] as String? ??
+              'member-$index',
+          name: '参加者 ${index + 1}',
+          avatarUrl: null,
+          isHost: participants[index]['is_host'] == true,
+          isMe: participants[index]['is_me'] == true,
+          isReady: true,
+          hasCompletedVoting: participants[index]['is_complete'] == true,
+        ),
+    ];
   }
 
   Future<String> _participantToken() {
@@ -650,26 +721,66 @@ class ApiRoomRepository implements RoomRepository {
   }
 
   Future<String> _loadOrCreateParticipantToken() async {
-    const storageKey = 'gurumeet_participant_token';
     final preferences = await SharedPreferences.getInstance();
-    final storedToken = preferences.getString(storageKey);
-    if (storedToken != null && storedToken.length >= 16) {
+    final localStorageToken = _validParticipantToken(
+      readParticipantTokenLocalStorage(),
+    );
+    final cookieToken = _validParticipantToken(readParticipantTokenCookie());
+    final storedToken = _validParticipantToken(
+      preferences.getString(_participantTokenStorageKey),
+    );
+
+    if (localStorageToken != null) {
+      await preferences.setString(
+        _participantTokenStorageKey,
+        localStorageToken,
+      );
+      if (cookieToken != localStorageToken) {
+        writeParticipantTokenCookie(localStorageToken);
+      }
+      return localStorageToken;
+    }
+    if (cookieToken != null) {
+      await preferences.setString(_participantTokenStorageKey, cookieToken);
+      writeParticipantTokenLocalStorage(cookieToken);
+      return cookieToken;
+    }
+    if (storedToken != null) {
+      writeParticipantTokenLocalStorage(storedToken);
+      writeParticipantTokenCookie(storedToken);
       return storedToken;
     }
 
     final token = _newParticipantToken();
-    await preferences.setString(storageKey, token);
+    await preferences.setString(_participantTokenStorageKey, token);
+    writeParticipantTokenLocalStorage(token);
+    writeParticipantTokenCookie(token);
     return token;
+  }
+
+  static String? _validParticipantToken(String? token) {
+    final trimmed = token?.trim();
+    if (trimmed == null || trimmed.length < 16 || trimmed.length > 256) {
+      return null;
+    }
+    return trimmed;
   }
 
   static String _newParticipantToken() {
     final random = Random.secure();
-    final timestamp = DateTime.now().microsecondsSinceEpoch;
-    final suffix = List.generate(
-      24,
-      (_) => random.nextInt(16).toRadixString(16),
-    ).join();
-    return 'flutter-$timestamp-$suffix';
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return [
+      hex.substring(0, 8),
+      hex.substring(8, 12),
+      hex.substring(12, 16),
+      hex.substring(16, 20),
+      hex.substring(20),
+    ].join('-');
   }
 }
 

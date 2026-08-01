@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../models/result_summary.dart';
+import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
 import 'restaurant_detail_page.dart';
@@ -27,10 +31,13 @@ class MatchPage extends StatefulWidget {
 
 class _MatchPageState extends State<MatchPage>
     with SingleTickerProviderStateMixin {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
+
   late final ResultSummary _summary;
   late final AnimationController _controller;
   bool _isNavigating = false;
   bool _isOpeningMaps = false;
+  bool _isConfirmingRestaurant = false;
   bool _hasConfirmed = false;
 
   RestaurantPreview get restaurant => _summary.winner.restaurant;
@@ -78,11 +85,34 @@ class _MatchPageState extends State<MatchPage>
     }
   }
 
-  void _confirmRestaurant() {
-    if (_hasConfirmed) {
+  Future<void> _confirmRestaurant() async {
+    if (_hasConfirmed || _isConfirmingRestaurant) {
       return;
     }
-    setState(() => _hasConfirmed = true);
+
+    setState(() => _isConfirmingRestaurant = true);
+    try {
+      await _roomRepository.dissolveRoom(widget.draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isConfirmingRestaurant = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(roomDissolveErrorMessage(error))),
+        );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hasConfirmed = true;
+      _isConfirmingRestaurant = false;
+    });
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('${restaurant.name} に決定しました')));
@@ -126,84 +156,94 @@ class _MatchPageState extends State<MatchPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return AppShell(
-      appBar: AppBar(title: const Text('結果')),
-      maxContentWidth: AppSizes.homeMaxWidth,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: RepaintBoundary(
-              child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      painter: _ConfettiPainter(progress: _controller.value),
-                    );
-                  },
+    return PopScope<void>(
+      canPop: false,
+      child: AppShell(
+        appBar: AppBar(
+          title: const Text('結果'),
+          automaticallyImplyLeading: false,
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
+        ),
+        maxContentWidth: AppSizes.homeMaxWidth,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: _ConfettiPainter(progress: _controller.value),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ResultHeader(summary: _summary),
-              const SizedBox(height: AppSpacing.large),
-              ScaleTransition(
-                scale: Tween<double>(begin: 0.96, end: 1).animate(
-                  CurvedAnimation(
-                    parent: _controller,
-                    curve: const Interval(0, 0.55, curve: Curves.easeOutBack),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ResultHeader(summary: _summary),
+                const SizedBox(height: AppSpacing.large),
+                ScaleTransition(
+                  scale: Tween<double>(begin: 0.96, end: 1).animate(
+                    CurvedAnimation(
+                      parent: _controller,
+                      curve: const Interval(0, 0.55, curve: Curves.easeOutBack),
+                    ),
+                  ),
+                  child: _WinnerCard(summary: _summary),
+                ),
+                const SizedBox(height: AppSpacing.large),
+                _ResultActions(
+                  hasTie: _summary.hasTie,
+                  canRestart: widget.draft.roomId == null,
+                  onOpenMaps: _isOpeningMaps || _isNavigating
+                      ? null
+                      : _openMaps,
+                  onConfirm:
+                      _hasConfirmed || _isNavigating || _isConfirmingRestaurant
+                      ? null
+                      : () => unawaited(_confirmRestaurant()),
+                  onRestart: _isNavigating ? null : _restartVoting,
+                  onOpenDetail: _isNavigating ? null : _openDetail,
+                  onGoHome: _isNavigating ? null : _goHome,
+                ),
+                const SizedBox(height: AppSpacing.xLarge),
+                Text('ランキング', style: theme.textTheme.headlineSmall),
+                const SizedBox(height: AppSpacing.medium),
+                ..._summary.podiumResults.map(
+                  (result) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.regular),
+                    child: _RankedResultTile(
+                      result: result,
+                      selected: result.restaurant.id == restaurant.id,
+                    ),
                   ),
                 ),
-                child: _WinnerCard(summary: _summary),
-              ),
-              const SizedBox(height: AppSpacing.large),
-              _ResultActions(
-                hasTie: _summary.hasTie,
-                canRestart: widget.draft.roomId == null,
-                onOpenMaps: _isOpeningMaps || _isNavigating ? null : _openMaps,
-                onConfirm: _hasConfirmed || _isNavigating
-                    ? null
-                    : _confirmRestaurant,
-                onRestart: _isNavigating ? null : _restartVoting,
-                onOpenDetail: _isNavigating ? null : _openDetail,
-                onGoHome: _isNavigating ? null : _goHome,
-              ),
-              const SizedBox(height: AppSpacing.xLarge),
-              Text('ランキング', style: theme.textTheme.headlineSmall),
-              const SizedBox(height: AppSpacing.medium),
-              ..._summary.podiumResults.map(
-                (result) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.regular),
-                  child: _RankedResultTile(
-                    result: result,
-                    selected: result.restaurant.id == restaurant.id,
-                  ),
-                ),
-              ),
-              if (_summary.rankedResults.length > 3) ...[
-                const SizedBox(height: AppSpacing.medium),
-                Text('みんなの集計', style: theme.textTheme.titleLarge),
-                const SizedBox(height: AppSpacing.medium),
-                ..._summary.rankedResults
-                    .skip(3)
-                    .map(
-                      (result) => Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.regular,
-                        ),
-                        child: _RankedResultTile(
-                          result: result,
-                          selected: false,
+                if (_summary.rankedResults.length > 3) ...[
+                  const SizedBox(height: AppSpacing.medium),
+                  Text('みんなの集計', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: AppSpacing.medium),
+                  ..._summary.rankedResults
+                      .skip(3)
+                      .map(
+                        (result) => Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: AppSpacing.regular,
+                          ),
+                          child: _RankedResultTile(
+                            result: result,
+                            selected: false,
+                          ),
                         ),
                       ),
-                    ),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

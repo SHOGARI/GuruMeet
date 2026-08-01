@@ -10,6 +10,8 @@ class GroupCreationDraft {
     this.locationId,
     required this.isHost,
     this.roomId,
+    this.phase = GroupPhase.waiting,
+    this.restaurantSearchStatus = RestaurantSearchStatus.succeeded,
   });
 
   factory GroupCreationDraft.createMock({
@@ -27,6 +29,8 @@ class GroupCreationDraft {
         locationId: locationId,
         isHost: true,
         roomId: null,
+        phase: GroupPhase.waiting,
+        restaurantSearchStatus: RestaurantSearchStatus.succeeded,
       );
     }
 
@@ -48,6 +52,8 @@ class GroupCreationDraft {
       locationId: locationId,
       isHost: true,
       roomId: null,
+      phase: GroupPhase.waiting,
+      restaurantSearchStatus: RestaurantSearchStatus.succeeded,
     );
   }
 
@@ -60,6 +66,8 @@ class GroupCreationDraft {
       locationId: null,
       isHost: false,
       roomId: null,
+      phase: GroupPhase.waiting,
+      restaurantSearchStatus: RestaurantSearchStatus.succeeded,
     );
   }
 
@@ -71,6 +79,9 @@ class GroupCreationDraft {
     required BudgetOption budget,
     required bool isHost,
     String? locationId,
+    GroupPhase phase = GroupPhase.waiting,
+    RestaurantSearchStatus restaurantSearchStatus =
+        RestaurantSearchStatus.succeeded,
   }) {
     return GroupCreationDraft(
       peopleCount: peopleCount,
@@ -80,6 +91,8 @@ class GroupCreationDraft {
       locationId: locationId,
       isHost: isHost,
       roomId: roomId,
+      phase: phase,
+      restaurantSearchStatus: restaurantSearchStatus,
     );
   }
 
@@ -90,9 +103,39 @@ class GroupCreationDraft {
   final String? locationId;
   final bool isHost;
   final String? roomId;
+  final GroupPhase phase;
+  final RestaurantSearchStatus restaurantSearchStatus;
 
   String get inviteToken => roomId ?? groupId;
   String get inviteUrl => '${InviteConfig.baseUrl}/#/join/$inviteToken';
+}
+
+enum GroupPhase {
+  waiting,
+  swiping,
+  result;
+
+  factory GroupPhase.fromApi(Object? value) {
+    return switch (value) {
+      'swiping' => GroupPhase.swiping,
+      'result' => GroupPhase.result,
+      _ => GroupPhase.waiting,
+    };
+  }
+}
+
+enum RestaurantSearchStatus {
+  notRequested,
+  succeeded,
+  noResults;
+
+  factory RestaurantSearchStatus.fromApi(Object? value) {
+    return switch (value) {
+      'not_requested' => RestaurantSearchStatus.notRequested,
+      'no_results' => RestaurantSearchStatus.noResults,
+      _ => RestaurantSearchStatus.succeeded,
+    };
+  }
 }
 
 enum BudgetOption {

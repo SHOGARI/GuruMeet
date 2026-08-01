@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/group_creation_draft.dart';
+import '../services/room_repository.dart';
+import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
+import 'create_group_page.dart';
 import 'waiting_room_page.dart';
 
 class GroupCreatedPage extends StatefulWidget {
@@ -20,11 +26,19 @@ class GroupCreatedPage extends StatefulWidget {
 }
 
 class _GroupCreatedPageState extends State<GroupCreatedPage> {
+  final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
+
   String? _copyFeedback;
+  bool _isExitAllowed = false;
+  bool _isExitDialogOpen = false;
+  bool _isDissolving = false;
   bool _isNavigating = false;
 
+  bool get _hasNoRestaurants =>
+      widget.draft.restaurantSearchStatus == RestaurantSearchStatus.noResults;
+
   Future<void> _openWaitingRoom() async {
-    if (_isNavigating) {
+    if (_isNavigating || _isDissolving) {
       return;
     }
     setState(() => _isNavigating = true);
@@ -54,114 +68,221 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
         ? AppSpacing.medium
         : AppSpacing.xLarge;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('招待')),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  AppSpacing.xLarge,
-                  horizontalPadding,
-                  AppSpacing.xLarge,
-                ),
-                children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: AppSizes.contentMaxWidth,
-                      ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const _SuccessMark(),
-                            const SizedBox(height: AppSpacing.medium),
-                            Text(
-                              '招待を送ろう',
-                              style: theme.textTheme.headlineMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.small),
-                            Text(
-                              'ルームコードかURLを共有して、参加者を待ちます。',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colors.onSurfaceVariant,
+    return PopScope<void>(
+      canPop: _isExitAllowed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_confirmExit());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('招待'),
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.xLarge,
+                    horizontalPadding,
+                    AppSpacing.xLarge,
+                  ),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: AppSizes.contentMaxWidth,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _hasNoRestaurants
+                                  ? const _WarningMark()
+                                  : const _SuccessMark(),
+                              const SizedBox(height: AppSpacing.medium),
+                              Text(
+                                _hasNoRestaurants ? '候補の店舗がありません' : '招待を送ろう',
+                                style: theme.textTheme.headlineMedium,
                               ),
-                            ),
-                            const SizedBox(height: AppSpacing.xLarge),
-                            _InvitationPanel(
-                              draft: widget.draft,
-                              onCopyUrl: () => _copyUrl(context),
-                              onCopyCode: () => _copyCode(context),
-                              onShare: () => _shareInvite(context),
-                            ),
-                            const SizedBox(height: AppSpacing.large),
-                            AnimatedSwitcher(
-                              duration: AppMotion.medium,
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: Tween<double>(
-                                      begin: 0.96,
-                                      end: 1,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _copyFeedback == null
-                                  ? const SizedBox.shrink()
-                                  : _CopySuccessBanner(
-                                      key: ValueKey(_copyFeedback),
-                                      message: _copyFeedback!,
-                                    ),
-                            ),
-                            const SizedBox(height: AppSpacing.xLarge),
-                            _GroupSummary(draft: widget.draft),
-                          ],
+                              const SizedBox(height: AppSpacing.small),
+                              Text(
+                                _hasNoRestaurants
+                                    ? '条件に合う店舗が見つからなかったため、このグループでは投票を始められません。'
+                                    : 'ルームコードかURLを共有して、参加者を待ちます。',
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xLarge),
+                              if (_hasNoRestaurants)
+                                const _NoRestaurantsNotice()
+                              else ...[
+                                _InvitationPanel(
+                                  draft: widget.draft,
+                                  onCopyUrl: () => _copyUrl(context),
+                                  onCopyCode: () => _copyCode(context),
+                                  onShare: () => _shareInvite(context),
+                                ),
+                                const SizedBox(height: AppSpacing.large),
+                                AnimatedSwitcher(
+                                  duration: AppMotion.medium,
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: ScaleTransition(
+                                        scale: Tween<double>(
+                                          begin: 0.96,
+                                          end: 1,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _copyFeedback == null
+                                      ? const SizedBox.shrink()
+                                      : _CopySuccessBanner(
+                                          key: ValueKey(_copyFeedback),
+                                          message: _copyFeedback!,
+                                        ),
+                                ),
+                              ],
+                              const SizedBox(height: AppSpacing.xLarge),
+                              _GroupSummary(draft: widget.draft),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  AppSpacing.small,
-                  horizontalPadding,
-                  AppSpacing.large,
+                  ],
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: AppSizes.actionMaxWidth,
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.small,
+                    horizontalPadding,
+                    AppSpacing.large,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: PrimaryActionButton(
-                      label: '待機画面へ進む',
-                      onPressed: _isNavigating ? null : _openWaitingRoom,
-                      isLoading: _isNavigating,
-                      loadingLabel: '移動中',
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: AppSizes.actionMaxWidth,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: PrimaryActionButton(
+                        label: _hasNoRestaurants ? '解散して作り直す' : '待機画面へ進む',
+                        onPressed: _isDissolving || _isNavigating
+                            ? null
+                            : _hasNoRestaurants
+                            ? _dissolveAndReturnHome
+                            : _openWaitingRoom,
+                        isLoading: _isDissolving || _isNavigating,
+                        loadingLabel: _isDissolving ? '解散中' : '移動中',
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmExit() async {
+    if (_isExitDialogOpen || _isDissolving) {
+      return;
+    }
+    _isExitDialogOpen = true;
+    final shouldExit =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('グループを解散しますか？'),
+            content: const Text(
+              '解散すると招待URLとルームコードは使えなくなります。招待を続ける場合はこのまま進んでください。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('戻らない'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('解散して戻る'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    _isExitDialogOpen = false;
+    if (!mounted || !shouldExit) {
+      return;
+    }
+
+    setState(() => _isDissolving = true);
+    try {
+      await _roomRepository.dissolveRoom(widget.draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isDissolving = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(roomDissolveErrorMessage(error))),
+        );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isExitAllowed = true);
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _dissolveAndReturnHome() async {
+    if (_isDissolving) {
+      return;
+    }
+    setState(() => _isDissolving = true);
+    try {
+      await _roomRepository.dissolveRoom(widget.draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isDissolving = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(roomDissolveErrorMessage(error))),
+        );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isExitAllowed = true);
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(CreateGroupPage.routeName, (route) => false);
   }
 
   Future<void> _copyUrl(BuildContext context) async {
@@ -257,6 +378,64 @@ class _SuccessMark extends StatelessWidget {
         Icons.check_rounded,
         color: colors.onPrimary,
         size: AppSizes.iconLarge,
+      ),
+    );
+  }
+}
+
+class _WarningMark extends StatelessWidget {
+  const _WarningMark();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      width: AppSizes.successIndicator,
+      height: AppSizes.successIndicator,
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Icons.search_off_rounded,
+        color: colors.onErrorContainer,
+        size: AppSizes.iconLarge,
+      ),
+    );
+  }
+}
+
+class _NoRestaurantsNotice extends StatelessWidget {
+  const _NoRestaurantsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.large),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_rounded, color: colors.onErrorContainer),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              '場所や予算の条件を変えると候補が見つかる可能性があります。参加者を招待する前に、このグループを解散して作り直してください。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onErrorContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

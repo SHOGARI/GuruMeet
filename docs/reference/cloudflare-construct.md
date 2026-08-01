@@ -134,7 +134,7 @@ gurumeet/
 
   docs/
     reference/
-      clouflare-construct.md             # [追加] この手順書
+      cloudflare-construct.md            # [追加] この手順書
 ```
 
 Cloudflare 固有の設定は `infra/cloudflare/app-worker/` に寄せる。`backend/app` には Cloudflare の都合を混ぜない。
@@ -1240,7 +1240,7 @@ npm run check
 
 DB migration がある場合は production DB に適用する。
 地点マスタの初回投入・更新が必要な場合は
-[Location Data Import](../location-data-import.md) の本番DB投入手順に従う。
+[Location Data Import](./location-data-import.md) の本番DB投入手順に従う。
 
 ### deploy
 
@@ -1568,7 +1568,7 @@ infra/cloudflare/app-worker/tsconfig.json
 infra/cloudflare/app-worker/wrangler.jsonc
 infra/cloudflare/app-worker/src/index.ts
 infra/cloudflare/app-worker/.dev.vars.sample
-docs/reference/clouflare-construct.md
+docs/reference/cloudflare-construct.md
 ```
 
 まだやらなくてよい:

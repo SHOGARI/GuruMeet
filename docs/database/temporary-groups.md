@@ -17,7 +17,7 @@
 | `restaurant_search_status` | `VARCHAR(32)` | no | Hot Pepper店舗検索の状態。`not_requested`, `succeeded`, `no_results` のいずれか。 |
 | `voting_started_at` | `TIMESTAMP WITH TIME ZONE` | yes | 投票開始時刻。未開始の場合はnull。 |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | no | DB側の `now()` で作成日時を保存する。 |
-| `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から24時間後。 |
+| `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から3時間後。 |
 
 ## Constraints and Indexes
 
