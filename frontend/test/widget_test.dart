@@ -69,27 +69,18 @@ void main() {
     await tester.pump();
     expect(find.text('4人'), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(const ValueKey('prefecture-search-field')),
-      '東京',
-    );
+    await tester.tap(find.byKey(const ValueKey('prefecture-select-field')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('東京都').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('prefecture-search-field')));
-    await tester.pump();
-    expect(
-      tester
-          .widget<TextFormField>(
-            find.byKey(const ValueKey('prefecture-search-field')),
-          )
-          .controller
-          ?.text,
-      '東京都',
-    );
-    tester.binding.focusManager.primaryFocus?.unfocus();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'グループを作成'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('prefecture-select-field')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('東京都'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const ValueKey('location-search-field')),
