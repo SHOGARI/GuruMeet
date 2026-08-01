@@ -19,15 +19,15 @@ def notify_group_created(
     group: TemporaryGroup,
 ) -> None:
     send_discord_alert(
-        title="group_created",
+        title="グループ作成",
         fields={
-            "environment": settings.environment,
-            "group_id": str(group.id),
-            "participant_count": _display(group.participant_count),
-            "location": group.location or "(none)",
-            "budget": _budget(group.budget_min, group.budget_max),
-            "restaurant_search_status": group.restaurant_search_status,
-            "expires_at": _isoformat(group.expires_at),
+            "環境": settings.environment,
+            "グループID": str(group.id),
+            "人数": _display(group.participant_count),
+            "場所": group.location or "(none)",
+            "予算": _budget(group.budget_min, group.budget_max),
+            "店舗検索": group.restaurant_search_status,
+            "無効化時刻": _format_jst(group.expires_at),
         },
     )
 
@@ -39,53 +39,61 @@ def notify_cleanup_completed(
     scheduled_at: datetime,
 ) -> None:
     send_discord_alert(
-        title="cleanup_completed",
+        title="期限切れグループ削除",
         fields={
-            "environment": settings.environment,
-            "deleted_expired_temporary_groups": deleted_expired_temporary_groups,
-            "expired_groups": summary.get("expired_groups", 0),
-            "total_expected_participants": summary.get(
+            "環境": settings.environment,
+            "削除グループ数": deleted_expired_temporary_groups,
+            "期限切れグループ数": summary.get("expired_groups", 0),
+            "予定人数合計": summary.get(
                 "total_expected_participants",
                 0,
             ),
-            "total_joined_participants": summary.get(
+            "参加人数合計": summary.get(
                 "total_joined_participants",
                 0,
             ),
-            "total_votes": summary.get("total_votes", 0),
-            "groups_with_votes": summary.get("groups_with_votes", 0),
-            "restaurant_statuses": summary.get("restaurant_statuses", "(none)"),
-            "top_locations": summary.get("top_locations", "(none)"),
-            "scheduled_at": _isoformat(scheduled_at),
+            "投票数": summary.get("total_votes", 0),
+            "投票ありグループ数": summary.get("groups_with_votes", 0),
+            "店舗検索状態": summary.get("restaurant_statuses", "(none)"),
+            "多い場所": summary.get("top_locations", "(none)"),
+            "削除実行時刻": _format_jst(scheduled_at),
         },
     )
 
 
-def notify_voting_result_viewed(
+def notify_restaurant_decided(
     group: TemporaryGroup,
     *,
     result: Any,
 ) -> None:
-    top_result = result.results[0] if result.results else None
-    top_restaurant = top_result.restaurant if top_result else None
+    selected_result = result.results[0] if result.results else None
+    if result.selected_restaurant_id is not None:
+        for item in result.results:
+            if item.restaurant.id == result.selected_restaurant_id:
+                selected_result = item
+                break
+
+    selected_restaurant = selected_result.restaurant if selected_result else None
     send_discord_alert(
-        title="voting_result_viewed",
+        title="お店決定",
         fields={
-            "environment": settings.environment,
-            "group_id": str(group.id),
-            "participant_count": _display(group.participant_count),
-            "joined/completed": (
+            "環境": settings.environment,
+            "グループID": str(group.id),
+            "人数": _display(group.participant_count),
+            "参加/完了": (
                 f"{result.joined_participant_count}/"
                 f"{result.completed_participant_count}"
             ),
-            "is_complete": result.is_complete,
-            "location": group.location or "(none)",
-            "has_tie": result.has_tie,
-            "top_like_count": result.top_like_count,
-            "top_restaurant_name": (
-                top_restaurant.name if top_restaurant is not None else "(none)"
+            "場所": group.location or "(none)",
+            "同率から決定": result.has_tie,
+            "最多いいね": result.top_like_count,
+            "決定店舗": (
+                selected_restaurant.name
+                if selected_restaurant is not None
+                else "(none)"
             ),
-            "created_to_result_viewed_minutes": _elapsed_minutes(group.created_at),
+            "完了まで": _elapsed_duration(group.created_at),
+            "決定時刻": _format_jst(datetime.now(UTC)),
         },
     )
 
@@ -109,7 +117,7 @@ def send_discord_alert(
                     {
                         "name": key,
                         "value": _field_value(value),
-                        "inline": True,
+                        "inline": False,
                     }
                     for key, value in fields.items()
                 ],
@@ -142,15 +150,16 @@ def _display(value: object) -> str:
     return "(none)" if value is None else str(value)
 
 
-def _isoformat(value: datetime) -> str:
-    return value.astimezone(DISPLAY_TIMEZONE).isoformat()
+def _format_jst(value: datetime) -> str:
+    return value.astimezone(DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S JST")
 
 
-def _elapsed_minutes(started_at: datetime) -> str:
+def _elapsed_duration(started_at: datetime) -> str:
     started_at_utc = started_at.astimezone(UTC)
     elapsed_seconds = (datetime.now(UTC) - started_at_utc).total_seconds()
-    elapsed_minutes = max(0, round(elapsed_seconds / 60))
-    return str(elapsed_minutes)
+    total_seconds = max(0, round(elapsed_seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes}m{seconds:02d}s"
 
 
 def _field_value(value: object) -> str:

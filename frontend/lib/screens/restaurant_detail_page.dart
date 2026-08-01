@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/group_creation_draft.dart';
 import '../models/restaurant_preview.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
 import '../widgets/restaurant_image.dart';
 import 'home_page.dart';
 
-class RestaurantDetailPage extends StatelessWidget {
+class RestaurantDetailPage extends StatefulWidget {
   const RestaurantDetailPage({
     super.key,
     required this.draft,
@@ -21,32 +23,77 @@ class RestaurantDetailPage extends StatelessWidget {
   final RestaurantPreview restaurant;
 
   @override
+  State<RestaurantDetailPage> createState() => _RestaurantDetailPageState();
+}
+
+class _RestaurantDetailPageState extends State<RestaurantDetailPage> {
+  bool _isOpeningMaps = false;
+  bool _isNavigating = false;
+
+  GroupCreationDraft get draft => widget.draft;
+  RestaurantPreview get restaurant => widget.restaurant;
+
+  Future<void> _openMaps() async {
+    if (_isOpeningMaps) {
+      return;
+    }
+    setState(() => _isOpeningMaps = true);
+    final query = Uri.encodeComponent(
+      '${restaurant.name} ${restaurant.address}',
+    );
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$query',
+    );
+    var launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Googleマップを開けませんでした')));
+    }
+    if (mounted) {
+      setState(() => _isOpeningMaps = false);
+    }
+  }
+
+  void _goHome() {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(HomePage.routeName, (route) => false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
     return AppShell(
-      appBar: AppBar(title: const Text('店舗詳細')),
+      appBar: AppBar(
+        title: const Text('店舗詳細'),
+        actions: [GroupCodeBadge(code: draft.groupId)],
+      ),
       maxContentWidth: AppSizes.homeMaxWidth,
       bottomBar: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           PrimaryActionButton(
-            label: 'Google Mapsで見る',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Google Maps連携は現在準備中です')),
-              );
-            },
+            label: 'Googleマップで開く',
+            onPressed: _isOpeningMaps || _isNavigating ? null : _openMaps,
+            isLoading: _isOpeningMaps,
+            loadingLabel: 'マップを開いています',
           ),
           const SizedBox(height: AppSpacing.small),
           OutlinedButton(
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).pushNamedAndRemoveUntil(HomePage.routeName, (route) => false);
-            },
+            onPressed: _isNavigating || _isOpeningMaps ? null : _goHome,
             child: const Text('ホームへ戻る'),
           ),
         ],
@@ -66,7 +113,7 @@ class RestaurantDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xLarge),
           Text(
-            'MATCHED RESTAURANT',
+            '選ばれたお店',
             style: theme.textTheme.labelLarge?.copyWith(
               color: colors.primary,
               letterSpacing: AppSizes.codeLabelLetterSpacing,
@@ -89,11 +136,6 @@ class RestaurantDetailPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xLarge),
           Text(restaurant.description, style: theme.textTheme.bodyLarge),
           const SizedBox(height: AppSpacing.section),
-          _DetailRow(label: 'グループID', value: draft.groupId),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),
-            child: Divider(),
-          ),
           _DetailRow(label: '人数', value: '${draft.peopleCount}人'),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.medium),

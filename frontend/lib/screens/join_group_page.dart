@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/group_creation_draft.dart';
 import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/primary_action_button.dart';
+import 'match_page.dart';
+import 'swipe_page.dart';
 import 'waiting_room_page.dart';
 
 class JoinGroupPage extends StatefulWidget {
@@ -92,9 +95,7 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
       if (!mounted) {
         return;
       }
-      await Navigator.of(
-        context,
-      ).pushNamed(WaitingRoomPage.routeName, arguments: draft);
+      await _openJoinedRoom(draft);
     } catch (error) {
       if (!mounted) {
         return;
@@ -106,6 +107,32 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
       if (mounted) {
         setState(() => _isNavigating = false);
       }
+    }
+  }
+
+  Future<void> _openJoinedRoom(GroupCreationDraft draft) async {
+    switch (draft.phase) {
+      case GroupPhase.waiting:
+        await Navigator.of(
+          context,
+        ).pushReplacementNamed(WaitingRoomPage.routeName, arguments: draft);
+      case GroupPhase.swiping:
+        await Navigator.of(
+          context,
+        ).pushReplacementNamed(SwipePage.routeName, arguments: draft);
+      case GroupPhase.result:
+        final result = await _roomRepository.getResult(
+          draft: draft,
+          restaurants: const [],
+          localChoices: const [],
+        );
+        if (!mounted) {
+          return;
+        }
+        await Navigator.of(context).pushReplacementNamed(
+          MatchPage.routeName,
+          arguments: (draft: draft, result: result),
+        );
     }
   }
 
@@ -230,6 +257,8 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               width: double.infinity,
               child: PrimaryActionButton(
                 label: '参加する',
+                isLoading: _isNavigating,
+                loadingLabel: '参加中',
                 onPressed:
                     _isNavigating ||
                         (_hasInviteToken && !_canSubmitInvite) ||

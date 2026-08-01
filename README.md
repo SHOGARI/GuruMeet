@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/grumeet-icon.png" width="120" alt="GuruMeet logo">
+<img src="docs/assets/gurumeet-icon.png" width="120" alt="GuruMeet logo">
 
 # GuruMeet
 
@@ -19,6 +19,10 @@
 
 ## Overview
 
+<div align="center">
+  <img src="docs/assets/main-image.png" width="320" alt="GuruMeet main screen">
+</div>
+
 GuruMeet は、人数・場所・予算から飲食店候補を出し、参加者がスワイプ投票で店を決める一時グループアプリです。
 
 招待URL / 5桁コードで参加でき、駅・市区町村・現在地を検索原点にできます。
@@ -27,6 +31,13 @@ GuruMeet は、人数・場所・予算から飲食店候補を出し、参加�
 ```text
 Create group -> Share invite -> Swipe restaurants -> Vote -> Decide
 ```
+
+<div align="center">
+  <img src="docs/assets/demo-1.png" width="22%" alt="GuruMeet demo: create a group">
+  <img src="docs/assets/demo-2.png" width="22%" alt="GuruMeet demo: share an invite">
+  <img src="docs/assets/demo-3.png" width="22%" alt="GuruMeet demo: swipe restaurants">
+  <img src="docs/assets/demo-4.png" width="22%" alt="GuruMeet demo: view voting results">
+</div>
 
 ## Features
 
@@ -148,5 +159,14 @@ gurumeet/
 - [API](./docs/api/)
 - [Database](./docs/database/)
 - [Designs](./docs/designs/)
+- [Legal](./docs/legal/)
 - [Reference](./docs/reference/)
 - [Cloudflare Ops](./infra/cloudflare/README.md)
+
+## Developers
+
+| area | developer | comment |
+| --- | --- | --- |
+| frontend | [https://github.com/jcm2bd9rn5-cyber](https://github.com/jcm2bd9rn5-cyber) | UI職人 |
+| backend | [https://github.com/gaku213waka](https://github.com/gaku213waka) | DB設計の鬼 |
+| infra | [https://github.com/med-000](https://github.com/med-000) | ヒョロガリ |

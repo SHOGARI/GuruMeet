@@ -67,6 +67,14 @@ class TemporaryGroup(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    voting_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    selected_restaurant_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -11,7 +11,7 @@ Cloudflare Worker / Container の運用で、課金事故や異常に気づけ�
 ```text
 やる:
   一時グループ作成時の利用通知
-  投票結果取得時の結果通知
+  店舗決定時の結果通知
   cleanup cron の結果通知
   cleanup cron の失敗通知
 
@@ -192,21 +192,22 @@ scheduled_at
 
 失敗通知は必ず送る。成功通知は日次1回なのでノイズは許容する。
 
-### voting_result_viewed
+### restaurant_decided
 
-投票結果APIが取得されたタイミングで送る。
+投票完了によって単独1位が決まった時点、または同率1位からホストが
+最終決定した時点で送る。
 
 目的:
 
 ```text
-group_created と照合して、作成されたグループが実際に結果表示まで進んだかを見る
+group_created と照合して、作成されたグループが実際に店舗決定まで進んだかを見る
 投票完了数、候補数、同率有無、上位店舗を把握する
 ```
 
 送る情報:
 
 ```text
-event: voting_result_viewed
+event: restaurant_decided
 environment
 group_id
 participant_count
@@ -219,12 +220,8 @@ top_restaurant_name
 created_to_result_viewed_minutes
 ```
 
-注意:
-
-```text
-結果画面を再表示すると複数回通知される可能性がある
-重複排除が必要になったら通知履歴テーブルを追加する
-```
+投票結果の単なる再取得では通知しない。同率決定APIも決定済みの場合は現在結果を
+冪等に返し、通知を再送しない。
 
 ## 実装位置
 

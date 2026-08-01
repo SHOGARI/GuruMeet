@@ -1,123 +1,105 @@
 # Database Foundation
 
-FastAPI、SQLAlchemy、Alembic、PostgreSQL の接続構成を説明する参考資料。
-現在のDB schemaは [`../database/`](../database/) を参照する。
+FastAPI、SQLAlchemy、Alembic、PostgreSQLの現在の接続構成。
+テーブル定義は [`../database/`](../database/) を参照する。
 
-FastAPIからPostgreSQLを利用するために、SQLAlchemyとAlembicを使ったデータベース基盤を作成しました。
+## 構成
 
-## データベースへ接続する流れ
+```text
+FastAPI route
+  -> get_db / SessionLocal
+  -> service
+  -> repository
+  -> SQLAlchemy model
+  -> PostgreSQL
 
-```
-FastAPI
-    │
-    ▼
-database.py（DB接続）
-    │
-    ▼
-Base（ORMの土台）
-    │
-    ▼
-Userモデル（テーブル定義）
-    │
-    ▼
-Alembic（マイグレーション）
-    │
-    ▼
-PostgreSQL
+Alembic
+  -> Base.metadata
+  -> versions/*
+  -> PostgreSQL schema
 ```
 
----
+| path | role |
+| --- | --- |
+| `backend/app/db/database_url.py` | `DATABASE_URL` または `POSTGRES_*` から接続URLを作る。 |
+| `backend/app/db/database.py` | SQLAlchemy engineと `SessionLocal` を作る。 |
+| `backend/app/db/session.py` | FastAPI dependencyとしてSessionを提供する。 |
+| `backend/app/db/base.py` | ORM model共通の `Base`。 |
+| `backend/app/models/` | 現行テーブルに対応するORM model。 |
+| `backend/app/repositories/` | query、lock、集計、永続化処理。 |
+| `backend/alembic/env.py` | AlembicからmetadataとDB接続を読む。 |
+| `backend/alembic/versions/` | schema変更履歴。 |
 
-## 主なファイルと役割
+## 接続URL
 
-- `app/db/database.py`
-  - `.env`の`DATABASE_URL`を読み込みます。
-  - `engine`でPostgreSQLへの接続を管理します。
-  - `SessionLocal`でDB操作用のセッションを作成します。
+`DATABASE_URL` があれば最優先する。`postgresql://` は実行時に
+`postgresql+psycopg://` へ変換する。
 
-- `app/db/base.py`
-  - ORMモデルが共通で継承する`Base`を定義します。
-  - モデルのテーブル情報は`Base.metadata`に集約されます。
+`DATABASE_URL` がなければ以下から組み立てる。
 
-- `app/models/user.py`
-  - PostgreSQLの`users`テーブルに対応する`User`モデルです。
-  - `id`、`name`、`email`、`created_at`を定義しています。
-
-- `alembic.ini` / `alembic/env.py`
-  - AlembicがDBへ接続し、ORMモデルの変更を検出するための設定です。
-
-- `alembic/versions/6724ca471deb_create_users_table.py`
-  - `users`テーブルを作成するマイグレーションファイルです。
-  - `upgrade()`でテーブルを作成します。
-  - `downgrade()`でテーブルを削除します。
-
----
-
-## 各ファイルの役割
-
-### engine
-
-データベースへ接続するための窓口です。
-FastAPIからPostgreSQLへ接続するときに利用されます。
-
-### SessionLocal
-
-データベース操作を行うためのSessionを作成します。
-
-今後は次のように利用します。
-
-```python
-db = SessionLocal()
+```text
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_HOST
+POSTGRES_PORT
+POSTGRES_DB
 ```
 
-### Base
+ローカルComposeは `POSTGRES_*`、Cloudflare ContainerはNeonの
+`DATABASE_URL` を使う。
 
-ORMモデルが共通で継承するクラスです。
+## Session
 
-Alembicは`Base.metadata`を参照して、
-テーブルの追加・変更・削除を検出します。
+通常のrouteでは `Depends(get_db)` を使い、request終了時にSessionを閉じる。
+一時グループ作成ではHot Pepper API待ちの間にDB Sessionを保持しないため、
+外部検索後の同期処理をthread poolへ移し、その内部で `SessionLocal` を開く。
 
----
+transactionのcommit / rollbackはservice層が処理単位で行う。
 
-## Alembicを使う理由
+## Models
 
-ORMモデルを書いただけでは、PostgreSQLに実際のテーブルは作成されません。
+現行model:
 
-AlembicはORMモデルとDBの差分からマイグレーションファイルを作成し、
-その内容をPostgreSQLへ適用します。
-
----
-
-## 実行した主なコマンド
-
-```bash
-docker-compose --env-file .env -f compose.yaml up -d --build
-docker-compose --env-file .env -f compose.yaml exec api alembic revision --autogenerate -m "create users table"
-docker-compose --env-file .env -f compose.yaml exec api alembic upgrade head
-docker-compose --env-file .env -f compose.yaml exec db psql -U gurumeet -d gurumeet -c "\dt"
+```text
+User
+AnonymousUser
+Location
+MunicipalityLocation
+StationLocation
+CustomLocation
+TemporaryGroup
+TemporaryGroupParticipant
+TemporaryGroupVote
 ```
 
----
+`Meeting` modelとusers / meetings routerには、現在有効な機能実装はない。
 
-## 実行結果
+## Migration
 
-PostgreSQLに次のテーブルが作成されました。
+適用:
 
-- `users`
-  - ユーザーデータを保存するテーブルです。
+```sh
+cd backend
+make migrate
+```
 
-- `alembic_version`
-  - Alembicが適用済みのマイグレーションを管理するためのテーブルです。
+現在のheadは `202608010001`。空DBではusers作成から一時グループ、地点、投票、
+店舗決定カラムまで順番に適用する。
 
----
+既存migrationを編集できる条件やshared環境でのforward migration方針は
+[`../migration/migration.md`](../migration/migration.md) を参照する。
 
-## 今後実装する内容
+## 現在のテーブル
 
-今回はデータベース基盤の構築までを行いました。
-
-今後は以下の機能を追加していきます。
-
-- CRUD処理（追加・取得・更新・削除）
-- APIエンドポイント
-- Pydantic Schema
-- サービス層の実装
+```text
+users
+anonymous_users
+locations
+municipality_locations
+station_locations
+custom_locations
+temporary_groups
+temporary_group_participants
+temporary_group_votes
+alembic_version
+```

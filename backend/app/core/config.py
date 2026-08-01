@@ -18,7 +18,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="HOTPEPPER_API_KEY",
     )
-    temporary_group_ttl_minutes: int = 1440
+    temporary_group_ttl_minutes: int = 180
     temporary_group_code_max_attempts: int = 20
     join_rate_limit_requests: int = 10
     join_rate_limit_window_seconds: int = 60

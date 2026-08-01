@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | `id` | `UUID` | no | URL共有用の推測困難な識別子。アプリ側で `uuid4` を生成する。 |
 | `code` | `CHAR(5)` | no | 手入力参加用の5桁英数字コード。unique制約あり。 |
-| `creator_id` | `VARCHAR(128)` | yes | 作成者識別子。認証連携前の任意フィールド。 |
+| `creator_id` | `VARCHAR(128)` | yes | 作成者識別子。作成時tokenがあり明示値がなければ匿名ユーザーUUIDを文字列で保存する。 |
 | `participant_count` | `INT` | yes | 参加人数。 |
 | `location` | `VARCHAR(255)` | yes | 希望場所の表示名。 |
 | `location_id` | `VARCHAR(40)` | yes | 駅・市区町村を選択した場合の `locations.id`。 |
@@ -16,8 +16,10 @@
 | `restaurant` | `JSONB` | yes | 選択済み、または候補の店舗情報。 |
 | `restaurant_search_status` | `VARCHAR(32)` | no | Hot Pepper店舗検索の状態。`not_requested`, `succeeded`, `no_results` のいずれか。 |
 | `voting_started_at` | `TIMESTAMP WITH TIME ZONE` | yes | 投票開始時刻。未開始の場合はnull。 |
+| `voting_completed_at` | `TIMESTAMP WITH TIME ZONE` | yes | 全参加者が全候補へ投票し終えた時刻。未完了の場合はnull。 |
+| `selected_restaurant_id` | `VARCHAR(128)` | yes | 同率1位からホストが決定した店舗ID。単独1位ではnullのまま。 |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | no | DB側の `now()` で作成日時を保存する。 |
-| `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から24時間後。 |
+| `expires_at` | `TIMESTAMP WITH TIME ZONE` | no | 有効期限。デフォルトは作成から3時間後。 |
 
 ## Constraints and Indexes
 
@@ -44,6 +46,19 @@
 
 `location_id` と `custom_location_id` は同時に使わない。
 `location` だけを送る自由入力は、検索原点が解決できないためAPIで400にする。
+
+## 投票状態
+
+進行状態は時刻から計算し、`phase` 自体は保存しない。
+
+| phase | condition |
+| --- | --- |
+| `waiting` | `voting_started_at IS NULL` |
+| `swiping` | `voting_started_at IS NOT NULL` かつ `voting_completed_at IS NULL` |
+| `result` | `voting_completed_at IS NOT NULL` |
+
+個々の投票は `temporary_group_votes` に保存する。全参加者が保存済み店舗候補の
+すべてへ投票すると `voting_completed_at` を一度だけ設定する。
 
 ## 参加人数
 
@@ -91,6 +106,8 @@ backend/alembic/versions/202607290001_add_restaurant_search_status.py
 backend/alembic/versions/202607290002_add_temporary_group_voting.py
 backend/alembic/versions/202607300001_create_locations.py
 backend/alembic/versions/202607300002_create_custom_locations.py
+backend/alembic/versions/202607310001_add_temporary_group_voting_completed_at.py
+backend/alembic/versions/202608010001_add_temporary_group_selected_restaurant.py
 ```
 
 既存DB構成は `feature/setup-db-etc` の方針に合わせ、`POSTGRES_*` 環境変数からDB URLを組み立てる。

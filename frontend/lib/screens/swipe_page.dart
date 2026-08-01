@@ -10,7 +10,9 @@ import '../services/room_repository.dart';
 import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/group_code_badge.dart';
 import '../widgets/restaurant_image.dart';
+import 'home_page.dart';
 import 'match_page.dart';
 
 class SwipePage extends StatefulWidget {
@@ -30,6 +32,7 @@ class _SwipePageState extends State<SwipePage> {
   int _currentIndex = 0;
   final List<VoteChoice> _localChoices = [];
   _SwipeChoice? _lastChoice;
+  _SwipeChoice? _pendingFinalChoice;
   List<RestaurantPreview> _restaurants = const [];
   List<RoomMember> _votingMembers = const [];
   int _restoredPhotoIndex = 0;
@@ -38,17 +41,21 @@ class _SwipePageState extends State<SwipePage> {
   bool _isComplete = false;
   bool _isOpeningResult = false;
   bool _isOpeningMaps = false;
+  bool _isLoadingVotingStatus = false;
+  bool _hasShownVotingStatusError = false;
   String? _restaurantLoadError;
   Timer? _completionTimer;
 
   RestaurantPreview get _currentRestaurant => _restaurants[_currentIndex];
-  int get _remainingCount =>
-      _isComplete ? 0 : _restaurants.length - _currentIndex;
+  int get _remainingCount => _isComplete || _isConfirmingFinalChoice
+      ? 0
+      : _restaurants.length - _currentIndex;
   int get _completedVotingCount =>
       _votingMembers.where((member) => member.hasCompletedVoting).length;
   bool get _isAllVotingComplete =>
       _votingMembers.isNotEmpty &&
       _completedVotingCount == _votingMembers.length;
+  bool get _isConfirmingFinalChoice => _pendingFinalChoice != null;
 
   @override
   void initState() {
@@ -78,6 +85,11 @@ class _SwipePageState extends State<SwipePage> {
         _restaurants = restaurants;
         _isLoadingRestaurants = false;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _precacheUpcomingImages(0);
+        }
+      });
     } catch (error) {
       if (!mounted) {
         return;
@@ -98,7 +110,6 @@ class _SwipePageState extends State<SwipePage> {
         _currentIndex >= _restaurants.length) {
       return;
     }
-    setState(() => _isResolvingChoice = true);
     final currentRestaurant = _currentRestaurant;
     final voteChoice = VoteChoice(
       restaurantId: currentRestaurant.id,
@@ -111,6 +122,15 @@ class _SwipePageState extends State<SwipePage> {
       photoIndex: photoIndex,
     );
 
+    if (_currentIndex == _restaurants.length - 1) {
+      setState(() {
+        _pendingFinalChoice = choice;
+        _restoredPhotoIndex = 0;
+      });
+      return;
+    }
+
+    setState(() => _isResolvingChoice = true);
     try {
       await _roomRepository.submitVote(draft: widget.draft, choice: voteChoice);
     } catch (error) {
@@ -126,33 +146,94 @@ class _SwipePageState extends State<SwipePage> {
 
     _localChoices.add(voteChoice);
 
-    if (_currentIndex == _restaurants.length - 1) {
-      final votingStatus = await _roomRepository.getVotingStatus(widget.draft);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _lastChoice = choice;
-        _votingMembers = votingStatus.members;
-        _restoredPhotoIndex = 0;
-        _isComplete = true;
-        _isResolvingChoice = false;
-      });
-      _startCompletionSimulation();
-      return;
-    }
-
     setState(() {
       _lastChoice = choice;
       _restoredPhotoIndex = 0;
       _currentIndex++;
       _isResolvingChoice = false;
     });
+    _precacheUpcomingImages(_currentIndex);
+  }
+
+  void _precacheUpcomingImages(int startIndex) {
+    if (!mounted || _restaurants.isEmpty) {
+      return;
+    }
+    final lastIndex = (startIndex + 1).clamp(0, _restaurants.length - 1);
+    for (var index = startIndex; index <= lastIndex; index++) {
+      final restaurant = _restaurants[index];
+      final imageUrl = restaurant.imageUrls.isEmpty
+          ? restaurant.imageUrl
+          : restaurant.imageUrls.first;
+      final uri = Uri.tryParse(imageUrl);
+      if (uri == null || !uri.hasScheme) {
+        continue;
+      }
+      final provider = ResizeImage.resizeIfNeeded(
+        1080,
+        null,
+        NetworkImage(imageUrl),
+      );
+      unawaited(precacheImage(provider, context, onError: (_, _) {}));
+    }
+  }
+
+  Future<void> _confirmFinalChoice() async {
+    final choice = _pendingFinalChoice;
+    if (choice == null || _isResolvingChoice || _isComplete) {
+      return;
+    }
+
+    setState(() => _isResolvingChoice = true);
+    final voteChoice = VoteChoice(
+      restaurantId: choice.restaurantId,
+      liked: choice.liked,
+    );
+    try {
+      await _roomRepository.submitVote(draft: widget.draft, choice: voteChoice);
+      final votingStatus = await _roomRepository.getVotingStatus(widget.draft);
+      if (!mounted) {
+        return;
+      }
+      _localChoices.add(voteChoice);
+      setState(() {
+        _lastChoice = choice;
+        _pendingFinalChoice = null;
+        _votingMembers = votingStatus.members;
+        _restoredPhotoIndex = 0;
+        _isComplete = true;
+        _isResolvingChoice = false;
+      });
+      _startCompletionSimulation();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isResolvingChoice = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+    }
+  }
+
+  void _editFinalChoice() {
+    final choice = _pendingFinalChoice;
+    if (choice == null || _isResolvingChoice) {
+      return;
+    }
+    setState(() {
+      _pendingFinalChoice = null;
+      _currentIndex = choice.restaurantIndex;
+      _restoredPhotoIndex = choice.photoIndex;
+    });
   }
 
   void _undoLastChoice() {
     final choice = _lastChoice;
-    if (choice == null || _isResolvingChoice || _isOpeningResult) {
+    if (choice == null ||
+        _isResolvingChoice ||
+        _isOpeningResult ||
+        _isConfirmingFinalChoice) {
       return;
     }
 
@@ -223,12 +304,19 @@ class _SwipePageState extends State<SwipePage> {
   }
 
   Future<void> _loadVotingStatus() async {
+    if (_isLoadingVotingStatus) {
+      return;
+    }
+    _isLoadingVotingStatus = true;
     try {
       final status = await _roomRepository.getVotingStatus(widget.draft);
       if (!mounted) {
         return;
       }
-      setState(() => _votingMembers = status.members);
+      setState(() {
+        _votingMembers = status.members;
+        _hasShownVotingStatusError = false;
+      });
       if (status.isComplete) {
         _completionTimer?.cancel();
       }
@@ -236,9 +324,14 @@ class _SwipePageState extends State<SwipePage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+      if (!_hasShownVotingStatusError) {
+        _hasShownVotingStatusError = true;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+      }
+    } finally {
+      _isLoadingVotingStatus = false;
     }
   }
 
@@ -286,115 +379,138 @@ class _SwipePageState extends State<SwipePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final pendingFinalChoice = _pendingFinalChoice;
 
-    return AppShell(
-      appBar: AppBar(title: const Text('お店を選ぶ')),
-      maxContentWidth: AppSizes.homeMaxWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('食べたい？', style: theme.textTheme.headlineMedium),
-              ),
-              if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
-                _RemainingBadge(
-                  remainingCount: _remainingCount,
-                  totalCount: _restaurants.length,
+    return PopScope<void>(
+      canPop: false,
+      child: AppShell(
+        appBar: AppBar(
+          title: const Text('お店を選ぶ'),
+          automaticallyImplyLeading: false,
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
+        ),
+        maxContentWidth: AppSizes.homeMaxWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'このお店、行きたい？',
+                    style: theme.textTheme.headlineMedium,
+                  ),
                 ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.small),
-          if (_isLoadingRestaurants)
-            const LinearProgressIndicator()
-          else if (_restaurants.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-              child: LinearProgressIndicator(
-                minHeight: AppSizes.progressIndicatorHeight,
-                value: _isComplete
-                    ? 1
-                    : (_currentIndex + 1) / _restaurants.length,
-                backgroundColor: colors.surfaceContainerHigh,
-              ),
+                if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
+                  _RemainingBadge(
+                    remainingCount: _remainingCount,
+                    totalCount: _restaurants.length,
+                  ),
+              ],
             ),
-          const SizedBox(height: AppSpacing.regular),
-          const _SwipeHelpText(),
-          const SizedBox(height: AppSpacing.regular),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppSizes.restaurantCardMaxWidth,
+            const SizedBox(height: AppSpacing.small),
+            if (_isLoadingRestaurants)
+              const LinearProgressIndicator()
+            else if (_restaurants.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: LinearProgressIndicator(
+                  minHeight: AppSizes.progressIndicatorHeight,
+                  value: _isComplete ? 1 : _currentIndex / _restaurants.length,
+                  backgroundColor: colors.surfaceContainerHigh,
+                ),
               ),
-              child: AnimatedSwitcher(
-                duration: AppMotion.medium,
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: _isLoadingRestaurants
-                    ? const _SwipeNoticeCard(
-                        key: ValueKey('restaurant-loading'),
-                        icon: Icons.restaurant_menu_rounded,
-                        title: '店舗候補を探しています',
-                        message: '条件に合うお店を読み込んでいます。',
-                      )
-                    : _restaurantLoadError != null
-                    ? _SwipeNoticeCard(
-                        key: const ValueKey('restaurant-error'),
-                        icon: Icons.error_outline_rounded,
-                        title: '読み込みに失敗しました',
-                        message: _restaurantLoadError!,
-                        actionLabel: '再読み込み',
-                        onAction: () => unawaited(_loadRestaurants()),
-                      )
-                    : _restaurants.isEmpty
-                    ? _SwipeNoticeCard(
-                        key: ValueKey('restaurant-empty'),
-                        icon: Icons.search_off_rounded,
-                        title: '候補が見つかりませんでした',
-                        message: 'エリアや予算を変えてもう一度作成してください。',
-                        actionLabel: '戻る',
-                        onAction: () => Navigator.of(context).maybePop(),
-                      )
-                    : _isComplete
-                    ? _CompletionCard(
-                        key: const ValueKey('swipe-complete'),
-                        members: _votingMembers,
-                        onOpenResult: _isOpeningResult || !_isAllVotingComplete
-                            ? null
-                            : () => unawaited(_openResult()),
-                      )
-                    : _SwipeCard(
-                        key: ValueKey(_currentRestaurant.id),
-                        restaurant: _currentRestaurant,
-                        initialPhotoIndex: _restoredPhotoIndex,
-                        isResolvingChoice: _isResolvingChoice,
-                        onShowDetails: () =>
-                            _showRestaurantDetails(_currentRestaurant),
-                        onSelected: (liked, photoIndex) => _chooseRestaurant(
-                          liked: liked,
-                          photoIndex: photoIndex,
+            const SizedBox(height: AppSpacing.regular),
+            const _SwipeHelpText(),
+            const SizedBox(height: AppSpacing.regular),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppSizes.restaurantCardMaxWidth,
+                ),
+                child: AnimatedSwitcher(
+                  duration: AppMotion.medium,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  child: _isLoadingRestaurants
+                      ? const _SwipeNoticeCard(
+                          key: ValueKey('restaurant-loading'),
+                          icon: Icons.restaurant_menu_rounded,
+                          title: '店舗候補を探しています',
+                          message: '条件に合うお店を読み込んでいます。',
+                        )
+                      : _restaurantLoadError != null
+                      ? _SwipeNoticeCard(
+                          key: const ValueKey('restaurant-error'),
+                          icon: Icons.error_outline_rounded,
+                          title: '読み込みに失敗しました',
+                          message: _restaurantLoadError!,
+                          actionLabel: '再読み込み',
+                          onAction: () => unawaited(_loadRestaurants()),
+                        )
+                      : _restaurants.isEmpty
+                      ? _SwipeNoticeCard(
+                          key: ValueKey('restaurant-empty'),
+                          icon: Icons.search_off_rounded,
+                          title: '候補が見つかりませんでした',
+                          message: 'エリアや予算を変えてもう一度作成してください。',
+                          actionLabel: '戻る',
+                          onAction: () =>
+                              Navigator.of(context).pushNamedAndRemoveUntil(
+                                HomePage.routeName,
+                                (route) => false,
+                              ),
+                        )
+                      : _isComplete
+                      ? _CompletionCard(
+                          key: const ValueKey('swipe-complete'),
+                          members: _votingMembers,
+                          onOpenResult:
+                              _isOpeningResult || !_isAllVotingComplete
+                              ? null
+                              : () => unawaited(_openResult()),
+                        )
+                      : pendingFinalChoice != null
+                      ? _FinalConfirmCard(
+                          key: const ValueKey('swipe-final-confirm'),
+                          isSubmitting: _isResolvingChoice,
+                          onConfirm: () => unawaited(_confirmFinalChoice()),
+                          onEdit: _editFinalChoice,
+                        )
+                      : _SwipeCard(
+                          key: ValueKey(_currentRestaurant.id),
+                          restaurant: _currentRestaurant,
+                          initialPhotoIndex: _restoredPhotoIndex,
+                          isResolvingChoice: _isResolvingChoice,
+                          onShowDetails: () =>
+                              _showRestaurantDetails(_currentRestaurant),
+                          onSelected: (liked, photoIndex) => _chooseRestaurant(
+                            liked: liked,
+                            photoIndex: photoIndex,
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.regular),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppSizes.restaurantCardMaxWidth,
+            if (!_isComplete && !_isConfirmingFinalChoice) ...[
+              const SizedBox(height: AppSpacing.regular),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppSizes.restaurantCardMaxWidth,
+                  ),
+                  child: _SwipeFooterActions(
+                    canUndo:
+                        _lastChoice != null &&
+                        !_isResolvingChoice &&
+                        !_isOpeningResult,
+                    onUndo: _undoLastChoice,
+                  ),
+                ),
               ),
-              child: _SwipeFooterActions(
-                canUndo:
-                    _lastChoice != null &&
-                    !_isResolvingChoice &&
-                    !_isOpeningResult,
-                onUndo: _undoLastChoice,
-              ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -498,7 +614,7 @@ class _SwipeHelpText extends StatelessWidget {
         const SizedBox(width: AppSpacing.small),
         Expanded(
           child: Text(
-            '右で食べたい、左で見送り',
+            '右で行きたい、左で今回は見送る',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.primary,
               fontWeight: FontWeight.w800,
@@ -563,6 +679,85 @@ class _SwipeNoticeCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.medium),
             FilledButton.tonal(onPressed: onAction, child: Text(label)),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FinalConfirmCard extends StatelessWidget {
+  const _FinalConfirmCard({
+    super.key,
+    required this.isSubmitting,
+    required this.onConfirm,
+    required this.onEdit,
+  });
+
+  final bool isSubmitting;
+  final VoidCallback onConfirm;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.large),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.center,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.done_all_rounded, color: colors.primary),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.medium),
+          Text(
+            'これで全部完了しますか？',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.small),
+          Text(
+            'すべての候補に回答済みです。完了すると、みんなの投票待ちに進みます。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.large),
+          FilledButton.icon(
+            onPressed: isSubmitting ? null : onConfirm,
+            icon: isSubmitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.check_rounded),
+            label: const Text('投票を完了する'),
+          ),
+          const SizedBox(height: AppSpacing.small),
+          OutlinedButton.icon(
+            onPressed: isSubmitting ? null : onEdit,
+            icon: const Icon(Icons.edit_rounded),
+            label: const Text('回答に戻る'),
+          ),
         ],
       ),
     );
@@ -711,6 +906,10 @@ class _VotingMemberTile extends StatelessWidget {
                 if (member.isHost) ...[
                   const SizedBox(width: AppSpacing.small),
                   _TinyStatusPill(label: 'ホスト', completed: completed),
+                ],
+                if (member.isMe) ...[
+                  const SizedBox(width: AppSpacing.small),
+                  _TinyStatusPill(label: 'あなた', completed: completed),
                 ],
               ],
             ),
@@ -955,7 +1154,7 @@ class _SwipeCardState extends State<_SwipeCard>
     if (_isInteractionLocked) {
       return;
     }
-    setState(() => _dragOffset += details.delta);
+    setState(() => _dragOffset += Offset(details.delta.dx, 0));
   }
 
   void _handlePanEnd(DragEndDetails details) {
@@ -1048,36 +1247,38 @@ class _SwipeCardState extends State<_SwipeCard>
     final likeOpacity = _dragOffset.dx > 0 ? _decisionProgress : 0.0;
     final rejectOpacity = _dragOffset.dx < 0 ? _decisionProgress : 0.0;
 
-    return Transform.translate(
-      offset: _dragOffset,
-      child: Transform.rotate(
-        angle: rotation,
-        child: GestureDetector(
-          onPanUpdate: _handlePanUpdate,
-          onPanEnd: _handlePanEnd,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final cardSize = Size(
-                constraints.maxWidth,
-                constraints.hasBoundedHeight
-                    ? constraints.maxHeight
-                    : constraints.maxWidth * 1.25,
-              );
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) => _handleTapUp(details, cardSize),
-                child: _CardSurface(
-                  restaurant: widget.restaurant,
-                  photoIndex: _photoIndex,
-                  likeOpacity: likeOpacity,
-                  rejectOpacity: rejectOpacity,
-                  isResolvingChoice: _isInteractionLocked,
-                  onShowDetails: widget.onShowDetails,
-                  onRejected: () => _animateOut(liked: false),
-                  onLiked: () => _animateOut(liked: true),
-                ),
-              );
-            },
+    return RepaintBoundary(
+      child: Transform.translate(
+        offset: _dragOffset,
+        child: Transform.rotate(
+          angle: rotation,
+          child: GestureDetector(
+            onHorizontalDragUpdate: _handlePanUpdate,
+            onHorizontalDragEnd: _handlePanEnd,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final cardSize = Size(
+                  constraints.maxWidth,
+                  constraints.hasBoundedHeight
+                      ? constraints.maxHeight
+                      : constraints.maxWidth * 1.25,
+                );
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) => _handleTapUp(details, cardSize),
+                  child: _CardSurface(
+                    restaurant: widget.restaurant,
+                    photoIndex: _photoIndex,
+                    likeOpacity: likeOpacity,
+                    rejectOpacity: rejectOpacity,
+                    isResolvingChoice: _isInteractionLocked,
+                    onShowDetails: widget.onShowDetails,
+                    onRejected: () => _animateOut(liked: false),
+                    onLiked: () => _animateOut(liked: true),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1194,8 +1395,8 @@ class _CardSurface extends StatelessWidget {
                     child: Transform.rotate(
                       angle: -0.18,
                       child: const _DecisionStamp(
-                        label: 'LIKE',
-                        icon: Icons.favorite_rounded,
+                        label: '行きたい',
+                        icon: Icons.bookmark_add_rounded,
                       ),
                     ),
                   ),
@@ -1208,8 +1409,8 @@ class _CardSurface extends StatelessWidget {
                     child: Transform.rotate(
                       angle: 0.18,
                       child: const _DecisionStamp(
-                        label: 'NOPE',
-                        icon: Icons.close_rounded,
+                        label: '今回は見送る',
+                        icon: Icons.remove_circle_outline_rounded,
                       ),
                     ),
                   ),
@@ -1288,15 +1489,15 @@ class _CardSurface extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _SwipeActionButton(
-                        tooltip: '拒否',
-                        icon: Icons.close_rounded,
+                        tooltip: '今回は見送る',
+                        icon: Icons.remove_circle_outline_rounded,
                         foregroundColor: colors.onErrorContainer,
                         backgroundColor: colors.errorContainer,
                         onPressed: isResolvingChoice ? null : onRejected,
                       ),
                       _SwipeActionButton(
-                        tooltip: 'いいね',
-                        icon: Icons.favorite_rounded,
+                        tooltip: '行きたい',
+                        icon: Icons.bookmark_add_rounded,
                         foregroundColor: colors.onPrimary,
                         backgroundColor: colors.primary,
                         onPressed: isResolvingChoice ? null : onLiked,

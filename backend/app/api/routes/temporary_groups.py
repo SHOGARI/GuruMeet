@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -11,8 +11,10 @@ from app.models.temporary_group import TemporaryGroup
 from app.schemas.temporary_group import (
     TemporaryGroupCreate,
     TemporaryGroupDetail,
+    TemporaryGroupDissolveRequest,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
+    TemporaryGroupRestaurantDecisionRequest,
     TemporaryGroupResponse,
     TemporaryGroupVoteSubmitRequest,
     TemporaryGroupVoteSubmitResponse,
@@ -22,7 +24,6 @@ from app.schemas.temporary_group import (
 )
 from app.services.discord_alert_service import (
     notify_group_created,
-    notify_voting_result_viewed,
 )
 from app.services.hotpepper_service import (
     HotPepperAPIError,
@@ -31,12 +32,16 @@ from app.services.hotpepper_service import (
 from app.services.temporary_group_service import (
     TemporaryGroupCodeCollisionError,
     TemporaryGroupFullError,
+    TemporaryGroupHostRequiredError,
     TemporaryGroupNotFoundError,
     TemporaryGroupParticipantNotFoundError,
     TemporaryGroupRestaurantNotFoundError,
+    TemporaryGroupRestaurantDecisionError,
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
+    TemporaryGroupVotingCompleteError,
+    TemporaryGroupVotingNotCompleteError,
     TemporaryGroupVotingNotReadyError,
     TemporaryGroupVotingNotStartedError,
 )
@@ -176,6 +181,36 @@ def get_temporary_group(
 
 
 @router.post(
+    "/{group_id}/dissolve",
+    response_model=TemporaryGroupResponse,
+    summary="一時グループを解散する",
+    description=(
+        "作成者が一時グループを解散します。物理削除はせず、expires_atをリクエスト時刻へ更新し、"
+        "以後は期限切れグループとして扱います。"
+    ),
+)
+def dissolve_temporary_group(
+    group_id: UUID,
+    request_body: TemporaryGroupDissolveRequest,
+    db: Session = Depends(get_db),
+) -> TemporaryGroupResponse:
+    service = TemporaryGroupService(db)
+    try:
+        group = service.dissolve_group(group_id, request_body.participant_token)
+    except TemporaryGroupNotFoundError:
+        raise _not_found() from None
+    except TemporaryGroupParticipantNotFoundError:
+        raise _participant_not_found() from None
+    except TemporaryGroupHostRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="この一時グループを解散できるのは作成者だけです。",
+        ) from None
+
+    return _to_response(group, service)
+
+
+@router.post(
     "/{group_id}/voting/start",
     response_model=TemporaryGroupVotingProgress,
     summary="一時グループの投票を開始する",
@@ -226,6 +261,11 @@ def submit_temporary_group_vote(
         raise _not_found() from None
     except TemporaryGroupVotingNotStartedError:
         raise _voting_not_started() from None
+    except TemporaryGroupVotingCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="投票はすでに完了しています。",
+        ) from None
     except TemporaryGroupParticipantNotFoundError:
         raise _participant_not_found() from None
     except TemporaryGroupRestaurantNotFoundError as exc:
@@ -247,11 +287,12 @@ def submit_temporary_group_vote(
 )
 def get_temporary_group_voting_progress(
     group_id: UUID,
+    participant_token: str | None = Query(default=None, min_length=16, max_length=256),
     db: Session = Depends(get_db),
 ) -> TemporaryGroupVotingProgress:
     service = TemporaryGroupService(db)
     try:
-        return service.get_voting_progress(group_id)
+        return service.get_voting_progress(group_id, participant_token)
     except TemporaryGroupNotFoundError:
         raise _not_found() from None
     except TemporaryGroupVotingCandidatesError as exc:
@@ -272,15 +313,61 @@ def get_temporary_group_voting_result(
 ) -> TemporaryGroupVotingResult:
     service = TemporaryGroupService(db)
     try:
-        result = service.get_voting_result(group_id)
-        group = service.get_active_by_id(group_id)
-        if group is not None:
-            notify_voting_result_viewed(group, result=result)
-        return result
+        return service.get_voting_result(group_id)
     except TemporaryGroupNotFoundError:
         raise _not_found() from None
     except TemporaryGroupVotingNotStartedError:
         raise _voting_not_started() from None
+    except TemporaryGroupVotingNotCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="全員の投票が完了するまで結果を表示できません。",
+        ) from None
+    except TemporaryGroupVotingCandidatesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{group_id}/voting/result/decision",
+    response_model=TemporaryGroupVotingResult,
+    summary="同率1位の店舗候補から最終決定する",
+)
+def decide_temporary_group_voting_result(
+    group_id: UUID,
+    request_body: TemporaryGroupRestaurantDecisionRequest,
+    db: Session = Depends(get_db),
+) -> TemporaryGroupVotingResult:
+    service = TemporaryGroupService(db)
+    try:
+        return service.decide_restaurant(
+            group_id=group_id,
+            participant_token=request_body.participant_token,
+            restaurant_id=request_body.restaurant_id,
+        )
+    except TemporaryGroupNotFoundError:
+        raise _not_found() from None
+    except TemporaryGroupParticipantNotFoundError:
+        raise _participant_not_found() from None
+    except TemporaryGroupHostRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="同率候補を決定できるのはホストだけです。",
+        ) from None
+    except TemporaryGroupVotingNotStartedError:
+        raise _voting_not_started() from None
+    except TemporaryGroupVotingNotCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="全員の投票が完了するまで結果を決定できません。",
+        ) from None
+    except TemporaryGroupRestaurantDecisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     except TemporaryGroupVotingCandidatesError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -400,8 +487,10 @@ def _to_detail(
         expires_at=group.expires_at,
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
+        phase=_group_phase(group),
         created_at=group.created_at,
         voting_started_at=group.voting_started_at,
+        voting_completed_at=group.voting_completed_at,
         creator_id=group.creator_id,
         participant_count=group.participant_count,
         location=group.location,
@@ -425,7 +514,17 @@ def _to_response(
         expires_at=group.expires_at,
         joined_participant_count=joined_participant_count,
         is_full=service.is_full(group, joined_participant_count),
+        phase=_group_phase(group),
+        restaurant_search_status=group.restaurant_search_status,
     )
+
+
+def _group_phase(group: TemporaryGroup) -> str:
+    if group.voting_completed_at is not None:
+        return "result"
+    if group.voting_started_at is not None:
+        return "swiping"
+    return "waiting"
 
 
 def _create_temporary_group_response(
