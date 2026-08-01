@@ -11,41 +11,47 @@
 
 地点の親テーブル。駅・市区町村の候補を選択した一時グループは、この `id` を保持する。
 
-| column | description |
-| --- | --- |
-| `id` | `municipality:{code}` または `station:{code}` |
-| `location_type` | `municipality` / `station` |
-| `name` | 駅名または市区町村名 |
-| `name_kana` | 読み仮名。検索補助用 |
-| `normalized_name` | 検索用に正規化した名称 |
-| `normalized_kana` | 検索用に正規化した読み |
-| `display_name` | 候補表示用の名称 |
-| `prefecture_name` | 都道府県名 |
-| `municipality_name` | 市区町村名 |
-| `latitude` | 緯度 |
-| `longitude` | 経度 |
-| `source` | `geolonia` / `ekidata` |
-| `source_updated_at` | 元データ更新日時。取得できる場合だけ入れる |
+| column | type | null | description |
+| --- | --- | --- | --- |
+| `id` | `VARCHAR(40)` | no | `municipality:{code}` または `station:{code}`。主キー。 |
+| `location_type` | `VARCHAR(32)` | no | `municipality` / `station`。CHECK制約あり。 |
+| `name` | `VARCHAR(128)` | no | 駅名または市区町村名。 |
+| `name_kana` | `VARCHAR(128)` | yes | 読み仮名。検索補助用。 |
+| `normalized_name` | `VARCHAR(128)` | no | 検索用に正規化した名称。 |
+| `normalized_kana` | `VARCHAR(128)` | yes | 検索用に正規化した読み。 |
+| `display_name` | `VARCHAR(255)` | no | 候補表示用の名称。 |
+| `prefecture_name` | `VARCHAR(32)` | no | 都道府県名。 |
+| `municipality_name` | `VARCHAR(64)` | yes | 市区町村名。 |
+| `latitude` | `FLOAT` | no | 緯度。 |
+| `longitude` | `FLOAT` | no | 経度。 |
+| `source` | `VARCHAR(32)` | no | `geolonia` / `ekidata`。 |
+| `source_updated_at` | `TIMESTAMP WITH TIME ZONE` | yes | 元データ更新日時。 |
 
 ## municipality_locations
 
 市区町村の固有情報。
 
-| column | description |
-| --- | --- |
-| `location_id` | `locations.id` へのFK |
-| `municipality_code` | 市区町村コード |
+| column | type | null | description |
+| --- | --- | --- | --- |
+| `location_id` | `VARCHAR(40)` | no | `locations.id` へのFK兼主キー。親削除時CASCADE。 |
+| `municipality_code` | `VARCHAR(16)` | no | uniqueな市区町村コード。 |
 
 ## station_locations
 
 駅の固有情報。
 
-| column | description |
-| --- | --- |
-| `location_id` | `locations.id` へのFK |
-| `station_code` | 駅コード |
-| `station_group_code` | 駅グループコード |
-| `line_name` | 路線名。複数路線の場合は `/` 区切り |
+| column | type | null | description |
+| --- | --- | --- | --- |
+| `location_id` | `VARCHAR(40)` | no | `locations.id` へのFK兼主キー。親削除時CASCADE。 |
+| `station_code` | `VARCHAR(16)` | no | uniqueな駅コード。 |
+| `station_group_code` | `VARCHAR(16)` | yes | 路線違いの同一駅を束ねるコード。 |
+| `line_name` | `VARCHAR(128)` | yes | 路線名。複数路線の場合は `/` 区切り。 |
+
+## Indexes
+
+検索用indexは `locations.location_type`、`prefecture_name`、
+`normalized_name`、`normalized_kana` に設定する。子テーブルは
+`municipality_code`、`station_code`、`station_group_code` にindexを持つ。
 
 ## temporary_groups への保存
 

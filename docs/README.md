@@ -10,6 +10,7 @@ GuruMeet の仕様、設計、運用手順、外部資料を置くディレク�
 | [`database/`](./database/) | DB schema、ER図、テーブル定義。 |
 | [`designs/`](./designs/) | 設計判断、採用方針、検討メモ。 |
 | [`development/`](./development/) | 開発時のルール、ブランチ運用、ローカル開発方針。 |
+| [`legal/`](./legal/) | アプリ内に表示する規約、プライバシー、問い合わせ、ライセンス文書。 |
 | [`migration/`](./migration/) | Alembic migration の運用方針。 |
 | [`reference/`](./reference/) | 外部サービス説明、構築手順、運用手順、データ投入台帳、参考資料。 |
 

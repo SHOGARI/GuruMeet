@@ -2,6 +2,9 @@
 
 DB定義を変更するときのAlembic運用メモ。
 
+現在のrevision headは `202608010001`。現行schemaは
+[`../database/`](../database/) を参照する。
+
 このrepoでは、**merge前のfeature branchではmigrationを最終形に整理する**。  
 試行錯誤のmigrationを全部残すより、merge時点で機能単位の少ないmigrationになっている方を優先する。
 
@@ -214,4 +217,3 @@ make dev
 ```
 
 注意: `down -v` はDBデータを削除する。必要なデータがある環境では実行しない。
-

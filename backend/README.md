@@ -13,18 +13,35 @@ backend/
     api/
       routes/
         health.py
+        internal.py
+        locations.py
+        temporary_groups.py
         users.py
         meetings.py
     core/
       config.py
     schemas/
+      location.py
+      temporary_group.py
       user.py
       meeting.py
     models/
+      anonymous_user.py
+      custom_location.py
+      location.py
+      temporary_group.py
+      temporary_group_participant.py
+      temporary_group_vote.py
       user.py
       meeting.py
+    repositories/
+      location_repository.py
+      temporary_group_repository.py
     services/
+      hotpepper_service.py
+      location_service.py
       meeting_service.py
+      temporary_group_service.py
     db/
       session.py
   compose.yaml
@@ -43,6 +60,7 @@ backend/
 - `app/core/`: アプリ全体の設定を置く。環境変数、認証設定、共通設定などはここに寄せる。
 - `app/schemas/`: API の request / response の型を置く。Flutter と JSON でやり取りする形はここで定義する。
 - `app/models/`: DB の table に対応する型を置く。DB 構造の source of truth にする。
+- `app/repositories/`: SQLAlchemy query、行ロック、集計、永続化処理を置く。
 - `app/services/`: 業務ロジックを置く。`routes/` に処理を書きすぎず、複数 API で使う処理はここへ逃がす。
 - `app/db/`: DB 接続や session 管理を置く。
 - `compose.yaml`: backend local 開発用の compose 設定を置く。
@@ -86,6 +104,7 @@ CORS_ALLOW_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000","http://loc
 GURUMEET_ENABLE_MOCK_RESTAURANTS=true
 GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS=1000
 GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS=3000
+GURUMEET_HOTPEPPER_CUSTOM_LOCATION_SEARCH_RADIUS_METERS=1000
 PARTICIPANT_TOKEN_HASH_SECRET=<openssl rand -hex 32 の出力>
 INTERNAL_TASK_SECRET=<openssl rand -hex 32 の出力>
 ```
@@ -136,6 +155,7 @@ CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
 GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS
 GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS
+GURUMEET_HOTPEPPER_CUSTOM_LOCATION_SEARCH_RADIUS_METERS
 ```
 
 Environment secrets の登録場所:
@@ -170,6 +190,7 @@ CORS_ALLOW_ORIGINS:
 GURUMEET_ENABLE_MOCK_RESTAURANTS: false
 GURUMEET_HOTPEPPER_STATION_SEARCH_RADIUS_METERS: 1000
 GURUMEET_HOTPEPPER_MUNICIPALITY_SEARCH_RADIUS_METERS: 3000
+GURUMEET_HOTPEPPER_CUSTOM_LOCATION_SEARCH_RADIUS_METERS: 1000
 ```
 
 `backend` フォルダ内で実行:
@@ -189,6 +210,9 @@ API:
 - `http://localhost:8000/`
 - `http://localhost:8000/health`
 - `http://localhost:8000/docs`
+
+現行endpoint一覧は [API Overview](../docs/api/api.md)、DB定義は
+[Database Overview](../docs/database/database.md) を参照する。
 
 店舗候補は一時グループ作成時に希望場所が指定されていれば同時に検索・保存されます。
 
@@ -212,10 +236,10 @@ POST /temporary-groups
   - 利用条件は駅データ.jpの案内に従う
   - ひらがな・カタカナ検索を本番品質で行う場合は、駅名称カナを含む有料データを前提にする
 
-外部データ/APIのライセンス、料金、運用上の扱いは [External Data And Services](../docs/external-services.md) にまとめる。
+外部データ/APIのライセンス、料金、運用上の扱いは [External Data And Services](../docs/reference/external-services.md) にまとめる。
 
 CSVはGitに含めず、ローカルまたは運用環境で取得して指定する。
-初回投入の具体的な手順は [Location Data Import](../docs/location-data-import.md) にまとめる。
+初回投入の具体的な手順は [Location Data Import](../docs/reference/location-data-import.md) にまとめる。
 
 ```sh
 python scripts/import_locations.py \

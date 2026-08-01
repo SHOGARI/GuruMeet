@@ -52,6 +52,10 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: 法務文書をアプリ表示用コードへ反映
+        working-directory: frontend
+        run: dart run tool/generate_legal_content.dart
+
       - name: frontend を静的解析
         working-directory: frontend
         run: flutter analyze

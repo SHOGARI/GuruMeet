@@ -3,11 +3,13 @@
 DB定義の入口。
 
 - [Database Overview](./database.md)
+- [Users Table](./users.md)
 - [Anonymous Users Table](./anonymous-users.md)
 - [Location Tables](./locations.md)
 - [Custom Locations Table](./custom-locations.md)
 - [Temporary Groups Table](./temporary-groups.md)
 - [Temporary Group Participants Table](./temporary-group-participants.md)
+- [Temporary Group Votes Table](./temporary-group-votes.md)
 
 ## ER図
 
@@ -50,6 +52,8 @@ erDiagram
         json restaurant
         string restaurant_search_status
         datetime voting_started_at
+        datetime voting_completed_at
+        string selected_restaurant_id
         datetime created_at
         datetime expires_at
     }
@@ -139,3 +143,11 @@ Hot Pepper検索に使う原点は `location_id` / `custom_location_id` で分�
 
 `custom_locations.source` は `current_location` / `map_pin` を許可する。
 現在のフロントエンドでは、現在地検索は `current_location` として送信する。
+
+## 投票状態の扱い
+
+`temporary_groups.voting_started_at` が投票開始、`voting_completed_at` が全参加者の
+全候補への投票完了を表す。個票は `temporary_group_votes` に保存する。
+
+同率1位をホストが決定した場合だけ `selected_restaurant_id` を保存する。
+単独1位の場合はnullのままで、集計結果の先頭を決定店舗として扱う。

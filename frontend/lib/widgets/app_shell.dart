@@ -8,12 +8,14 @@ class AppShell extends StatelessWidget {
     required this.child,
     this.appBar,
     this.bottomBar,
+    this.floatingActionButton,
     this.maxContentWidth = AppSizes.contentMaxWidth,
   });
 
   final Widget child;
   final PreferredSizeWidget? appBar;
   final Widget? bottomBar;
+  final Widget? floatingActionButton;
   final double maxContentWidth;
 
   @override
@@ -46,6 +48,7 @@ class AppShell extends StatelessWidget {
 
     return Scaffold(
       appBar: appBar,
+      floatingActionButton: floatingActionButton,
       body: SafeArea(child: screenWidth >= 900 ? Scrollbar(child: body) : body),
       bottomNavigationBar: bottomBar == null
           ? null

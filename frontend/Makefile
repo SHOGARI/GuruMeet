@@ -16,6 +16,7 @@ help:
 	@printf "%s\n" ""
 	@printf "%s\n" "初期設定:"
 	@printf "%s\n" "  make install      Flutter の依存関係を取得"
+	@printf "%s\n" "  make legal        docs/legal をアプリ表示用コードへ変換"
 	@printf "%s\n" ""
 	@printf "%s\n" "ローカル起動:"
 	@printf "%s\n" "  make check-env    .env と dart-define 用の値を確認"
@@ -27,20 +28,25 @@ help:
 	@printf "%s\n" "  make analyze      Flutter analyze を実行"
 	@printf "%s\n" "  make test         Flutter test を実行"
 
+.PHONY: legal
+legal:
+	dart run tool/generate_legal_content.dart
+
 .PHONY: install
 install:
 	flutter pub get
+	$(MAKE) legal
 
 .PHONY: check-env
 check-env:
 	cd .. && python3 scripts/check_local_env.py --scope frontend
 
 .PHONY: dev
-dev: check-env
+dev: check-env legal
 	flutter run -d web-server --web-hostname 0.0.0.0 --web-port $(FRONTEND_PORT) $(DART_DEFINES)
 
 .PHONY: dev-chrome
-dev-chrome: check-env
+dev-chrome: check-env legal
 	flutter run -d chrome --web-port $(FRONTEND_PORT) $(DART_DEFINES)
 
 .PHONY: format
@@ -48,9 +54,9 @@ format:
 	flutter format .
 
 .PHONY: analyze
-analyze:
+analyze: legal
 	flutter analyze
 
 .PHONY: test
-test: check-env
+test: check-env legal
 	flutter test $(DART_DEFINES)

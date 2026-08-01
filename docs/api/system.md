@@ -1,0 +1,54 @@
+# System API
+
+backendの疎通確認と、運用タスク用の内部API。
+
+## GET /
+
+FastAPI applicationが応答できることを確認する。
+
+```json
+{
+  "status": "ok",
+  "service": "gurumeet-backend"
+}
+```
+
+## GET /health
+
+backend processのhealth check。
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+DBや外部APIの疎通までは検査しない。Cloudflare WorkerとR2のhealthは
+`GET /edge/health` が担当する。
+
+## POST /internal/cleanup-expired-temporary-groups
+
+期限切れ一時グループを物理削除し、期限切れのcustom locationも削除する。
+Cloudflare Cron Triggerが毎日12:00 UTC（21:00 JST）にcontainerへ直接実行する。
+
+Request header:
+
+```http
+X-Internal-Task-Secret: <INTERNAL_TASK_SECRET>
+```
+
+secretは必須で、欠落または不一致の場合は `401 Unauthorized`。
+
+Response:
+
+```json
+{
+  "deleted_expired_temporary_groups": 12
+}
+```
+
+レスポンス件数は削除した `temporary_groups` の数だけを表す。関連する
+participants / votesはFKのCASCADEで削除する。削除した `custom_locations` の件数は返さない。
+
+このendpointは一般クライアント用ではない。productionでは公開 `/api/*` 自体を
+Workerが404にしており、Cronは `http://container/internal/...` を直接呼ぶ。
