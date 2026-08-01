@@ -62,15 +62,13 @@ APIレスポンスのJSON fieldは原則 `snake_case`。地点候補の
 http://localhost:8000/temporary-groups
 ```
 
-Cloudflare stagingではWorkerが `/api/*` を受け、`/api` prefixを外して
-FastAPI containerへ転送する。
+Cloudflare staging / productionではWorkerが `/api/*` を受け、`/api` prefixを外して
+FastAPI containerへ転送する。`/api` と `/api/` はAPI rootとして公開せず404を返す。
 
 ```text
 https://stg.gurumeet.net/api/temporary-groups
+https://gurumeet.net/api/temporary-groups
 ```
-
-現行Workerは `ENVIRONMENT=production` の場合、`/api` と `/api/*` を
-containerへ転送せず404にする。したがって `https://gurumeet.net/api/*` は現在非公開。
 
 ## エラーポリシー
 
