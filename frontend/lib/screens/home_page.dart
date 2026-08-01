@@ -113,11 +113,19 @@ class _HomePageState extends State<HomePage> {
             else ...[
               _HomeIntroText(headlineStyle: headlineStyle),
               SizedBox(height: verticalGap),
-              const HeroCardStack(),
-              const SizedBox(height: AppSpacing.large),
-              _HomeActions(
-                onCreateGroup: _isNavigating ? null : _openCreateGroup,
-                onJoinGroup: _isNavigating ? null : _openJoinGroup,
+              Align(
+                alignment: Alignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const HeroCardStack(),
+                    const SizedBox(height: AppSpacing.large),
+                    _HomeActions(
+                      onCreateGroup: _isNavigating ? null : _openCreateGroup,
+                      onJoinGroup: _isNavigating ? null : _openJoinGroup,
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
