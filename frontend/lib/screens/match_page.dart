@@ -283,6 +283,7 @@ class _MatchPageState extends State<MatchPage>
                   (result) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.regular),
                     child: _RankedResultTile(
+                      key: ValueKey('ranked-result-${result.restaurant.id}'),
                       result: result,
                       selected:
                           result.restaurant.id == _selectedResult.restaurant.id,
@@ -306,6 +307,9 @@ class _MatchPageState extends State<MatchPage>
                             bottom: AppSpacing.regular,
                           ),
                           child: _RankedResultTile(
+                            key: ValueKey(
+                              'ranked-result-${result.restaurant.id}',
+                            ),
                             result: result,
                             selected:
                                 result.restaurant.id ==
@@ -620,6 +624,7 @@ class _TieNotice extends StatelessWidget {
 
 class _RankedResultTile extends StatelessWidget {
   const _RankedResultTile({
+    super.key,
     required this.result,
     required this.selected,
     required this.enabled,

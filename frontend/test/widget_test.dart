@@ -375,7 +375,12 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'この店に決定'), findsOneWidget);
     expect(find.text('決選投票をする'), findsNothing);
 
-    await tester.tap(find.text(mockRestaurants[1].name).last);
+    final secondRankedResult = find.byKey(
+      ValueKey('ranked-result-${mockRestaurants[1].id}'),
+    );
+    await tester.ensureVisible(secondRankedResult);
+    await tester.pumpAndSettle();
+    await tester.tap(secondRankedResult);
     await tester.pumpAndSettle();
     expect(
       tester
@@ -386,7 +391,10 @@ void main() {
       mockRestaurants[1].imageUrl,
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'この店に決定'));
+    final confirmButton = find.widgetWithText(FilledButton, 'この店に決定');
+    await tester.ensureVisible(confirmButton);
+    await tester.pumpAndSettle();
+    await tester.tap(confirmButton);
     await tester.pumpAndSettle();
 
     expect(find.text('今日のお店が決定。'), findsOneWidget);
