@@ -14,6 +14,7 @@ from app.schemas.temporary_group import (
     TemporaryGroupDissolveRequest,
     TemporaryGroupJoinRequest,
     TemporaryGroupParticipantJoinRequest,
+    TemporaryGroupRestaurantDecisionRequest,
     TemporaryGroupResponse,
     TemporaryGroupVoteSubmitRequest,
     TemporaryGroupVoteSubmitResponse,
@@ -35,6 +36,7 @@ from app.services.temporary_group_service import (
     TemporaryGroupNotFoundError,
     TemporaryGroupParticipantNotFoundError,
     TemporaryGroupRestaurantNotFoundError,
+    TemporaryGroupRestaurantDecisionError,
     TemporaryGroupSearchCriteriaError,
     TemporaryGroupService,
     TemporaryGroupVotingCandidatesError,
@@ -321,6 +323,51 @@ def get_temporary_group_voting_result(
             status_code=status.HTTP_409_CONFLICT,
             detail="全員の投票が完了するまで結果を表示できません。",
         ) from None
+    except TemporaryGroupVotingCandidatesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{group_id}/voting/result/decision",
+    response_model=TemporaryGroupVotingResult,
+    summary="同率1位の店舗候補から最終決定する",
+)
+def decide_temporary_group_voting_result(
+    group_id: UUID,
+    request_body: TemporaryGroupRestaurantDecisionRequest,
+    db: Session = Depends(get_db),
+) -> TemporaryGroupVotingResult:
+    service = TemporaryGroupService(db)
+    try:
+        return service.decide_restaurant(
+            group_id=group_id,
+            participant_token=request_body.participant_token,
+            restaurant_id=request_body.restaurant_id,
+        )
+    except TemporaryGroupNotFoundError:
+        raise _not_found() from None
+    except TemporaryGroupParticipantNotFoundError:
+        raise _participant_not_found() from None
+    except TemporaryGroupHostRequiredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="同率候補を決定できるのはホストだけです。",
+        ) from None
+    except TemporaryGroupVotingNotStartedError:
+        raise _voting_not_started() from None
+    except TemporaryGroupVotingNotCompleteError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="全員の投票が完了するまで結果を決定できません。",
+        ) from None
+    except TemporaryGroupRestaurantDecisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     except TemporaryGroupVotingCandidatesError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
