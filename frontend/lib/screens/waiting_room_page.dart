@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/group_creation_draft.dart';
 import '../models/room_member.dart';
@@ -164,6 +165,35 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     );
   }
 
+  Future<void> _copyInviteUrl() async {
+    await Clipboard.setData(ClipboardData(text: widget.draft.inviteUrl));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('招待リンクをコピーしました'),
+          duration: Duration(milliseconds: 1400),
+        ),
+      );
+  }
+
+  Future<void> _shareInvite() async {
+    final text =
+        'GuruMeetのルームに参加してください。\n'
+        'コード: ${widget.draft.groupId}\n'
+        '${widget.draft.inviteUrl}';
+    try {
+      await SharePlus.instance.share(
+        ShareParams(title: 'GuruMeetの招待', subject: 'GuruMeetの招待', text: text),
+      );
+    } catch (_) {
+      await _copyInviteUrl();
+    }
+  }
+
   Future<void> _confirmHostExit() async {
     if (!_isHost || _isExitDialogOpen || _isDissolving || _isNavigating) {
       return;
@@ -266,8 +296,9 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
                           children: [
                             _RoomCodePanel(
                               draft: widget.draft,
-                              joinedCount: _members.length,
                               onCopyRoomCode: _copyRoomCode,
+                              onCopyInviteUrl: _copyInviteUrl,
+                              onShareInvite: _shareInvite,
                             ),
                             const SizedBox(height: AppSpacing.large),
                             _MemberList(
@@ -330,13 +361,15 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
 class _RoomCodePanel extends StatelessWidget {
   const _RoomCodePanel({
     required this.draft,
-    required this.joinedCount,
     required this.onCopyRoomCode,
+    required this.onCopyInviteUrl,
+    required this.onShareInvite,
   });
 
   final GroupCreationDraft draft;
-  final int joinedCount;
   final VoidCallback onCopyRoomCode;
+  final VoidCallback onCopyInviteUrl;
+  final VoidCallback onShareInvite;
 
   @override
   Widget build(BuildContext context) {
@@ -355,83 +388,86 @@ class _RoomCodePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            joinedCount == draft.peopleCount ? 'READY' : 'WAITING',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colors.onPrimary.withValues(alpha: 0.72),
-              letterSpacing: AppSizes.codeLabelLetterSpacing,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.small),
-          Text(
             'ルームコード',
             style: theme.textTheme.titleMedium?.copyWith(
               color: colors.onPrimary.withValues(alpha: 0.82),
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: AppSpacing.micro),
-          SelectableText(
-            draft.groupId,
-            style: theme.textTheme.displaySmall?.copyWith(
-              color: colors.onPrimary,
-              letterSpacing: AppSizes.groupCodeLetterSpacing,
-              height: 0.95,
-              fontSize: 42,
+          Semantics(
+            button: true,
+            label: 'ルームコード ${draft.groupId} をコピー',
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              child: InkWell(
+                onTap: onCopyRoomCode,
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.small,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.copy_rounded,
+                        color: colors.onPrimary.withValues(alpha: 0.82),
+                        size: AppSizes.iconMedium,
+                      ),
+                      const SizedBox(width: AppSpacing.small),
+                      SelectableText(
+                        draft.groupId,
+                        style: theme.textTheme.displaySmall?.copyWith(
+                          color: colors.onPrimary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: AppSizes.groupCodeLetterSpacing,
+                          height: 0.95,
+                          fontSize: 42,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.regular),
+          const SizedBox(height: AppSpacing.large),
           LayoutBuilder(
             builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 270;
-              final copyButton = SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  onPressed: onCopyRoomCode,
-                  icon: const Icon(Icons.copy_rounded),
-                  label: const Text('コピー'),
-                ),
-              );
-              final qrCode = Align(
-                alignment: isNarrow ? Alignment.centerLeft : Alignment.center,
+              return Center(
                 child: _QrPlaceholder(
                   value: draft.inviteUrl,
-                  size: constraints.maxWidth < 360 ? 92 : 108,
+                  size: constraints.maxWidth < 360 ? 132 : 156,
                 ),
-              );
-
-              if (isNarrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    copyButton,
-                    const SizedBox(height: AppSpacing.medium),
-                    qrCode,
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  Expanded(child: copyButton),
-                  const SizedBox(width: AppSpacing.medium),
-                  qrCode,
-                ],
               );
             },
           ),
-          const SizedBox(height: AppSpacing.small),
-          Text(
-            '$joinedCount / ${draft.peopleCount}人',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: colors.onPrimary.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.micro),
-          SelectableText(
-            draft.inviteUrl,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.onPrimary.withValues(alpha: 0.82),
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(height: AppSpacing.large),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: onCopyInviteUrl,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, AppSizes.touchTarget),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.medium,
+                  ),
+                ),
+                icon: const Icon(Icons.link_rounded, size: AppSizes.iconMedium),
+                label: const Text('リンクをコピー'),
+              ),
+              const SizedBox(width: AppSpacing.small),
+              IconButton.filledTonal(
+                tooltip: '招待を共有',
+                onPressed: onShareInvite,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.ios_share_rounded),
+              ),
+            ],
           ),
         ],
       ),
@@ -502,7 +538,35 @@ class _MemberList extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text('参加メンバー', style: theme.textTheme.titleLarge)),
+            Text('参加メンバー', style: theme.textTheme.titleLarge),
+            const SizedBox(width: AppSpacing.small),
+            Text(
+              '${members.length} / $peopleCount人',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.small,
+                vertical: AppSpacing.micro,
+              ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Text(
+                members.length == peopleCount ? 'READY' : 'WAITING',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: AppSizes.codeLabelLetterSpacing,
+                ),
+              ),
+            ),
+            const Spacer(),
             if (lastUpdatedAt != null)
               Text(
                 '更新 ${_formatTime(lastUpdatedAt!)}',

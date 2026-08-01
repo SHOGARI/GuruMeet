@@ -122,15 +122,12 @@ void main() {
     // 招待完了画面を挟まず、招待情報を含む待機画面へ直接進む。
     expect(find.text('メンバー待機'), findsOneWidget);
     expect(find.text('WAITING'), findsOneWidget);
-    expect(
-      find.textContaining('http://localhost:3000/#/join/'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('http://localhost:3000/#/join/'), findsNothing);
     expect(find.byType(QrImageView), findsOneWidget);
 
     expect(find.text('参加メンバー'), findsOneWidget);
     expect(find.text('ルームコード'), findsOneWidget);
-    expect(find.text('コピー'), findsOneWidget);
+    expect(find.text('リンクをコピー'), findsOneWidget);
     expect(find.text('ホスト'), findsOneWidget);
     expect(find.text('準備OK'), findsOneWidget);
     expect(find.text('1 / 4人'), findsOneWidget);
