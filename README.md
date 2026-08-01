@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/grumeet-icon.png" width="120" alt="GuruMeet logo">
+<img src="docs/assets/gurumeet-icon.png" width="120" alt="GuruMeet logo">
 
 # GuruMeet
 
