@@ -13,6 +13,7 @@ from app.schemas.temporary_group import (
 )
 from app.services.temporary_group_service import (
     TemporaryGroupParticipantNotFoundError,
+    TemporaryGroupRestaurantDecisionError,
     TemporaryGroupRestaurantNotFoundError,
     TemporaryGroupService,
     TemporaryGroupHostRequiredError,
@@ -66,6 +67,10 @@ class FakeTemporaryGroupRepository:
 
     def complete_voting(self, group, completed_at):
         group.voting_completed_at = group.voting_completed_at or completed_at
+        return group
+
+    def select_restaurant(self, group, restaurant_id):
+        group.selected_restaurant_id = restaurant_id
         return group
 
     def expire(self, group, expired_at):
@@ -128,6 +133,7 @@ def make_group(
         },
         voting_started_at=voting_started_at,
         voting_completed_at=voting_completed_at,
+        selected_restaurant_id=None,
         creator_id=None,
     )
 
@@ -227,12 +233,12 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertEqual(response.progress.completed_participant_count, 1)
         self.assertIsNotNone(group.voting_completed_at)
 
-    def test_submit_vote_notifies_once_when_group_completes(self) -> None:
+    def test_submit_vote_notifies_once_when_restaurant_is_decided(self) -> None:
         group = make_group(voting_started_at=datetime.now(UTC))
         service, _ = self.make_service(group)
 
         with patch(
-            "app.services.temporary_group_service.notify_voting_completed"
+            "app.services.temporary_group_service.notify_restaurant_decided"
         ) as notify:
             service.submit_vote(group.id, TOKEN, "shop-a", True)
             notify.assert_not_called()
@@ -242,6 +248,18 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
 
             service.submit_vote(group.id, TOKEN, "shop-a", False)
             notify.assert_called_once()
+
+    def test_submit_vote_does_not_notify_decision_when_tied(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, _ = self.make_service(group)
+
+        with patch(
+            "app.services.temporary_group_service.notify_restaurant_decided"
+        ) as notify:
+            service.submit_vote(group.id, TOKEN, "shop-a", True)
+            service.submit_vote(group.id, TOKEN, "shop-b", True)
+
+            notify.assert_not_called()
 
     def test_submit_vote_rejects_changes_after_group_completion(self) -> None:
         group = make_group(voting_started_at=datetime.now(UTC))
@@ -277,6 +295,42 @@ class TemporaryGroupVotingServiceTests(unittest.TestCase):
         self.assertEqual(result.top_like_count, 1)
         self.assertEqual([item.rank for item in result.results], [1, 1])
         self.assertEqual([item.like_count for item in result.results], [1, 1])
+
+    def test_decide_restaurant_selects_tied_top_restaurant(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, repository = self.make_service(group)
+        group.creator_id = str(repository.user.id)
+        service.submit_vote(group.id, TOKEN, "shop-a", True)
+        service.submit_vote(group.id, TOKEN, "shop-b", True)
+
+        result = service.decide_restaurant(group.id, TOKEN, "shop-b")
+
+        self.assertEqual(group.selected_restaurant_id, "shop-b")
+        self.assertEqual(result.selected_restaurant_id, "shop-b")
+
+    def test_decide_restaurant_notifies_when_tied_restaurant_is_selected(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, repository = self.make_service(group)
+        group.creator_id = str(repository.user.id)
+        service.submit_vote(group.id, TOKEN, "shop-a", True)
+        service.submit_vote(group.id, TOKEN, "shop-b", True)
+
+        with patch(
+            "app.services.temporary_group_service.notify_restaurant_decided"
+        ) as notify:
+            service.decide_restaurant(group.id, TOKEN, "shop-b")
+
+            notify.assert_called_once()
+
+    def test_decide_restaurant_rejects_non_top_restaurant(self) -> None:
+        group = make_group(voting_started_at=datetime.now(UTC))
+        service, repository = self.make_service(group)
+        group.creator_id = str(repository.user.id)
+        service.submit_vote(group.id, TOKEN, "shop-a", True)
+        service.submit_vote(group.id, TOKEN, "shop-b", False)
+
+        with self.assertRaises(TemporaryGroupRestaurantDecisionError):
+            service.decide_restaurant(group.id, TOKEN, "shop-b")
 
     def test_result_requires_group_completion(self) -> None:
         group = make_group(voting_started_at=datetime.now(UTC))

@@ -43,11 +43,13 @@ class RestaurantMatchResult {
     required this.restaurant,
     required this.results,
     required this.peopleCount,
+    this.decidedRestaurantId,
   });
 
   final RestaurantPreview restaurant;
   final List<RestaurantVoteResult> results;
   final int peopleCount;
+  final String? decidedRestaurantId;
 
   int get matchedLikeCount => _resultFor(restaurant).likeCount;
 

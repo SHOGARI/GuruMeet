@@ -116,6 +116,13 @@ abstract class RoomRepository {
     required List<RestaurantPreview> restaurants,
     required List<VoteChoice> localChoices,
   });
+
+  Future<RestaurantMatchResult> decideTiedWinner({
+    required GroupCreationDraft draft,
+    required String restaurantId,
+    required List<RestaurantPreview> restaurants,
+    required List<VoteChoice> localChoices,
+  });
 }
 
 abstract final class RoomRepositoryProvider {
@@ -265,6 +272,29 @@ class MockRoomRepository implements RoomRepository {
       restaurant: targets.first,
       results: results,
       peopleCount: draft.peopleCount,
+    );
+  }
+
+  @override
+  Future<RestaurantMatchResult> decideTiedWinner({
+    required GroupCreationDraft draft,
+    required String restaurantId,
+    required List<RestaurantPreview> restaurants,
+    required List<VoteChoice> localChoices,
+  }) async {
+    final result = await getResult(
+      draft: draft,
+      restaurants: restaurants,
+      localChoices: localChoices,
+    );
+    final selected = result.results
+        .map((result) => result.restaurant)
+        .firstWhere((restaurant) => restaurant.id == restaurantId);
+    return RestaurantMatchResult(
+      restaurant: selected,
+      results: result.results,
+      peopleCount: result.peopleCount,
+      decidedRestaurantId: restaurantId,
     );
   }
 
@@ -548,6 +578,49 @@ class ApiRoomRepository implements RoomRepository {
     final json = await _apiClient.getJson(
       '/temporary-groups/$roomId/voting/result',
     );
+    return _matchResultFromJson(
+      json,
+      draft: draft,
+      fallbackRestaurants: restaurants,
+    );
+  }
+
+  @override
+  Future<RestaurantMatchResult> decideTiedWinner({
+    required GroupCreationDraft draft,
+    required String restaurantId,
+    required List<RestaurantPreview> restaurants,
+    required List<VoteChoice> localChoices,
+  }) async {
+    final roomId = draft.roomId;
+    if (roomId == null) {
+      return _fallback.decideTiedWinner(
+        draft: draft,
+        restaurantId: restaurantId,
+        restaurants: restaurants,
+        localChoices: localChoices,
+      );
+    }
+    final participantToken = await _participantToken();
+    final json = await _apiClient.postJson(
+      '/temporary-groups/$roomId/voting/result/decision',
+      body: {
+        'participant_token': participantToken,
+        'restaurant_id': restaurantId,
+      },
+    );
+    return _matchResultFromJson(
+      json,
+      draft: draft,
+      fallbackRestaurants: restaurants,
+    );
+  }
+
+  RestaurantMatchResult _matchResultFromJson(
+    Map<String, dynamic> json, {
+    required GroupCreationDraft draft,
+    required List<RestaurantPreview> fallbackRestaurants,
+  }) {
     final resultItems = json['results'];
     if (resultItems is! List) {
       throw const ApiException('投票結果のレスポンス形式が不正です');
@@ -565,14 +638,36 @@ class ApiRoomRepository implements RoomRepository {
         rejectCount: item['reject_count'] as int? ?? 0,
       );
     }).toList();
-    final winner = voteResults.isEmpty
-        ? (restaurants.isEmpty ? mockRestaurants.first : restaurants.first)
-        : voteResults.first.restaurant;
+    final decidedRestaurantId = json['selected_restaurant_id'] as String?;
+    final decidedRestaurant = _findRestaurant(voteResults, decidedRestaurantId);
+    final winner =
+        decidedRestaurant ??
+        (voteResults.isEmpty
+            ? (fallbackRestaurants.isEmpty
+                  ? mockRestaurants.first
+                  : fallbackRestaurants.first)
+            : voteResults.first.restaurant);
     return RestaurantMatchResult(
       restaurant: winner,
       results: voteResults,
       peopleCount: draft.peopleCount,
+      decidedRestaurantId: decidedRestaurantId,
     );
+  }
+
+  RestaurantPreview? _findRestaurant(
+    List<RestaurantVoteResult> results,
+    String? restaurantId,
+  ) {
+    if (restaurantId == null) {
+      return null;
+    }
+    for (final result in results) {
+      if (result.restaurant.id == restaurantId) {
+        return result.restaurant;
+      }
+    }
+    return null;
   }
 
   RestaurantPreview _restaurantFromJson(Map<String, dynamic> json) {

@@ -61,15 +61,21 @@ def notify_cleanup_completed(
     )
 
 
-def notify_voting_completed(
+def notify_restaurant_decided(
     group: TemporaryGroup,
     *,
     result: Any,
 ) -> None:
-    top_result = result.results[0] if result.results else None
-    top_restaurant = top_result.restaurant if top_result else None
+    selected_result = result.results[0] if result.results else None
+    if result.selected_restaurant_id is not None:
+        for item in result.results:
+            if item.restaurant.id == result.selected_restaurant_id:
+                selected_result = item
+                break
+
+    selected_restaurant = selected_result.restaurant if selected_result else None
     send_discord_alert(
-        title="投票完了",
+        title="お店決定",
         fields={
             "環境": settings.environment,
             "グループID": str(group.id),
@@ -78,19 +84,16 @@ def notify_voting_completed(
                 f"{result.joined_participant_count}/"
                 f"{result.completed_participant_count}"
             ),
-            "完了状態": result.is_complete,
             "場所": group.location or "(none)",
-            "同率あり": result.has_tie,
+            "同率から決定": result.has_tie,
             "最多いいね": result.top_like_count,
-            "1位候補": (
-                top_restaurant.name if top_restaurant is not None else "(none)"
-            ),
-            "完了まで": _elapsed_duration(group.created_at),
-            "完了時刻": (
-                _format_jst(group.voting_completed_at)
-                if group.voting_completed_at is not None
+            "決定店舗": (
+                selected_restaurant.name
+                if selected_restaurant is not None
                 else "(none)"
             ),
+            "完了まで": _elapsed_duration(group.created_at),
+            "決定時刻": _format_jst(datetime.now(UTC)),
         },
     )
 

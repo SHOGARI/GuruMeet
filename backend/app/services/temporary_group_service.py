@@ -38,7 +38,9 @@ from app.services.hotpepper_service import (
     HotPepperBudgetRangeError,
     search_restaurants_for_group_by_coordinates,
 )
-from app.services.discord_alert_service import notify_voting_completed
+from app.services.discord_alert_service import (
+    notify_restaurant_decided,
+)
 
 
 class TemporaryGroupCodeCollisionError(RuntimeError):
@@ -86,6 +88,10 @@ class TemporaryGroupHostRequiredError(RuntimeError):
 
 
 class TemporaryGroupRestaurantNotFoundError(ValueError):
+    pass
+
+
+class TemporaryGroupRestaurantDecisionError(ValueError):
     pass
 
 
@@ -454,7 +460,9 @@ class TemporaryGroupService:
             current_anonymous_user_id=participant.anonymous_user_id,
         )
         if should_notify_completion:
-            notify_voting_completed(group, result=self.get_voting_result(group.id))
+            result = self.get_voting_result(group.id)
+            if not result.has_tie:
+                notify_restaurant_decided(group, result=result)
 
         return TemporaryGroupVoteSubmitResponse(
             restaurant_id=restaurant_id,
@@ -596,6 +604,7 @@ class TemporaryGroupService:
         return TemporaryGroupVotingResult(
             voting_started_at=group.voting_started_at,
             voting_completed_at=group.voting_completed_at,
+            selected_restaurant_id=group.selected_restaurant_id,
             candidate_count=progress.candidate_count,
             joined_participant_count=progress.joined_participant_count,
             completed_participant_count=progress.completed_participant_count,
@@ -604,6 +613,52 @@ class TemporaryGroupService:
             top_like_count=top_like_count,
             results=results,
         )
+
+    def decide_restaurant(
+        self,
+        group_id: UUID,
+        participant_token: str,
+        restaurant_id: str,
+    ) -> TemporaryGroupVotingResult:
+        group = self.repository.get_active_by_id_for_update(group_id, self._now())
+        if group is None:
+            raise TemporaryGroupNotFoundError
+        if group.voting_started_at is None:
+            raise TemporaryGroupVotingNotStartedError
+        if group.voting_completed_at is None:
+            raise TemporaryGroupVotingNotCompleteError
+
+        participant = self._require_participant(group.id, participant_token)
+        if (
+            group.creator_id is not None
+            and str(participant.anonymous_user_id) != group.creator_id
+        ):
+            raise TemporaryGroupHostRequiredError
+
+        if group.selected_restaurant_id is not None:
+            return self.get_voting_result(group.id)
+
+        current_result = self.get_voting_result(group.id)
+        top_restaurant_ids = {
+            result.restaurant.id
+            for result in current_result.results
+            if result.like_count == current_result.top_like_count
+        }
+        if restaurant_id not in top_restaurant_ids:
+            raise TemporaryGroupRestaurantDecisionError(
+                "selected restaurant must be one of tied top restaurants"
+            )
+        if len(top_restaurant_ids) < 2:
+            raise TemporaryGroupRestaurantDecisionError(
+                "restaurant decision is only available for tied results"
+            )
+
+        self.repository.select_restaurant(group, restaurant_id)
+        self.db.commit()
+        self.db.refresh(group)
+        result = self.get_voting_result(group.id)
+        notify_restaurant_decided(group, result=result)
+        return result
 
     def _join_group(
         self,
