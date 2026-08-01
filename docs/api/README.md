@@ -8,6 +8,7 @@ DB schema の詳細は [`../database/`](../database/) に置く。
 ## Documents
 
 - [API Overview](./api.md)
+- [System API](./system.md)
 - [Location API](./locations.md)
 - [Temporary Group API](./temporary-group.md)
 - [TemporaryGroup x Restaurant](./temporary-group-restaurant.md)

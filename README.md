@@ -161,3 +161,11 @@ gurumeet/
 - [Designs](./docs/designs/)
 - [Reference](./docs/reference/)
 - [Cloudflare Ops](./infra/cloudflare/README.md)
+
+## Developers
+
+| area | developer | comment |
+| --- | --- | --- |
+| frontend | [https://github.com/jcm2bd9rn5-cyber](https://github.com/jcm2bd9rn5-cyber) | UI職人 |
+| backend | [https://github.com/gaku213waka](https://github.com/gaku213waka) | DB設計の鬼 |
+| infra | [https://github.com/med-000](https://github.com/med-000) | ヒョロガリ |

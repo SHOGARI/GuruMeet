@@ -2,7 +2,8 @@
 
 ## 目的
 
-GuruMeet は frontend を Flutter、backend を FastAPI で構成する。初期デプロイは Cloudflare Worker 1本に寄せ、静的配信、API 入口、container 実行、storage をまとめて管理する。
+GuruMeet は frontend を Flutter、backend を FastAPI で構成する。現在はCloudflare
+Worker 1本に静的配信、API入口、container実行、R2配信、定期cleanupをまとめている。
 
 ただし、DB は最初から Cloudflare D1 に寄せない。ユーザー、ミーティング、参加者、予定のようなリレーションを扱うため、backend の主 DB は PostgreSQL を前提にする。
 
@@ -31,15 +32,15 @@ Object storage
 
 Cache / lightweight state
   Cloudflare KV
-    feature flag、短い cache、頻繁に変わらない設定値を置く
+    現在は未使用。feature flagや短いcacheが必要になった場合の候補
 
 Async jobs
   Cloudflare Queues
-    通知、メール送信、重い後処理などを後で逃がす
+    現在は未使用。通知、メール送信、重い後処理を逃がす場合の候補
 
 Scheduled jobs
   Workers Cron Triggers
-    定期 cleanup、通知予約、集計などを後で逃がす
+    毎日12:00 UTC（21:00 JST）に期限切れ一時グループをcleanup
 ```
 
 ## 全体像
@@ -50,14 +51,15 @@ User
   v
 Cloudflare Worker
   |-- /             -> Flutter Web static assets
-  |-- /api/*        -> Workers Container -> FastAPI -> PostgreSQL
+  |-- /api/*        -> stagingのみ Workers Container -> FastAPI -> PostgreSQL
+  |                    productionは現在404
   |-- /files/*      -> R2
   |-- /edge/health  -> Worker health
 ```
 
 ## ドメイン案
 
-初期:
+現在:
 
 ```text
 stg.gurumeet.net  -> staging Worker
@@ -71,7 +73,8 @@ gurumeet.net      -> Cloudflare Pages
 api.gurumeet.net  -> Cloudflare Worker + Workers Container
 ```
 
-初期は `/api/*` を同一ドメイン配下にまとめる。CORS と Access 保護を簡単にするため。
+stagingは `/api/*` を同一ドメイン配下にまとめている。productionは現行Workerで
+`/api` と `/api/*` を404にしており、公開APIを停止している。
 
 ## Frontend
 
@@ -166,7 +169,7 @@ Cloudflare 公式ドキュメントでは、Containers は Workers と組み合�
 - FastAPI + SQLAlchemy / Alembic と相性がよい
 - migration と運用の選択肢が広い
 
-Cloudflare D1 は初期の主 DB にはしない。
+Cloudflare D1 は主DBにはしない。
 
 理由:
 
@@ -207,23 +210,24 @@ Access
   管理画面や internal endpoint を保護する場合に使う
 ```
 
-## 初期実装でやること
+## 現在の実装
 
-1. backend は local Docker で FastAPI を動かす
-2. `backend/compose.yaml` に PostgreSQL を追加する
-3. SQLAlchemy / Alembic の導入を検討する
-4. Cloudflare deploy layer を `infra/cloudflare/app-worker/` に追加する
-5. Workers Containers で FastAPI container を呼び出す最小構成を作る
-6. frontend から同一 origin の `/api` を呼ぶ設定を用意する
-7. production DB は Neon PostgreSQL にする
+1. Flutter WebをWorkers Static Assetsで配信する
+2. stagingでは `/api/*` のprefixを外してFastAPI containerへ転送する
+3. productionでは `/api` と `/api/*` を404にする
+4. staging / productionともNeon PostgreSQLへ接続する
+5. `/files/*` で環境別R2 bucketのobjectを返す
+6. `/edge/health` でWorkerとR2のhealthを返す
+7. Cron Triggerから内部cleanup APIをsecret付きで呼ぶ
+8. containerの5xx、cleanup失敗、利用イベントをDiscordへ通知する
 
-## 初期実装ではやらないこと
+## 現在やっていないこと
 
 - Cloudflare D1 を主 DB にする
 - backend を Pages Functions に寄せる
 - FastAPI の中に Cloudflare Worker の都合を混ぜる
 - frontend を Cloudflare Pages に分ける
-- R2 / KV / Queues を最初から全部実装する
+- KV / Queuesを利用する
 
 ## リスク
 
@@ -242,7 +246,8 @@ Workers Containers は通常の container hosting より構成が特殊になる
 
 Cloudflare を使い倒す方針で進める。
 
-ただし、Cloudflare に寄せるのは deploy / routing / storage / cache / async layer であり、backend application code は FastAPI として独立させる。
+ただし、Cloudflare に寄せるのは deploy / routing / storage layerであり、
+backend application codeはFastAPIとして独立させる。cache / async layerは将来必要になった場合に追加する。
 
 ```text
 frontend = Workers Static Assets
@@ -250,6 +255,6 @@ entrypoint = Cloudflare Worker
 backend runtime = Workers Containers
 main DB = Neon PostgreSQL
 blob storage = R2
-cache = KV
-async = Queues
+cache = unused (KV is a future option)
+async = unused (Queues is a future option)
 ```

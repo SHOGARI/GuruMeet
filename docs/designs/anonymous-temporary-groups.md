@@ -69,11 +69,18 @@ staging / production では GitHub Environment secrets の `PARTICIPANT_TOKEN_HA
 temporary_groups
   id
   code
+  creator_id
   participant_count
   location
+  location_id
+  custom_location_id
   budget_min
   budget_max
   restaurant
+  restaurant_search_status
+  voting_started_at
+  voting_completed_at
+  selected_restaurant_id
   created_at
   expires_at
 
@@ -89,6 +96,15 @@ temporary_group_participants
   anonymous_user_id
   joined_at
   last_seen_at
+
+temporary_group_votes
+  id
+  temporary_group_id
+  anonymous_user_id
+  restaurant_id
+  liked
+  created_at
+  updated_at
 ```
 
 `temporary_groups` に参加者ID配列は持たない。配列にすると外部キー、重複防止、参加日時、同時実行制御が扱いづらくなるため、中間テーブルで参加関係を表す。
@@ -106,6 +122,15 @@ temporary_group_participants.anonymous_user_id
   foreign key -> anonymous_users.id
 
 temporary_group_participants(temporary_group_id, anonymous_user_id)
+  unique
+
+temporary_group_votes.temporary_group_id
+  foreign key -> temporary_groups.id
+
+temporary_group_votes.anonymous_user_id
+  foreign key -> anonymous_users.id
+
+temporary_group_votes(temporary_group_id, anonymous_user_id, restaurant_id)
   unique
 ```
 
@@ -174,7 +199,38 @@ GET /temporary-groups/{group_id}
 ```text
 joined_participant_count
 is_full
+phase
 ```
+
+投票では同じ `participant_token` を使い、DB内部の `anonymous_user_id` と照合する。
+
+```text
+POST /temporary-groups/{group_id}/voting/start
+POST /temporary-groups/{group_id}/votes
+GET  /temporary-groups/{group_id}/voting/progress
+GET  /temporary-groups/{group_id}/voting/result
+POST /temporary-groups/{group_id}/voting/result/decision
+```
+
+## 投票と店舗決定
+
+投票開始は参加者であることを要求する。予定人数 `participant_count` がある場合は、
+その人数が参加済みになるまで開始しない。
+
+各参加者は保存済みの全店舗候補へ `liked=true/false` を1件ずつ送る。
+`UNIQUE(temporary_group_id, anonymous_user_id, restaurant_id)` により、再送時は
+同じ投票行を更新する。
+
+```text
+全参加者が全候補へ投票
+  -> voting_completed_at を設定
+  -> like_count降順で集計
+  -> 単独1位なら results[0] を決定店舗として扱う
+  -> 同率1位ならホストが1店舗を選び selected_restaurant_id を設定
+```
+
+`phase` は保存せず、`voting_started_at` / `voting_completed_at` から
+`waiting` / `swiping` / `result` を計算する。
 
 ## フロント表示
 
