@@ -7,10 +7,14 @@ class PrimaryActionButton extends StatefulWidget {
     super.key,
     required this.label,
     required this.onPressed,
+    this.isLoading = false,
+    this.loadingLabel,
   });
 
   final String label;
   final VoidCallback? onPressed;
+  final bool isLoading;
+  final String? loadingLabel;
 
   @override
   State<PrimaryActionButton> createState() => _PrimaryActionButtonState();
@@ -21,20 +25,22 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton> {
   bool _isHovered = false;
   bool _isFocused = false;
 
+  bool get _isInteractive => widget.onPressed != null && !widget.isLoading;
+
   void _setPressed(bool value) {
-    if (widget.onPressed != null && _isPressed != value) {
+    if (_isInteractive && _isPressed != value) {
       setState(() => _isPressed = value);
     }
   }
 
   void _setHovered(bool value) {
-    if (widget.onPressed != null && _isHovered != value) {
+    if (_isInteractive && _isHovered != value) {
       setState(() => _isHovered = value);
     }
   }
 
   void _setFocused(bool value) {
-    if (widget.onPressed != null && _isFocused != value) {
+    if (_isInteractive && _isFocused != value) {
       setState(() => _isFocused = value);
     }
   }
@@ -42,7 +48,7 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final isInteractive = widget.onPressed != null;
+    final isInteractive = _isInteractive;
 
     return Focus(
       onFocusChange: _setFocused,
@@ -70,7 +76,7 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton> {
                     : const [],
               ),
               child: FilledButton(
-                onPressed: widget.onPressed,
+                onPressed: isInteractive ? widget.onPressed : null,
                 style: ButtonStyle(
                   side: WidgetStateProperty.resolveWith((states) {
                     if (states.contains(WidgetState.focused) || _isFocused) {
@@ -82,7 +88,19 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton> {
                     return BorderSide.none;
                   }),
                 ),
-                child: Text(widget.label),
+                child: widget.isLoading
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox.square(
+                            dimension: AppSizes.iconMedium,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: AppSpacing.small),
+                          Text(widget.loadingLabel ?? widget.label),
+                        ],
+                      )
+                    : Text(widget.label),
               ),
             ),
           ),

@@ -21,21 +21,36 @@ class RestaurantImage extends StatelessWidget {
       return _ImagePlaceholder(colors: colors);
     }
 
-    return Image.network(
-      effectiveImageUrl,
-      semanticLabel: semanticLabel,
-      width: double.infinity,
-      height: double.infinity,
-      fit: fit,
-      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
-      errorBuilder: (context, error, stackTrace) {
-        return _ImagePlaceholder(colors: colors);
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
-        return _ImageSkeleton(color: colors.surfaceContainerHighest);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+        final cacheWidth = constraints.hasBoundedWidth
+            ? (constraints.maxWidth * pixelRatio).round().clamp(1, 1440)
+            : null;
+        final cacheHeight = constraints.hasBoundedHeight
+            ? (constraints.maxHeight * pixelRatio).round().clamp(1, 1440)
+            : null;
+
+        return Image.network(
+          effectiveImageUrl,
+          semanticLabel: semanticLabel,
+          width: double.infinity,
+          height: double.infinity,
+          fit: fit,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
+          filterQuality: FilterQuality.medium,
+          webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+          errorBuilder: (context, error, stackTrace) {
+            return _ImagePlaceholder(colors: colors);
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            return _ImageSkeleton(color: colors.surfaceContainerHighest);
+          },
+        );
       },
     );
   }

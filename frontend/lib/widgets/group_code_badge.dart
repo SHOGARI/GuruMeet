@@ -54,6 +54,11 @@ class GroupCodeBadge extends StatelessWidget {
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('ルームコードをコピーしました')));
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('ルームコードをコピーしました'),
+          duration: Duration(milliseconds: 1400),
+        ),
+      );
   }
 }

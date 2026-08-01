@@ -32,9 +32,23 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
   bool _isExitAllowed = false;
   bool _isExitDialogOpen = false;
   bool _isDissolving = false;
+  bool _isNavigating = false;
 
   bool get _hasNoRestaurants =>
       widget.draft.restaurantSearchStatus == RestaurantSearchStatus.noResults;
+
+  Future<void> _openWaitingRoom() async {
+    if (_isNavigating || _isDissolving) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(
+      context,
+    ).pushNamed(WaitingRoomPage.routeName, arguments: widget.draft);
+    if (mounted) {
+      setState(() => _isNavigating = false);
+    }
+  }
 
   void _showCopySuccess(String message) {
     setState(() => _copyFeedback = message);
@@ -169,16 +183,13 @@ class _GroupCreatedPageState extends State<GroupCreatedPage> {
                       width: double.infinity,
                       child: PrimaryActionButton(
                         label: _hasNoRestaurants ? '解散して作り直す' : '待機画面へ進む',
-                        onPressed: _isDissolving
+                        onPressed: _isDissolving || _isNavigating
                             ? null
                             : _hasNoRestaurants
                             ? _dissolveAndReturnHome
-                            : () {
-                                Navigator.of(context).pushNamed(
-                                  WaitingRoomPage.routeName,
-                                  arguments: widget.draft,
-                                );
-                              },
+                            : _openWaitingRoom,
+                        isLoading: _isDissolving || _isNavigating,
+                        loadingLabel: _isDissolving ? '解散中' : '移動中',
                       ),
                     ),
                   ),

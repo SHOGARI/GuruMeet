@@ -72,12 +72,27 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'GuruMeet',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colors.primary,
-                letterSpacing: AppSizes.codeLabelLetterSpacing,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  child: Image.asset(
+                    'assets/images/gurumeet_icon.png',
+                    width: 32,
+                    height: 32,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.small),
+                Text(
+                  'GuruMeet',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colors.primary,
+                    letterSpacing: AppSizes.codeLabelLetterSpacing,
+                  ),
+                ),
+              ],
             ),
             SizedBox(height: isDesktop ? AppSpacing.xxLarge : AppSpacing.large),
             if (isDesktop)
@@ -98,11 +113,19 @@ class _HomePageState extends State<HomePage> {
             else ...[
               _HomeIntroText(headlineStyle: headlineStyle),
               SizedBox(height: verticalGap),
-              const HeroCardStack(),
-              const SizedBox(height: AppSpacing.large),
-              _HomeActions(
-                onCreateGroup: _isNavigating ? null : _openCreateGroup,
-                onJoinGroup: _isNavigating ? null : _openJoinGroup,
+              Align(
+                alignment: Alignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const HeroCardStack(),
+                    const SizedBox(height: AppSpacing.large),
+                    _HomeActions(
+                      onCreateGroup: _isNavigating ? null : _openCreateGroup,
+                      onJoinGroup: _isNavigating ? null : _openJoinGroup,
+                    ),
+                  ],
+                ),
               ),
             ],
           ],

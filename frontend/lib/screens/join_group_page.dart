@@ -257,6 +257,8 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
               width: double.infinity,
               child: PrimaryActionButton(
                 label: '参加する',
+                isLoading: _isNavigating,
+                loadingLabel: '参加中',
                 onPressed:
                     _isNavigating ||
                         (_hasInviteToken && !_canSubmitInvite) ||

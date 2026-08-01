@@ -41,6 +41,8 @@ class _SwipePageState extends State<SwipePage> {
   bool _isComplete = false;
   bool _isOpeningResult = false;
   bool _isOpeningMaps = false;
+  bool _isLoadingVotingStatus = false;
+  bool _hasShownVotingStatusError = false;
   String? _restaurantLoadError;
   Timer? _completionTimer;
 
@@ -82,6 +84,11 @@ class _SwipePageState extends State<SwipePage> {
       setState(() {
         _restaurants = restaurants;
         _isLoadingRestaurants = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _precacheUpcomingImages(0);
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -145,6 +152,30 @@ class _SwipePageState extends State<SwipePage> {
       _currentIndex++;
       _isResolvingChoice = false;
     });
+    _precacheUpcomingImages(_currentIndex);
+  }
+
+  void _precacheUpcomingImages(int startIndex) {
+    if (!mounted || _restaurants.isEmpty) {
+      return;
+    }
+    final lastIndex = (startIndex + 1).clamp(0, _restaurants.length - 1);
+    for (var index = startIndex; index <= lastIndex; index++) {
+      final restaurant = _restaurants[index];
+      final imageUrl = restaurant.imageUrls.isEmpty
+          ? restaurant.imageUrl
+          : restaurant.imageUrls.first;
+      final uri = Uri.tryParse(imageUrl);
+      if (uri == null || !uri.hasScheme) {
+        continue;
+      }
+      final provider = ResizeImage.resizeIfNeeded(
+        1080,
+        null,
+        NetworkImage(imageUrl),
+      );
+      unawaited(precacheImage(provider, context, onError: (_, _) {}));
+    }
   }
 
   Future<void> _confirmFinalChoice() async {
@@ -273,12 +304,19 @@ class _SwipePageState extends State<SwipePage> {
   }
 
   Future<void> _loadVotingStatus() async {
+    if (_isLoadingVotingStatus) {
+      return;
+    }
+    _isLoadingVotingStatus = true;
     try {
       final status = await _roomRepository.getVotingStatus(widget.draft);
       if (!mounted) {
         return;
       }
-      setState(() => _votingMembers = status.members);
+      setState(() {
+        _votingMembers = status.members;
+        _hasShownVotingStatusError = false;
+      });
       if (status.isComplete) {
         _completionTimer?.cancel();
       }
@@ -286,9 +324,14 @@ class _SwipePageState extends State<SwipePage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+      if (!_hasShownVotingStatusError) {
+        _hasShownVotingStatusError = true;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+      }
+    } finally {
+      _isLoadingVotingStatus = false;
     }
   }
 
@@ -353,7 +396,10 @@ class _SwipePageState extends State<SwipePage> {
             Row(
               children: [
                 Expanded(
-                  child: Text('食べたい？', style: theme.textTheme.headlineMedium),
+                  child: Text(
+                    'このお店、行きたい？',
+                    style: theme.textTheme.headlineMedium,
+                  ),
                 ),
                 if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
                   _RemainingBadge(
@@ -370,11 +416,7 @@ class _SwipePageState extends State<SwipePage> {
                 borderRadius: BorderRadius.circular(AppRadius.small),
                 child: LinearProgressIndicator(
                   minHeight: AppSizes.progressIndicatorHeight,
-                  value: _isComplete
-                      ? 1
-                      : _isConfirmingFinalChoice
-                      ? 1
-                      : (_currentIndex + 1) / _restaurants.length,
+                  value: _isComplete ? 1 : _currentIndex / _restaurants.length,
                   backgroundColor: colors.surfaceContainerHigh,
                 ),
               ),
@@ -572,7 +614,7 @@ class _SwipeHelpText extends StatelessWidget {
         const SizedBox(width: AppSpacing.small),
         Expanded(
           child: Text(
-            '右で食べたい、左で見送り',
+            '右で行きたい、左で今回は見送る',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.primary,
               fontWeight: FontWeight.w800,
@@ -1112,7 +1154,7 @@ class _SwipeCardState extends State<_SwipeCard>
     if (_isInteractionLocked) {
       return;
     }
-    setState(() => _dragOffset += details.delta);
+    setState(() => _dragOffset += Offset(details.delta.dx, 0));
   }
 
   void _handlePanEnd(DragEndDetails details) {
@@ -1205,36 +1247,38 @@ class _SwipeCardState extends State<_SwipeCard>
     final likeOpacity = _dragOffset.dx > 0 ? _decisionProgress : 0.0;
     final rejectOpacity = _dragOffset.dx < 0 ? _decisionProgress : 0.0;
 
-    return Transform.translate(
-      offset: _dragOffset,
-      child: Transform.rotate(
-        angle: rotation,
-        child: GestureDetector(
-          onPanUpdate: _handlePanUpdate,
-          onPanEnd: _handlePanEnd,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final cardSize = Size(
-                constraints.maxWidth,
-                constraints.hasBoundedHeight
-                    ? constraints.maxHeight
-                    : constraints.maxWidth * 1.25,
-              );
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) => _handleTapUp(details, cardSize),
-                child: _CardSurface(
-                  restaurant: widget.restaurant,
-                  photoIndex: _photoIndex,
-                  likeOpacity: likeOpacity,
-                  rejectOpacity: rejectOpacity,
-                  isResolvingChoice: _isInteractionLocked,
-                  onShowDetails: widget.onShowDetails,
-                  onRejected: () => _animateOut(liked: false),
-                  onLiked: () => _animateOut(liked: true),
-                ),
-              );
-            },
+    return RepaintBoundary(
+      child: Transform.translate(
+        offset: _dragOffset,
+        child: Transform.rotate(
+          angle: rotation,
+          child: GestureDetector(
+            onHorizontalDragUpdate: _handlePanUpdate,
+            onHorizontalDragEnd: _handlePanEnd,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final cardSize = Size(
+                  constraints.maxWidth,
+                  constraints.hasBoundedHeight
+                      ? constraints.maxHeight
+                      : constraints.maxWidth * 1.25,
+                );
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) => _handleTapUp(details, cardSize),
+                  child: _CardSurface(
+                    restaurant: widget.restaurant,
+                    photoIndex: _photoIndex,
+                    likeOpacity: likeOpacity,
+                    rejectOpacity: rejectOpacity,
+                    isResolvingChoice: _isInteractionLocked,
+                    onShowDetails: widget.onShowDetails,
+                    onRejected: () => _animateOut(liked: false),
+                    onLiked: () => _animateOut(liked: true),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1351,8 +1395,8 @@ class _CardSurface extends StatelessWidget {
                     child: Transform.rotate(
                       angle: -0.18,
                       child: const _DecisionStamp(
-                        label: 'LIKE',
-                        icon: Icons.favorite_rounded,
+                        label: '行きたい',
+                        icon: Icons.bookmark_add_rounded,
                       ),
                     ),
                   ),
@@ -1365,8 +1409,8 @@ class _CardSurface extends StatelessWidget {
                     child: Transform.rotate(
                       angle: 0.18,
                       child: const _DecisionStamp(
-                        label: 'NOPE',
-                        icon: Icons.close_rounded,
+                        label: '今回は見送る',
+                        icon: Icons.remove_circle_outline_rounded,
                       ),
                     ),
                   ),
@@ -1445,15 +1489,15 @@ class _CardSurface extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _SwipeActionButton(
-                        tooltip: '拒否',
-                        icon: Icons.close_rounded,
+                        tooltip: '今回は見送る',
+                        icon: Icons.remove_circle_outline_rounded,
                         foregroundColor: colors.onErrorContainer,
                         backgroundColor: colors.errorContainer,
                         onPressed: isResolvingChoice ? null : onRejected,
                       ),
                       _SwipeActionButton(
-                        tooltip: 'いいね',
-                        icon: Icons.favorite_rounded,
+                        tooltip: '行きたい',
+                        icon: Icons.bookmark_add_rounded,
                         foregroundColor: colors.onPrimary,
                         backgroundColor: colors.primary,
                         onPressed: isResolvingChoice ? null : onLiked,

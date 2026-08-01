@@ -213,9 +213,13 @@ ThemeData buildAppTheme() {
       space: 1,
     ),
     snackBarTheme: SnackBarThemeData(
-      behavior: SnackBarBehavior.fixed,
+      behavior: SnackBarBehavior.floating,
       backgroundColor: inkColor,
       contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
+      insetPadding: const EdgeInsets.all(AppSpacing.medium),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
     ),
     focusColor: brandColor.withValues(alpha: 0.12),
     hoverColor: brandColor.withValues(alpha: 0.06),

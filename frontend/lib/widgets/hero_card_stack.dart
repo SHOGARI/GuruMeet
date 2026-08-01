@@ -37,7 +37,9 @@ class HeroCardStack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.sizeOf(context).height;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final isCompactHeight = screenHeight < 860;
+    final isCompactWidth = screenWidth < AppBreakpoints.compact;
     final stackHeight = isCompactHeight ? _compactStackHeight : _stackHeight;
     final frontCardHeight = isCompactHeight
         ? _compactFrontCardHeight
@@ -55,25 +57,34 @@ class HeroCardStack extends StatelessWidget {
             _minimumSideOffset,
             _maximumSideOffset,
           );
+          final backOffset = isCompactWidth
+              ? const Offset(-34, AppSpacing.large)
+              : Offset(-sideOffset, AppSpacing.large);
+          final middleOffset = isCompactWidth
+              ? const Offset(34, AppSpacing.regular)
+              : Offset(sideOffset, AppSpacing.regular);
+          final rotation = isCompactWidth
+              ? _gentleRotation * 0.56
+              : _gentleRotation;
 
           return Stack(
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.hardEdge,
             alignment: Alignment.center,
             children: [
               _RestaurantCard(
                 preview: mockRestaurants[3],
                 width: cardWidth * _backCardScale,
                 height: frontCardHeight * 0.9,
-                offset: Offset(-sideOffset, AppSpacing.large),
-                rotation: -_gentleRotation,
+                offset: backOffset,
+                rotation: -rotation,
                 muted: true,
               ),
               _RestaurantCard(
                 preview: mockRestaurants[1],
                 width: cardWidth * _middleCardScale,
                 height: frontCardHeight * 0.96,
-                offset: Offset(sideOffset, AppSpacing.regular),
-                rotation: _gentleRotation,
+                offset: middleOffset,
+                rotation: rotation,
                 muted: true,
               ),
               _RestaurantCard(
@@ -139,49 +150,48 @@ class _RestaurantCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: muted ? 1 : 7,
+                  flex: 7,
                   child: RestaurantImage(
                     imageUrl: preview.imageUrl,
                     semanticLabel: '${preview.name}の料理写真',
                   ),
                 ),
-                if (!muted)
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.medium,
-                        AppSpacing.small,
-                        AppSpacing.medium,
-                        AppSpacing.small,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            preview.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              letterSpacing: 0,
-                              fontWeight: FontWeight.w800,
-                            ),
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.medium,
+                      AppSpacing.small,
+                      AppSpacing.medium,
+                      AppSpacing.small,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          preview.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            letterSpacing: 0,
+                            fontWeight: FontWeight.w800,
                           ),
-                          const SizedBox(height: AppSpacing.micro),
-                          Text(
-                            '${preview.area}  ·  ${preview.budget}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        ),
+                        const SizedBox(height: AppSpacing.micro),
+                        Text(
+                          '${preview.area}  ·  ${preview.budget}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
+                ),
               ],
             ),
           ),

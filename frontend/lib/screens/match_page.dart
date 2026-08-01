@@ -58,7 +58,7 @@ class _MatchPageState extends State<MatchPage>
         _summary.hasTie && widget.result.decidedRestaurantId != null;
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 700),
     );
     if (_isFinalDecision) {
       _controller.forward();
@@ -197,14 +197,25 @@ class _MatchPageState extends State<MatchPage>
     ).pushReplacementNamed(SwipePage.routeName, arguments: widget.draft);
   }
 
-  void _openDetail() {
-    Navigator.of(context).pushNamed(
+  Future<void> _openDetail() async {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
+    await Navigator.of(context).pushNamed(
       RestaurantDetailPage.routeName,
       arguments: (draft: widget.draft, restaurant: restaurant),
     );
+    if (mounted) {
+      setState(() => _isNavigating = false);
+    }
   }
 
   void _goHome() {
+    if (_isNavigating) {
+      return;
+    }
+    setState(() => _isNavigating = true);
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(HomePage.routeName, (route) => false);
@@ -226,14 +237,16 @@ class _MatchPageState extends State<MatchPage>
         child: Stack(
           children: [
             Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      painter: _ConfettiPainter(progress: _controller.value),
-                    );
-                  },
+              child: RepaintBoundary(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: _ConfettiPainter(progress: _controller.value),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -273,8 +286,8 @@ class _MatchPageState extends State<MatchPage>
                       ? _confirmRestaurant
                       : null,
                   onRestart: _isNavigating ? null : _restartVoting,
-                  onOpenDetail: _openDetail,
-                  onGoHome: _goHome,
+                  onOpenDetail: _isNavigating ? null : _openDetail,
+                  onGoHome: _isNavigating ? null : _goHome,
                 ),
                 const SizedBox(height: AppSpacing.xLarge),
                 Text('ランキング', style: theme.textTheme.headlineSmall),
@@ -376,7 +389,7 @@ class _ResultHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.small),
         Text(
           isFinalDecision
-              ? '${selectedResult.likeCount} / ${summary.peopleCount}人が「食べたい」を選びました。'
+              ? '${selectedResult.likeCount} / ${summary.peopleCount}人が「行きたい」を選びました。'
               : '話し合って、ホストが決定してください。',
           style: theme.textTheme.bodyLarge?.copyWith(
             color: colors.onSurfaceVariant,
@@ -471,21 +484,21 @@ class _WinnerCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _VoteMetric(
-                        label: 'いいね',
+                        label: '行きたい',
                         value: '${result.likeCount}',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.small),
                     Expanded(
                       child: _VoteMetric(
-                        label: '拒否',
+                        label: '見送り',
                         value: '${result.rejectCount}',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.small),
                     Expanded(
                       child: _VoteMetric(
-                        label: 'いいね率',
+                        label: '支持率',
                         value: '${(result.likeRate * 100).round()}%',
                       ),
                     ),
@@ -516,8 +529,8 @@ class _ResultActions extends StatelessWidget {
   final VoidCallback? onOpenMaps;
   final VoidCallback? onConfirm;
   final VoidCallback? onRestart;
-  final VoidCallback onOpenDetail;
-  final VoidCallback onGoHome;
+  final VoidCallback? onOpenDetail;
+  final VoidCallback? onGoHome;
 
   @override
   Widget build(BuildContext context) {
@@ -693,7 +706,7 @@ class _RankedResultTile extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.micro),
                     Text(
-                      '${result.likeCount}いいね  ·  ${result.rejectCount}拒否  ·  ${(result.likeRate * 100).round()}%',
+                      '${result.likeCount}人が行きたい  ·  ${result.rejectCount}人が見送り  ·  ${(result.likeRate * 100).round()}%',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
                       ),
