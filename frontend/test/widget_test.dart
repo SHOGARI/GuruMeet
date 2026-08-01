@@ -245,7 +245,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今日のお店が決定。'), findsOneWidget);
-    expect(find.text('RESULT'), findsOneWidget);
+    expect(find.text("IT'S A MATCH"), findsOneWidget);
     expect(find.text('支持率'), findsOneWidget);
     expect(find.text('GINZA SORA'), findsAtLeastNWidgets(1));
     expect(find.text('全員一致'), findsAtLeastNWidgets(1));
