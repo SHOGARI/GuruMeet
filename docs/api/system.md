@@ -50,5 +50,6 @@ Response:
 レスポンス件数は削除した `temporary_groups` の数だけを表す。関連する
 participants / votesはFKのCASCADEで削除する。削除した `custom_locations` の件数は返さない。
 
-このendpointは一般クライアント用ではない。productionでは公開 `/api/*` 自体を
-Workerが404にしており、Cronは `http://container/internal/...` を直接呼ぶ。
+このendpointは一般クライアント用ではない。Workerは `/api/internal/*` を
+containerへ転送し得るため、backend側で `X-Internal-Task-Secret` を必ず検証する。
+Cronは `http://container/internal/...` を直接呼ぶ。

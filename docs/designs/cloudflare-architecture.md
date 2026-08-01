@@ -51,8 +51,7 @@ User
   v
 Cloudflare Worker
   |-- /             -> Flutter Web static assets
-  |-- /api/*        -> stagingのみ Workers Container -> FastAPI -> PostgreSQL
-  |                    productionは現在404
+  |-- /api/*        -> Workers Container -> FastAPI -> PostgreSQL
   |-- /files/*      -> R2
   |-- /edge/health  -> Worker health
 ```
@@ -73,8 +72,8 @@ gurumeet.net      -> Cloudflare Pages
 api.gurumeet.net  -> Cloudflare Worker + Workers Container
 ```
 
-stagingは `/api/*` を同一ドメイン配下にまとめている。productionは現行Workerで
-`/api` と `/api/*` を404にしており、公開APIを停止している。
+staging / productionとも `/api/*` を同一ドメイン配下にまとめている。Workerは
+`/api` prefixを外してFastAPI containerへ転送する。
 
 ## Frontend
 
@@ -213,8 +212,8 @@ Access
 ## 現在の実装
 
 1. Flutter WebをWorkers Static Assetsで配信する
-2. stagingでは `/api/*` のprefixを外してFastAPI containerへ転送する
-3. productionでは `/api` と `/api/*` を404にする
+2. staging / productionでは `/api/*` のprefixを外してFastAPI containerへ転送する
+3. `/api` と `/api/` はAPI rootとして404にする
 4. staging / productionともNeon PostgreSQLへ接続する
 5. `/files/*` で環境別R2 bucketのobjectを返す
 6. `/edge/health` でWorkerとR2のhealthを返す
