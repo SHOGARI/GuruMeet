@@ -34,26 +34,42 @@ class _MatchPageState extends State<MatchPage>
   final RoomRepository _roomRepository = RoomRepositoryProvider.instance;
 
   late final ResultSummary _summary;
+  late RestaurantResult _selectedResult;
   late final AnimationController _controller;
+  Timer? _decisionTimer;
   bool _isNavigating = false;
   bool _isOpeningMaps = false;
-  bool _isConfirmingRestaurant = false;
-  bool _hasConfirmed = false;
+  bool _isConfirmingDecision = false;
+  late bool _isTieDecided;
 
-  RestaurantPreview get restaurant => _summary.winner.restaurant;
+  bool get _isFinalDecision => !_summary.hasTie || _isTieDecided;
+  bool get _canChooseTieWinner => _summary.hasTie && widget.draft.isHost;
+  RestaurantPreview get restaurant => _selectedResult.restaurant;
 
   @override
   void initState() {
     super.initState();
     _summary = ResultSummary.fromMatchResult(widget.result);
+    _selectedResult = _summary.rankedResults.firstWhere(
+      (result) => result.restaurant.id == widget.result.restaurant.id,
+      orElse: () => _summary.winner,
+    );
+    _isTieDecided =
+        _summary.hasTie && widget.result.decidedRestaurantId != null;
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
-    )..forward();
+    );
+    if (_isFinalDecision) {
+      _controller.forward();
+    } else {
+      _startDecisionPolling();
+    }
   }
 
   @override
   void dispose() {
+    _decisionTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -85,37 +101,90 @@ class _MatchPageState extends State<MatchPage>
     }
   }
 
-  Future<void> _confirmRestaurant() async {
-    if (_hasConfirmed || _isConfirmingRestaurant) {
+  void _selectTieResult(RestaurantResult result) {
+    if (!_canChooseTieWinner || _isTieDecided || result.rank != 1) {
       return;
     }
 
-    setState(() => _isConfirmingRestaurant = true);
+    setState(() => _selectedResult = result);
+  }
+
+  Future<void> _confirmRestaurant() async {
+    if (!_canChooseTieWinner || _isTieDecided || _isConfirmingDecision) {
+      return;
+    }
+
+    setState(() => _isConfirmingDecision = true);
     try {
-      await _roomRepository.dissolveRoom(widget.draft);
+      final result = await _roomRepository.decideTiedWinner(
+        draft: widget.draft,
+        restaurantId: _selectedResult.restaurant.id,
+        restaurants: _summary.rankedResults
+            .map((result) => result.restaurant)
+            .toList(),
+        localChoices: const [],
+      );
+      if (!mounted) {
+        return;
+      }
+      _applyDecidedResult(result);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      setState(() => _isConfirmingRestaurant = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(roomDissolveErrorMessage(error))),
-        );
-      return;
+        ..showSnackBar(SnackBar(content: Text(votingErrorMessage(error))));
+    } finally {
+      if (mounted) {
+        setState(() => _isConfirmingDecision = false);
+      }
     }
+  }
 
-    if (!mounted) {
+  void _startDecisionPolling() {
+    if (widget.draft.roomId == null) {
       return;
     }
-    setState(() {
-      _hasConfirmed = true;
-      _isConfirmingRestaurant = false;
+    _decisionTimer?.cancel();
+    _decisionTimer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
+      if (!mounted || _isTieDecided) {
+        _decisionTimer?.cancel();
+        return;
+      }
+      unawaited(_loadDecision());
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('${restaurant.name} に決定しました')));
+  }
+
+  Future<void> _loadDecision() async {
+    try {
+      final result = await _roomRepository.getResult(
+        draft: widget.draft,
+        restaurants: _summary.rankedResults
+            .map((result) => result.restaurant)
+            .toList(),
+        localChoices: const [],
+      );
+      if (!mounted || result.decidedRestaurantId == null) {
+        return;
+      }
+      _applyDecidedResult(result);
+    } catch (_) {
+      return;
+    }
+  }
+
+  void _applyDecidedResult(RestaurantMatchResult result) {
+    final selected = _summary.rankedResults.firstWhere(
+      (rankedResult) => rankedResult.restaurant.id == result.restaurant.id,
+      orElse: () => _selectedResult,
+    );
+    setState(() {
+      _selectedResult = selected;
+      _isTieDecided = true;
+    });
+    _decisionTimer?.cancel();
+    _controller.forward(from: 0);
   }
 
   void _restartVoting() {
@@ -171,7 +240,11 @@ class _MatchPageState extends State<MatchPage>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ResultHeader(summary: _summary),
+                _ResultHeader(
+                  summary: _summary,
+                  selectedResult: _selectedResult,
+                  isFinalDecision: _isFinalDecision,
+                ),
                 const SizedBox(height: AppSpacing.large),
                 ScaleTransition(
                   scale: Tween<double>(begin: 0.96, end: 1).animate(
@@ -180,19 +253,25 @@ class _MatchPageState extends State<MatchPage>
                       curve: const Interval(0, 0.55, curve: Curves.easeOutBack),
                     ),
                   ),
-                  child: _WinnerCard(summary: _summary),
+                  child: _WinnerCard(
+                    result: _selectedResult,
+                    hasTie: _summary.hasTie,
+                    isFinalDecision: _isFinalDecision,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.large),
                 _ResultActions(
-                  hasTie: _summary.hasTie,
+                  hasTie: _summary.hasTie && !_isFinalDecision,
                   canRestart: widget.draft.roomId == null,
                   onOpenMaps: _isOpeningMaps || _isNavigating
                       ? null
                       : _openMaps,
                   onConfirm:
-                      _hasConfirmed || _isNavigating || _isConfirmingRestaurant
-                      ? null
-                      : () => unawaited(_confirmRestaurant()),
+                      _canChooseTieWinner &&
+                          !_isFinalDecision &&
+                          !_isConfirmingDecision
+                      ? _confirmRestaurant
+                      : null,
                   onRestart: _isNavigating ? null : _restartVoting,
                   onOpenDetail: _openDetail,
                   onGoHome: _goHome,
@@ -205,7 +284,13 @@ class _MatchPageState extends State<MatchPage>
                     padding: const EdgeInsets.only(bottom: AppSpacing.regular),
                     child: _RankedResultTile(
                       result: result,
-                      selected: result.restaurant.id == restaurant.id,
+                      selected:
+                          result.restaurant.id == _selectedResult.restaurant.id,
+                      enabled:
+                          _canChooseTieWinner &&
+                          !_isTieDecided &&
+                          result.rank == 1,
+                      onTap: () => _selectTieResult(result),
                     ),
                   ),
                 ),
@@ -222,7 +307,14 @@ class _MatchPageState extends State<MatchPage>
                           ),
                           child: _RankedResultTile(
                             result: result,
-                            selected: false,
+                            selected:
+                                result.restaurant.id ==
+                                _selectedResult.restaurant.id,
+                            enabled:
+                                _canChooseTieWinner &&
+                                !_isTieDecided &&
+                                result.rank == 1,
+                            onTap: () => _selectTieResult(result),
                           ),
                         ),
                       ),
@@ -237,9 +329,15 @@ class _MatchPageState extends State<MatchPage>
 }
 
 class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({required this.summary});
+  const _ResultHeader({
+    required this.summary,
+    required this.selectedResult,
+    required this.isFinalDecision,
+  });
 
   final ResultSummary summary;
+  final RestaurantResult selectedResult;
+  final bool isFinalDecision;
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +357,7 @@ class _ResultHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.control),
           ),
           child: Text(
-            summary.hasTie ? 'FINAL ROUND' : "IT'S A MATCH",
+            isFinalDecision ? "IT'S A MATCH" : 'FINAL ROUND',
             style: theme.textTheme.labelLarge?.copyWith(
               color: colors.onPrimaryContainer,
               letterSpacing: AppSizes.codeLabelLetterSpacing,
@@ -268,14 +366,14 @@ class _ResultHeader extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.medium),
         Text(
-          summary.hasTie ? '同率1位。候補から選べます。' : '今日のお店が決定。',
+          isFinalDecision ? '今日のお店が決定。' : '同率1位。候補を選択。',
           style: theme.textTheme.headlineLarge,
         ),
         const SizedBox(height: AppSpacing.small),
         Text(
-          summary.hasTie
-              ? '${summary.topResults.length}店舗が同じ支持数で並びました。'
-              : '${summary.winner.likeCount} / ${summary.peopleCount}人が「食べたい」を選びました。',
+          isFinalDecision
+              ? '${selectedResult.likeCount} / ${summary.peopleCount}人が「食べたい」を選びました。'
+              : '話し合って、ホストが決定してください。',
           style: theme.textTheme.bodyLarge?.copyWith(
             color: colors.onSurfaceVariant,
           ),
@@ -286,17 +384,21 @@ class _ResultHeader extends StatelessWidget {
 }
 
 class _WinnerCard extends StatelessWidget {
-  const _WinnerCard({required this.summary});
+  const _WinnerCard({
+    required this.result,
+    required this.hasTie,
+    required this.isFinalDecision,
+  });
 
-  final ResultSummary summary;
-
-  RestaurantResult get winner => summary.winner;
+  final RestaurantResult result;
+  final bool hasTie;
+  final bool isFinalDecision;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final restaurant = winner.restaurant;
+    final restaurant = result.restaurant;
 
     return Material(
       color: colors.surfaceContainerLowest,
@@ -313,6 +415,7 @@ class _WinnerCard extends StatelessWidget {
               AspectRatio(
                 aspectRatio: 1.9,
                 child: RestaurantImage(
+                  key: ValueKey('winner-image-${restaurant.id}'),
                   imageUrl: restaurant.imageUrl,
                   semanticLabel: '${restaurant.name}の料理写真',
                 ),
@@ -321,11 +424,11 @@ class _WinnerCard extends StatelessWidget {
                 left: AppSpacing.medium,
                 top: AppSpacing.medium,
                 child: _RankBadge(
-                  label: summary.hasTie ? '同率1位' : '1位',
+                  label: hasTie ? '同率1位' : '1位',
                   icon: Icons.workspace_premium_rounded,
                 ),
               ),
-              if (winner.isUnanimous)
+              if (result.isUnanimous)
                 const Positioned(
                   right: AppSpacing.medium,
                   top: AppSpacing.medium,
@@ -338,7 +441,10 @@ class _WinnerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('この店に決定', style: theme.textTheme.titleMedium),
+                Text(
+                  isFinalDecision ? 'この店に決定' : '選択中の候補',
+                  style: theme.textTheme.titleMedium,
+                ),
                 const SizedBox(height: AppSpacing.small),
                 Text(
                   restaurant.name,
@@ -362,21 +468,21 @@ class _WinnerCard extends StatelessWidget {
                     Expanded(
                       child: _VoteMetric(
                         label: 'いいね',
-                        value: '${winner.likeCount}',
+                        value: '${result.likeCount}',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.small),
                     Expanded(
                       child: _VoteMetric(
                         label: '拒否',
-                        value: '${winner.rejectCount}',
+                        value: '${result.rejectCount}',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.small),
                     Expanded(
                       child: _VoteMetric(
                         label: 'いいね率',
-                        value: '${(winner.likeRate * 100).round()}%',
+                        value: '${(result.likeRate * 100).round()}%',
                       ),
                     ),
                   ],
@@ -419,11 +525,12 @@ class _ResultActions extends StatelessWidget {
             icon: const Icon(Icons.map_rounded),
             label: const Text('Googleマップで開く'),
           ),
-          FilledButton.tonalIcon(
-            onPressed: onConfirm,
-            icon: const Icon(Icons.check_circle_rounded),
-            label: const Text('この店に決定'),
-          ),
+          if (onConfirm != null)
+            FilledButton.tonalIcon(
+              onPressed: onConfirm,
+              icon: const Icon(Icons.check_circle_rounded),
+              label: const Text('この店に決定'),
+            ),
           if (canRestart)
             OutlinedButton.icon(
               onPressed: onRestart,
@@ -496,7 +603,7 @@ class _TieNotice extends StatelessWidget {
             child: Text(
               onRestart == null
                   ? '同率候補があります。ランキングから候補を確認してください。'
-                  : '同率候補があります。ランキングから候補を確認し、必要なら最初から選び直せます。',
+                  : '同率候補から選んでください。',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colors.onPrimaryContainer,
                 fontWeight: FontWeight.w700,
@@ -512,84 +619,107 @@ class _TieNotice extends StatelessWidget {
 }
 
 class _RankedResultTile extends StatelessWidget {
-  const _RankedResultTile({required this.result, required this.selected});
+  const _RankedResultTile({
+    required this.result,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final RestaurantResult result;
   final bool selected;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.medium),
-      decoration: BoxDecoration(
-        color: selected
-            ? colors.primaryContainer
-            : colors.surfaceContainerLowest,
+    return Material(
+      color: selected ? colors.primaryContainer : colors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.small),
-        border: Border.all(
+        side: BorderSide(
           color: selected
-              ? colors.primary.withValues(alpha: 0.34)
+              ? colors.primary.withValues(alpha: 0.42)
               : colors.outlineVariant.withValues(alpha: 0.7),
         ),
       ),
-      child: Row(
-        children: [
-          _RankNumber(rank: result.rank),
-          const SizedBox(width: AppSpacing.medium),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            child: SizedBox.square(
-              dimension: 64,
-              child: RestaurantImage(
-                imageUrl: result.restaurant.imageUrl,
-                semanticLabel: '${result.restaurant.name}の料理写真',
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.medium),
+          child: Row(
+            children: [
+              _RankNumber(rank: result.rank),
+              const SizedBox(width: AppSpacing.medium),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: SizedBox.square(
+                  dimension: 64,
+                  child: RestaurantImage(
+                    imageUrl: result.restaurant.imageUrl,
+                    semanticLabel: '${result.restaurant.name}の料理写真',
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.medium),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              const SizedBox(width: AppSpacing.medium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        result.restaurant.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            result.restaurant.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        if (selected && enabled)
+                          const _SmallBadge(label: '選択中'),
+                        if ((!selected || !enabled) && result.isUnanimous)
+                          const _SmallBadge(label: '全員一致'),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.micro),
+                    Text(
+                      '${result.likeCount}いいね  ·  ${result.rejectCount}拒否  ·  ${(result.likeRate * 100).round()}%',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
-                    if (result.isUnanimous) const _SmallBadge(label: '全員一致'),
+                    const SizedBox(height: AppSpacing.small),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      child: LinearProgressIndicator(
+                        value: result.likeRate,
+                        minHeight: AppSizes.progressIndicatorHeight,
+                        backgroundColor: colors.surfaceContainerHigh,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          selected ? colors.primary : colors.secondary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.micro),
-                Text(
-                  '${result.likeCount}いいね  ·  ${result.rejectCount}拒否  ·  ${(result.likeRate * 100).round()}%',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.small),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  child: LinearProgressIndicator(
-                    value: result.likeRate,
-                    minHeight: AppSizes.progressIndicatorHeight,
-                    backgroundColor: colors.surfaceContainerHigh,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      selected ? colors.primary : colors.secondary,
-                    ),
-                  ),
+              ),
+              if (enabled) ...[
+                const SizedBox(width: AppSpacing.small),
+                Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: selected ? colors.primary : colors.onSurfaceVariant,
                 ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

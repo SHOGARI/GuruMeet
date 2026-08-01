@@ -51,6 +51,15 @@ class TemporaryGroupRepository:
             self.db.flush()
         return group
 
+    def select_restaurant(
+        self,
+        group: TemporaryGroup,
+        restaurant_id: str,
+    ) -> TemporaryGroup:
+        group.selected_restaurant_id = restaurant_id
+        self.db.flush()
+        return group
+
     def expire(
         self,
         group: TemporaryGroup,

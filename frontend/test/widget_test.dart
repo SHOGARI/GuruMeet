@@ -5,6 +5,7 @@ import 'package:gurumeet/models/group_creation_draft.dart';
 import 'package:gurumeet/models/restaurant_preview.dart';
 import 'package:gurumeet/screens/group_created_page.dart';
 import 'package:gurumeet/screens/match_page.dart';
+import 'package:gurumeet/widgets/restaurant_image.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
@@ -331,7 +332,9 @@ void main() {
     expect(find.text(GroupCreatedPage.routeName), findsOneWidget);
   });
 
-  testWidgets('tie result shows tie notice and restart action', (tester) async {
+  testWidgets('host can choose tied winner before final decision', (
+    tester,
+  ) async {
     final draft = GroupCreationDraft.createMock(
       peopleCount: 3,
       area: '渋谷',
@@ -366,9 +369,66 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('同率1位。候補から選べます。'), findsOneWidget);
+    expect(find.text('同率1位。候補を選択。'), findsOneWidget);
+    expect(find.text('話し合って、ホストが決定してください。'), findsOneWidget);
     expect(find.text('選び直す'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'この店に決定'), findsOneWidget);
     expect(find.text('決選投票をする'), findsNothing);
+
+    await tester.tap(find.text(mockRestaurants[1].name).last);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<RestaurantImage>(
+            find.byKey(ValueKey('winner-image-${mockRestaurants[1].id}')),
+          )
+          .imageUrl,
+      mockRestaurants[1].imageUrl,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'この店に決定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('今日のお店が決定。'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'この店に決定'), findsNothing);
+  });
+
+  testWidgets('non-host cannot choose tied winner', (tester) async {
+    const draft = GroupCreationDraft(
+      peopleCount: 3,
+      area: '渋谷',
+      budget: BudgetOption.from2000To3000,
+      groupId: 'AB12C',
+      isHost: false,
+      roomId: '123e4567-e89b-12d3-a456-426614174000',
+    );
+    final result = RestaurantMatchResult(
+      restaurant: mockRestaurants.first,
+      peopleCount: 3,
+      results: [
+        RestaurantVoteResult(
+          restaurant: mockRestaurants[0],
+          likeCount: 2,
+          rejectCount: 1,
+        ),
+        RestaurantVoteResult(
+          restaurant: mockRestaurants[1],
+          likeCount: 2,
+          rejectCount: 1,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MatchPage(draft: draft, result: result),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('同率1位。候補を選択。'), findsOneWidget);
+    expect(find.text('話し合って、ホストが決定してください。'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'この店に決定'), findsNothing);
   });
 
   testWidgets('api room result hides restart action', (tester) async {
