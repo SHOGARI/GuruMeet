@@ -82,8 +82,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('東京都'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('location-search-field')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('location-search-overlay-field')),
+      findsOneWidget,
+    );
     await tester.enterText(
-      find.byKey(const ValueKey('location-search-field')),
+      find.byKey(const ValueKey('location-search-overlay-field')),
       '渋谷',
     );
     await tester.pump(const Duration(milliseconds: 500));
@@ -91,8 +97,6 @@ void main() {
     await tester.tap(find.text('渋谷駅'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('location-search-field')));
-    await tester.pump();
     expect(
       tester
           .widget<TextFormField>(
@@ -102,8 +106,6 @@ void main() {
           ?.text,
       '渋谷駅・東京都渋谷区',
     );
-    tester.binding.focusManager.primaryFocus?.unfocus();
-    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '3,000〜5,000円'));
     await tester.pumpAndSettle();
