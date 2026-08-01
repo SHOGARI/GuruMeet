@@ -57,7 +57,7 @@ class HeroCardStack extends StatelessWidget {
           );
 
           return Stack(
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.hardEdge,
             alignment: Alignment.center,
             children: [
               _RestaurantCard(

@@ -11,6 +11,7 @@ import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/group_code_badge.dart';
 import '../widgets/primary_action_button.dart';
+import 'create_group_page.dart';
 import 'swipe_page.dart';
 
 class WaitingRoomPage extends StatefulWidget {
@@ -33,6 +34,8 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
   bool _isLoadingMembers = true;
   bool _isVotingStarted = false;
   bool _isLoadingMembersRequest = false;
+  bool _isExitDialogOpen = false;
+  bool _isDissolving = false;
   String? _memberLoadError;
   DateTime? _lastMemberLoadedAt;
 
@@ -88,7 +91,12 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
       if (!_isHost && votingStarted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('投票が始まりました')));
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('投票が始まりました'),
+              duration: Duration(milliseconds: 1400),
+            ),
+          );
       }
     } catch (error) {
       if (!mounted) {
@@ -148,9 +156,71 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('ルームコードをコピーしました'),
+        duration: Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  Future<void> _confirmHostExit() async {
+    if (!_isHost || _isExitDialogOpen || _isDissolving || _isNavigating) {
+      return;
+    }
+    _isExitDialogOpen = true;
+    final shouldExit =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('グループを解散しますか？'),
+            content: const Text(
+              '解散すると招待URLとルームコードは使えなくなります。待機を続ける場合はこのまま戻ってください。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('待機を続ける'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('解散して戻る'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    _isExitDialogOpen = false;
+    if (!mounted || !shouldExit) {
+      return;
+    }
+
+    setState(() => _isDissolving = true);
+    _joinTimer?.cancel();
+    try {
+      await _roomRepository.dissolveRoom(widget.draft);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isDissolving = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(roomDissolveErrorMessage(error))),
+        );
+      _joinTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+        unawaited(_loadMembers(showLoading: false));
+      });
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('ルームコードをコピーしました')));
+    ).pushNamedAndRemoveUntil(CreateGroupPage.routeName, (route) => false);
   }
 
   @override
@@ -160,82 +230,94 @@ class _WaitingRoomPageState extends State<WaitingRoomPage> {
         ? AppSpacing.medium
         : AppSpacing.xLarge;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('メンバー待機'),
-        actions: [GroupCodeBadge(code: widget.draft.groupId)],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            AppSpacing.regular,
-            horizontalPadding,
-            AppSpacing.regular,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppSizes.contentMaxWidth,
-              ),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _RoomCodePanel(
-                            draft: widget.draft,
-                            joinedCount: _members.length,
-                            onCopyRoomCode: _copyRoomCode,
-                          ),
-                          const SizedBox(height: AppSpacing.large),
-                          _MemberList(
-                            members: _members,
-                            peopleCount: widget.draft.peopleCount,
-                            isLoading: _isLoadingMembers,
-                            errorMessage: _memberLoadError,
-                            lastUpdatedAt: _lastMemberLoadedAt,
-                            onRetry: () => unawaited(_loadMembers()),
-                          ),
-                          const SizedBox(height: AppSpacing.medium),
-                          _WaitingNote(isReady: _isRoomReady, isHost: _isHost),
-                          const SizedBox(height: AppSpacing.large),
-                        ],
+    return PopScope<void>(
+      canPop: !_isHost,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          unawaited(_confirmHostExit());
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('メンバー待機'),
+          actions: [GroupCodeBadge(code: widget.draft.groupId)],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              AppSpacing.regular,
+              horizontalPadding,
+              AppSpacing.regular,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppSizes.contentMaxWidth,
+                ),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _RoomCodePanel(
+                              draft: widget.draft,
+                              joinedCount: _members.length,
+                              onCopyRoomCode: _copyRoomCode,
+                            ),
+                            const SizedBox(height: AppSpacing.large),
+                            _MemberList(
+                              members: _members,
+                              peopleCount: widget.draft.peopleCount,
+                              isLoading: _isLoadingMembers,
+                              errorMessage: _memberLoadError,
+                              lastUpdatedAt: _lastMemberLoadedAt,
+                              onRetry: () => unawaited(_loadMembers()),
+                            ),
+                            const SizedBox(height: AppSpacing.medium),
+                            _WaitingNote(
+                              isReady: _isRoomReady,
+                              isHost: _isHost,
+                            ),
+                            const SizedBox(height: AppSpacing.large),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  if (_isHost) ...[
-                    _StartHint(
-                      joinedCount: _members.length,
-                      peopleCount: widget.draft.peopleCount,
-                      isReady: _isRoomReady,
-                    ),
-                    const SizedBox(height: AppSpacing.regular),
-                    PrimaryActionButton(
-                      label: '投票を開始',
-                      isLoading: _isNavigating,
-                      loadingLabel: '開始中',
-                      onPressed: _isNavigating || !_isRoomReady
-                          ? null
-                          : _startSwipe,
-                    ),
-                  ] else ...[
-                    _ParticipantVotingHint(isVotingStarted: _isVotingStarted),
-                    const SizedBox(height: AppSpacing.regular),
-                    PrimaryActionButton(
-                      label: '投票画面へ進む',
-                      isLoading: _isNavigating,
-                      loadingLabel: '移動中',
-                      onPressed: _isNavigating || !_isVotingStarted
-                          ? null
-                          : _enterSwipe,
-                    ),
+                    if (_isHost) ...[
+                      _StartHint(
+                        joinedCount: _members.length,
+                        peopleCount: widget.draft.peopleCount,
+                        isReady: _isRoomReady,
+                      ),
+                      const SizedBox(height: AppSpacing.regular),
+                      PrimaryActionButton(
+                        label: '投票を開始',
+                        isLoading: _isNavigating || _isDissolving,
+                        loadingLabel: _isDissolving ? '解散中' : '開始中',
+                        onPressed:
+                            _isNavigating || _isDissolving || !_isRoomReady
+                            ? null
+                            : _startSwipe,
+                      ),
+                    ] else ...[
+                      _ParticipantVotingHint(isVotingStarted: _isVotingStarted),
+                      const SizedBox(height: AppSpacing.regular),
+                      PrimaryActionButton(
+                        label: '投票画面へ進む',
+                        isLoading: _isNavigating,
+                        loadingLabel: '移動中',
+                        onPressed: _isNavigating || !_isVotingStarted
+                            ? null
+                            : _enterSwipe,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

@@ -52,6 +52,20 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
+      - name: frontend を静的解析
+        working-directory: frontend
+        run: flutter analyze
+
+      - name: frontend の回帰テスト
+        working-directory: frontend
+        run: |
+          flutter test \
+            --dart-define=DEMO_MODE=true \
+            --dart-define=DEMO_ROOM_CODE=G7M24 \
+            --dart-define=GURUMEET_ENABLE_MOCKS=true \
+            --dart-define=GURUMEET_API_BASE_URL=http://localhost:8000 \
+            --dart-define=GURUMEET_INVITE_BASE_URL=http://localhost:3000
+
       - name: frontend web を build
         working-directory: frontend
         run: |

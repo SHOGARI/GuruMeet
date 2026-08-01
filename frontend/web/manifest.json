@@ -1,11 +1,11 @@
 {
-    "name": "gurumeet",
-    "short_name": "gurumeet",
+    "name": "GuruMeet",
+    "short_name": "GuruMeet",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFF9F4",
+    "theme_color": "#EF5B3F",
+    "description": "みんなの食べたいをスワイプで決める、グループ向け飲食店選びアプリ。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

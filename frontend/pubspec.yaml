@@ -1,5 +1,5 @@
 name: gurumeet
-description: "A new Flutter project."
+description: "みんなの食べたいをスワイプで決める、グループ向け飲食店選びアプリ。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -62,6 +62,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/images/gurumeet_icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

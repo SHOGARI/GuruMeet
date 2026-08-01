@@ -76,6 +76,20 @@ void main() {
     await tester.tap(find.text('東京都').last);
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('prefecture-search-field')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('prefecture-search-field')),
+          )
+          .controller
+          ?.text,
+      '東京都',
+    );
+    tester.binding.focusManager.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+
     await tester.enterText(
       find.byKey(const ValueKey('location-search-field')),
       '渋谷',
@@ -83,6 +97,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     await tester.tap(find.text('渋谷駅'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('location-search-field')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('location-search-field')),
+          )
+          .controller
+          ?.text,
+      '渋谷駅・東京都渋谷区',
+    );
+    tester.binding.focusManager.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '3,000〜5,000円'));
@@ -97,34 +125,15 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'グループを作成'));
     await tester.pumpAndSettle();
 
-    expect(find.text('招待'), findsOneWidget);
-    expect(find.text('招待を送ろう'), findsOneWidget);
-    expect(find.text('GROUP CODE  |  招待コード'), findsOneWidget);
-    expect(find.text('渋谷駅・東京都渋谷区'), findsOneWidget);
-    expect(find.text('3,000〜5,000円'), findsOneWidget);
+    // 招待完了画面を挟まず、招待情報を含む待機画面へ直接進む。
+    expect(find.text('メンバー待機'), findsOneWidget);
+    expect(find.text('WAITING'), findsOneWidget);
     expect(
       find.textContaining('http://localhost:3000/#/join/'),
       findsOneWidget,
     );
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(tester.getTopLeft(find.text('招待を送ろう')).dy, greaterThan(0));
 
-    final blockedPop = tester
-        .state<NavigatorState>(find.byType(Navigator))
-        .maybePop();
-    await tester.pumpAndSettle();
-    expect(find.text('グループを解散しますか？'), findsOneWidget);
-    expect(find.text('解散して戻る'), findsOneWidget);
-    await tester.tap(find.text('戻らない'));
-    await tester.pumpAndSettle();
-    expect(await blockedPop, isTrue);
-    expect(find.text('招待を送ろう'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(FilledButton, '待機画面へ進む'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('メンバー待機'), findsOneWidget);
-    expect(find.text('WAITING'), findsOneWidget);
     expect(find.text('参加メンバー'), findsOneWidget);
     expect(find.text('ルームコード'), findsOneWidget);
     expect(find.text('コピー'), findsOneWidget);
@@ -137,6 +146,17 @@ void main() {
           .onPressed,
       isNull,
     );
+
+    final blockedPop = tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .maybePop();
+    await tester.pumpAndSettle();
+    expect(find.text('グループを解散しますか？'), findsOneWidget);
+    expect(find.text('解散して戻る'), findsOneWidget);
+    await tester.tap(find.text('待機を続ける'));
+    await tester.pumpAndSettle();
+    expect(await blockedPop, isTrue);
+    expect(find.text('メンバー待機'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 5200));
     await tester.pumpAndSettle();
@@ -151,8 +171,16 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '投票を開始'));
     await tester.pumpAndSettle();
 
-    expect(find.text('食べたい？'), findsOneWidget);
+    expect(find.text('このお店、行きたい？'), findsOneWidget);
     expect(find.text('残り 5 / 5'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(
+            find.byType(LinearProgressIndicator).first,
+          )
+          .value,
+      0,
+    );
     expect(find.widgetWithText(OutlinedButton, 'ひとつ戻す'), findsOneWidget);
     expect(
       tester.widget<AppBar>(find.byType(AppBar)).automaticallyImplyLeading,
@@ -165,12 +193,18 @@ void main() {
       isNull,
     );
 
+    await tester.drag(find.text('GINZA SORA').first, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(find.text('残り 5 / 5'), findsOneWidget);
+
     for (var restaurant = 0; restaurant < 5; restaurant++) {
       final likesRestaurant = restaurant == 0;
       await tester.tap(
         find.widgetWithIcon(
           IconButton,
-          likesRestaurant ? Icons.favorite_rounded : Icons.close_rounded,
+          likesRestaurant
+              ? Icons.bookmark_add_rounded
+              : Icons.remove_circle_outline_rounded,
         ),
       );
       await tester.pumpAndSettle();
@@ -188,7 +222,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('残り 5 / 5'), findsOneWidget);
         await tester.tap(
-          find.widgetWithIcon(IconButton, Icons.favorite_rounded),
+          find.widgetWithIcon(IconButton, Icons.bookmark_add_rounded),
         );
         await tester.pumpAndSettle();
       }
@@ -217,6 +251,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今日のお店が決定。'), findsOneWidget);
+    expect(find.text('RESULT'), findsOneWidget);
+    expect(find.text('支持率'), findsOneWidget);
     expect(find.text('GINZA SORA'), findsAtLeastNWidgets(1));
     expect(find.text('全員一致'), findsAtLeastNWidgets(1));
     expect(find.text('ランキング'), findsOneWidget);
@@ -235,7 +271,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('店舗詳細'), findsOneWidget);
-    expect(find.text('Google Mapsで見る'), findsOneWidget);
+    expect(find.text('Googleマップで開く'), findsOneWidget);
     expect(find.text('ホームへ戻る'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'ホームへ戻る'));

@@ -396,7 +396,10 @@ class _SwipePageState extends State<SwipePage> {
             Row(
               children: [
                 Expanded(
-                  child: Text('食べたい？', style: theme.textTheme.headlineMedium),
+                  child: Text(
+                    'このお店、行きたい？',
+                    style: theme.textTheme.headlineMedium,
+                  ),
                 ),
                 if (!_isLoadingRestaurants && _restaurants.isNotEmpty)
                   _RemainingBadge(
@@ -611,7 +614,7 @@ class _SwipeHelpText extends StatelessWidget {
         const SizedBox(width: AppSpacing.small),
         Expanded(
           child: Text(
-            '右で食べたい、左で見送り',
+            '右で行きたい、左で今回は見送る',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.primary,
               fontWeight: FontWeight.w800,

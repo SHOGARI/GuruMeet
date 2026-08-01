@@ -14,6 +14,7 @@ import '../services/user_error_messages.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/primary_action_button.dart';
 import 'group_created_page.dart';
+import 'waiting_room_page.dart';
 
 const _prefectureOptions = <String>[
   '北海道',
@@ -210,7 +211,12 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       _areaFocusNode.requestFocus();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('エリアを入力するとグループを作成できます')));
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('エリアを入力するとグループを作成できます'),
+            duration: Duration(milliseconds: 1800),
+          ),
+        );
       return;
     }
 
@@ -218,7 +224,12 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     if (selectedBudget == null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('予算を選んでください')));
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('予算を選んでください'),
+            duration: Duration(milliseconds: 1800),
+          ),
+        );
       return;
     }
 
@@ -238,9 +249,11 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       if (!mounted) {
         return;
       }
-      await Navigator.of(
-        context,
-      ).pushNamed(GroupCreatedPage.routeName, arguments: draft);
+      final nextRoute =
+          draft.restaurantSearchStatus == RestaurantSearchStatus.noResults
+          ? GroupCreatedPage.routeName
+          : WaitingRoomPage.routeName;
+      await Navigator.of(context).pushNamed(nextRoute, arguments: draft);
     } catch (error) {
       if (!mounted) {
         return;
@@ -529,7 +542,12 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1800),
+        ),
+      );
   }
 
   void _clearCurrentLocation() {
@@ -1293,6 +1311,9 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
     }
 
     return ListView.separated(
+      primary: false,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const ClampingScrollPhysics(),
       shrinkWrap: true,
       itemCount: _suggestions.length,
       separatorBuilder: (_, _) =>
@@ -1301,6 +1322,7 @@ class _LocationSearchFieldState extends State<_LocationSearchField> {
         final suggestion = _suggestions[index];
         final isStation = suggestion.type == LocationSuggestionType.station;
         return ListTile(
+          key: ValueKey(suggestion.id),
           leading: Icon(isStation ? Icons.train_rounded : Icons.place_outlined),
           title: Row(
             children: [
