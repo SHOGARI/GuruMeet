@@ -274,6 +274,45 @@ void main() {
     expect(find.text('GuruMeet'), findsOneWidget);
   });
 
+  testWidgets('legal documents are available only from the home menu', (
+    tester,
+  ) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+
+    await tester.pumpWidget(const GuruMeetApp());
+
+    expect(find.text('© 2026 GuruMeet'), findsOneWidget);
+    expect(find.text('プライバシーポリシー'), findsNothing);
+    await tester.tap(find.byTooltip('法務・お問い合わせ'));
+    await tester.pumpAndSettle();
+
+    final privacyLink = find.text('プライバシーポリシー');
+    expect(privacyLink, findsOneWidget);
+    await tester.tap(privacyLink);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. 取得する情報'), findsOneWidget);
+    expect(find.textContaining('Local Storage'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('閉じる'));
+    await tester.pumpAndSettle();
+    final createGroupButton = find.widgetWithText(FilledButton, 'グループを作る');
+    await tester.ensureVisible(createGroupButton);
+    await tester.tap(createGroupButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('プライバシーポリシー'), findsNothing);
+    expect(find.text('利用規約'), findsNothing);
+    expect(find.text('お問い合わせ'), findsNothing);
+    expect(find.text('ライセンス'), findsNothing);
+    expect(find.byTooltip('法務・お問い合わせ'), findsNothing);
+  });
+
   testWidgets('group created prompts dissolve when restaurants are empty', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/hero_card_stack.dart';
+import '../widgets/legal_menu_button.dart';
 import '../widgets/primary_action_button.dart';
 import 'create_group_page.dart';
 import 'join_group_page.dart';
@@ -56,6 +57,7 @@ class _HomePageState extends State<HomePage> {
       maxContentWidth: screenWidth >= 900
           ? _desktopContentWidth
           : _mobileContentWidth,
+      floatingActionButton: const LegalMenuButton(),
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: 1),
         duration: AppMotion.pageEntrance,

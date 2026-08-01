@@ -159,6 +159,7 @@ gurumeet/
 - [API](./docs/api/)
 - [Database](./docs/database/)
 - [Designs](./docs/designs/)
+- [Legal](./docs/legal/)
 - [Reference](./docs/reference/)
 - [Cloudflare Ops](./infra/cloudflare/README.md)
 
