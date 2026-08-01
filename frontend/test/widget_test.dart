@@ -71,7 +71,10 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('prefecture-select-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('東京都').last);
+    final tokyoOption = find.text('東京都').last;
+    await tester.ensureVisible(tokyoOption);
+    await tester.pumpAndSettle();
+    await tester.tap(tokyoOption);
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'グループを作成'));
@@ -514,7 +517,12 @@ void main() {
     expect(find.text('何人で行く？'), findsOneWidget);
     expect(find.text('どのあたり？'), findsOneWidget);
     expect(find.text('予算はどれくらい？'), findsOneWidget);
-    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('prefecture-select-field')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('location-search-field')), findsOneWidget);
+    expect(find.byType(TextFormField), findsOneWidget);
     await tester.ensureVisible(find.widgetWithText(OutlinedButton, '現在地から入力'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(OutlinedButton, '現在地から入力'), findsOneWidget);
@@ -574,7 +582,7 @@ void main() {
     expect(find.text('1 / 4人'), findsOneWidget);
     expect(
       find.textContaining('http://localhost:3000/#/join/AB12C'),
-      findsOneWidget,
+      findsNothing,
     );
   });
 

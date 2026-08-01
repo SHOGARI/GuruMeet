@@ -536,10 +536,12 @@ class _MemberList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: AppSpacing.small,
+          runSpacing: AppSpacing.micro,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text('参加メンバー', style: theme.textTheme.titleLarge),
-            const SizedBox(width: AppSpacing.small),
             Text(
               '${members.length} / $peopleCount人',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -547,7 +549,6 @@ class _MemberList extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(width: AppSpacing.small),
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.small,
@@ -566,16 +567,20 @@ class _MemberList extends StatelessWidget {
                 ),
               ),
             ),
-            const Spacer(),
-            if (lastUpdatedAt != null)
-              Text(
-                '更新 ${_formatTime(lastUpdatedAt!)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
           ],
         ),
+        if (lastUpdatedAt != null) ...[
+          const SizedBox(height: AppSpacing.micro),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '更新 ${_formatTime(lastUpdatedAt!)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.regular),
         if (isLoading) ...[
           const LinearProgressIndicator(),
