@@ -702,17 +702,17 @@ https://gurumeet.net/api/health
 Access login が出る
 frontend が表示される
 /edge/health が Worker から返る
-/api/health が FastAPI container から返る
+/api/health が Worker から返る
 ```
 
 注意:
 
 ```text
-/api/health を外部監視で常時叩かない
-監視するなら /edge/health を使う
+/api/health と /edge/health は Container を起こさない
+backend container の生存確認を常時監視しない
 ```
 
-`/api/health` は Container を起こすため、Container active time の課金に影響する。
+backend container の生存確認は Container を起こすため、Container active time の課金に影響する。
 
 ## 課金ガード
 

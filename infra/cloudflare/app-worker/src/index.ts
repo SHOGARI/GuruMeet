@@ -32,6 +32,53 @@ const runtimeEnv = workerEnv as {
 export class BackendContainer extends Container {
   defaultPort = 8000;
   sleepAfter = "5m";
+
+  async onActivityExpired(): Promise<void> {
+    console.log(
+      JSON.stringify({
+        event: "backend_container_activity_expired",
+        action: "stop_container_and_clear_alarm",
+      }),
+    );
+    await this.ctx.storage.deleteAlarm();
+    if (this.ctx.container?.running) {
+      await this.stop();
+    }
+    await this.ctx.storage.deleteAlarm();
+  }
+
+  async onStop(): Promise<void> {
+    console.log(
+      JSON.stringify({
+        event: "backend_container_stopped",
+        action: "clear_alarm",
+      }),
+    );
+    await this.ctx.storage.deleteAlarm();
+  }
+
+  async onError(error: unknown): Promise<void> {
+    const message = errorMessage(error);
+    if (isBenignContainerLifecycleError(message)) {
+      console.info(
+        JSON.stringify({
+          event: "backend_container_lifecycle_error_ignored",
+          message,
+        }),
+      );
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+
+    console.error(
+      JSON.stringify({
+        event: "backend_container_error",
+        error: message,
+      }),
+    );
+    throw error;
+  }
+
   envVars = {
     DATABASE_URL: requiredRuntimeEnv(runtimeEnv.DATABASE_URL, "DATABASE_URL"),
     HOTPEPPER_API_KEY: requiredRuntimeEnv(
@@ -89,6 +136,10 @@ export default {
     try {
       if (url.pathname === "/edge/health") {
         return edgeHealth(request, env);
+      }
+
+      if (isApiHealthPath(url.pathname)) {
+        return apiHealth();
       }
 
       if (url.pathname === "/discord/interactions") {
@@ -620,6 +671,22 @@ async function edgeHealth(request: Request, env: Env): Promise<Response> {
   return json(checks);
 }
 
+function apiHealth(): Response {
+  return json(
+    {
+      status: "healthy",
+      service: "gurumeet-worker",
+      backend_container: "not_checked",
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Gurumeet-Health-Source": "worker",
+      },
+    },
+  );
+}
+
 async function handleFileRequest(
   request: Request,
   env: Env,
@@ -659,6 +726,10 @@ function isProduction(env: Env): boolean {
 
 function isApiRootPath(pathname: string): boolean {
   return pathname === "/api" || pathname === "/api/";
+}
+
+function isApiHealthPath(pathname: string): boolean {
+  return pathname === "/api/health" || pathname === "/api/health/";
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -787,6 +858,14 @@ function logWorkerError(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isBenignContainerLifecycleError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("durable object reset because its code was updated") ||
+    normalized.includes("runtime signalled the container to exit due to a new version rollout")
+  );
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
