@@ -10,7 +10,7 @@
     "directory": "../../../frontend/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*", "/files/*", "/edge/*"],
+    "run_worker_first": ["/api", "/api/*", "/files/*", "/edge/*", "/discord/*"],
   },
   "secrets": {
     "required": [
@@ -18,7 +18,10 @@
       "HOTPEPPER_API_KEY",
       "PARTICIPANT_TOKEN_HASH_SECRET",
       "INTERNAL_TASK_SECRET",
+      "DISCORD_CLEANUP_FORWARD_SECRET",
       "DISCORD_ALERT_WEBHOOK_URL",
+      "DISCORD_APPLICATION_PUBLIC_KEY",
+      "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
     ],
   },
   "containers": [
@@ -43,9 +46,6 @@
       "new_sqlite_classes": ["BackendContainer"],
     },
   ],
-  "triggers": {
-    "crons": ["0 12 * * *"],
-  },
   "env": {
     "staging": {
       "name": "gurumeet-staging",
@@ -63,7 +63,10 @@
           "HOTPEPPER_API_KEY",
           "PARTICIPANT_TOKEN_HASH_SECRET",
           "INTERNAL_TASK_SECRET",
+          "DISCORD_CLEANUP_FORWARD_SECRET",
           "DISCORD_ALERT_WEBHOOK_URL",
+          "DISCORD_APPLICATION_PUBLIC_KEY",
+          "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
         ],
       },
       "containers": [
@@ -88,9 +91,6 @@
           "new_sqlite_classes": ["BackendContainer"],
         },
       ],
-      "triggers": {
-        "crons": ["0 12 * * *"],
-      },
       "routes": [
         {
           "pattern": "stg.gurumeet.net",
@@ -120,7 +120,10 @@
           "HOTPEPPER_API_KEY",
           "PARTICIPANT_TOKEN_HASH_SECRET",
           "INTERNAL_TASK_SECRET",
+          "DISCORD_CLEANUP_FORWARD_SECRET",
           "DISCORD_ALERT_WEBHOOK_URL",
+          "DISCORD_APPLICATION_PUBLIC_KEY",
+          "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
         ],
       },
       "containers": [
@@ -145,9 +148,6 @@
           "new_sqlite_classes": ["BackendContainer"],
         },
       ],
-      "triggers": {
-        "crons": ["0 12 * * *"],
-      },
       "routes": [
         {
           "pattern": "gurumeet.net",

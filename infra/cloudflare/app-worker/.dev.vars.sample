@@ -17,3 +17,19 @@ ENVIRONMENT=development
 # `wrangler dev` から起動したコンテナは、上の db という名前を解決できないことがある。
 # その場合は、Mac 側に公開された PostgreSQL を host.docker.internal で見る。
 DATABASE_URL=postgresql://gurumeet:change_me@host.docker.internal:5432/gurumeet
+
+HOTPEPPER_API_KEY=
+CORS_ALLOW_ORIGINS='["http://localhost:8787"]'
+PARTICIPANT_TOKEN_HASH_SECRET=change_me_to_a_long_random_value
+INTERNAL_TASK_SECRET=change_me_to_a_long_random_internal_secret
+DISCORD_ALERT_WEBHOOK_URL=
+
+# Discord slash command `/delete staging` / `/delete production` 用。
+# Discord Developer Portal の Interactions Endpoint URL は通常:
+#   https://gurumeet.net/discord/interactions
+DISCORD_APPLICATION_PUBLIC_KEY=
+DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS=
+# Worker間転送用。staging / production と同じ値を使う。
+DISCORD_CLEANUP_FORWARD_SECRET=change_me_to_a_long_random_discord_cleanup_forward_secret
+DISCORD_STAGING_CLEANUP_URL=https://gurumeet-staging.<account-subdomain>.workers.dev/edge/internal/cleanup-expired-temporary-groups
+DISCORD_PRODUCTION_CLEANUP_URL=https://gurumeet.net/edge/internal/cleanup-expired-temporary-groups
