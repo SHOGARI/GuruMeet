@@ -20,6 +20,8 @@
       "INTERNAL_TASK_SECRET",
       "DISCORD_CLEANUP_FORWARD_SECRET",
       "DISCORD_ALERT_WEBHOOK_URL",
+      "DISCORD_APPLICATION_PUBLIC_KEY",
+      "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
     ],
   },
   "containers": [
@@ -63,6 +65,8 @@
           "INTERNAL_TASK_SECRET",
           "DISCORD_CLEANUP_FORWARD_SECRET",
           "DISCORD_ALERT_WEBHOOK_URL",
+          "DISCORD_APPLICATION_PUBLIC_KEY",
+          "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
         ],
       },
       "containers": [
@@ -118,6 +122,8 @@
           "INTERNAL_TASK_SECRET",
           "DISCORD_CLEANUP_FORWARD_SECRET",
           "DISCORD_ALERT_WEBHOOK_URL",
+          "DISCORD_APPLICATION_PUBLIC_KEY",
+          "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
         ],
       },
       "containers": [
