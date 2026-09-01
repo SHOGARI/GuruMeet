@@ -12,8 +12,8 @@ Cloudflare Worker / Container の運用で、課金事故や異常に気づけ�
 やる:
   一時グループ作成時の利用通知
   店舗決定時の結果通知
-  cleanup cron の結果通知
-  cleanup cron の失敗通知
+  cleanup command の結果通知
+  cleanup command の失敗通知
 
 やらない:
   container wake 検知だけを目的にした定期監視
@@ -84,15 +84,15 @@ curl -X POST "$DISCORD_ALERT_WEBHOOK_URL" \
 
 ## 通知イベント
 
-### cleanup schedule
+### cleanup trigger
 
-期限切れ一時グループ削除は、毎日21:00 JSTに実行する。
+期限切れ一時グループ削除は、Discord slash command から任意のタイミングで実行する。
 
 理由:
 
 ```text
-夜の利用が増えやすい時間帯に合わせて、期限切れデータの削除と日次レポート作成をまとめて行う
-毎時実行による Backend Container の定期起動を避ける
+不要な定期起動を避ける
+staging / production の cleanup を明示的な運用操作にする
 ```
 
 ### group_created
@@ -128,14 +128,14 @@ restaurant の詳細情報は必要になるまで送らない
 
 ### cleanup_completed
 
-Cloudflare Cron Trigger から期限切れ一時グループ削除が完了したタイミングで送る。
+Discord slash command から期限切れ一時グループ削除が完了したタイミングで送る。
 
 目的:
 
 ```text
-日次 cleanup が動いていることの確認
+手動 cleanup が動いたことの確認
 削除件数の把握
-container が cron で起きた理由の記録
+container が cleanup command で起きた理由の記録
 ```
 
 送る情報:
@@ -145,7 +145,7 @@ event: cleanup_completed
 environment
 deleted_expired_temporary_groups
 report_summary
-scheduled_at
+triggered_at
 ```
 
 cleanup は期限切れ一時グループを削除する最後のタイミングなので、削除前に利用状況を集計する。
@@ -171,7 +171,7 @@ restaurant の詳細 JSON は初期実装では出力しない
 
 ### cleanup_failed
 
-cleanup cron が失敗したタイミングで送る。
+cleanup command が失敗したタイミングで送る。
 
 目的:
 
@@ -187,10 +187,10 @@ event: cleanup_failed
 environment
 status
 message
-scheduled_at
+triggered_at
 ```
 
-失敗通知は必ず送る。成功通知は日次1回なのでノイズは許容する。
+失敗通知は必ず送る。成功通知は手動実行ごとなので、実行回数が増える場合は通知先を分ける。
 
 ### restaurant_decided
 

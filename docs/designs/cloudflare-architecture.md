@@ -3,7 +3,7 @@
 ## 目的
 
 GuruMeet は frontend を Flutter、backend を FastAPI で構成する。現在はCloudflare
-Worker 1本に静的配信、API入口、container実行、R2配信、定期cleanupをまとめている。
+Worker 1本に静的配信、API入口、container実行、R2配信、Discord slash command cleanupをまとめている。
 
 ただし、DB は最初から Cloudflare D1 に寄せない。ユーザー、ミーティング、参加者、予定のようなリレーションを扱うため、backend の主 DB は PostgreSQL を前提にする。
 
@@ -38,9 +38,9 @@ Async jobs
   Cloudflare Queues
     現在は未使用。通知、メール送信、重い後処理を逃がす場合の候補
 
-Scheduled jobs
-  Workers Cron Triggers
-    毎日12:00 UTC（21:00 JST）に期限切れ一時グループをcleanup
+Ops commands
+  Discord slash command
+    /delete staging と /delete production で期限切れ一時グループをcleanup
 ```
 
 ## 全体像
@@ -202,8 +202,8 @@ KV
 Queues
   非同期処理
 
-Cron Triggers
-  定期処理
+Discord Interactions
+  手動運用コマンド
 
 Access
   管理画面や internal endpoint を保護する場合に使う
@@ -217,7 +217,7 @@ Access
 4. staging / productionともNeon PostgreSQLへ接続する
 5. `/files/*` で環境別R2 bucketのobjectを返す
 6. `/edge/health` でWorkerとR2のhealthを返す
-7. Cron Triggerから内部cleanup APIをsecret付きで呼ぶ
+7. Discord slash commandから内部cleanup APIをsecret付きで呼ぶ
 8. containerの5xx、cleanup失敗、利用イベントをDiscordへ通知する
 
 ## 現在やっていないこと

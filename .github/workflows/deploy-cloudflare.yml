@@ -102,9 +102,16 @@ jobs:
           HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
           PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
           INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CLEANUP_FORWARD_SECRET: ${{ secrets.DISCORD_CLEANUP_FORWARD_SECRET }}
           DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
           CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
           GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
+          DISCORD_APPLICATION_ID: ${{ vars.DISCORD_APPLICATION_ID }}
+          DISCORD_APPLICATION_PUBLIC_KEY: ${{ vars.DISCORD_APPLICATION_PUBLIC_KEY }}
+          DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS: ${{ vars.DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS }}
+          DISCORD_STAGING_CLEANUP_URL: ${{ vars.DISCORD_STAGING_CLEANUP_URL }}
+          DISCORD_PRODUCTION_CLEANUP_URL: ${{ vars.DISCORD_PRODUCTION_CLEANUP_URL }}
         run: |
           required_secrets=(
             CLOUDFLARE_API_TOKEN
@@ -113,12 +120,19 @@ jobs:
             HOTPEPPER_API_KEY
             PARTICIPANT_TOKEN_HASH_SECRET
             INTERNAL_TASK_SECRET
+            DISCORD_BOT_TOKEN
+            DISCORD_CLEANUP_FORWARD_SECRET
             DISCORD_ALERT_WEBHOOK_URL
           )
 
           required_vars=(
             CORS_ALLOW_ORIGINS
             GURUMEET_ENABLE_MOCK_RESTAURANTS
+            DISCORD_APPLICATION_ID
+            DISCORD_APPLICATION_PUBLIC_KEY
+            DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS
+            DISCORD_STAGING_CLEANUP_URL
+            DISCORD_PRODUCTION_CLEANUP_URL
           )
 
           missing=()
@@ -173,6 +187,33 @@ jobs:
               ;;
           esac
 
+          case "$DISCORD_CLEANUP_FORWARD_SECRET" in
+            change_me*)
+              echo "::error::DISCORD_CLEANUP_FORWARD_SECRET must not use the local development placeholder."
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$DISCORD_APPLICATION_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::DISCORD_APPLICATION_ID must be a numeric Discord application ID."
+            exit 1
+          fi
+
+          if [[ ! "$DISCORD_APPLICATION_PUBLIC_KEY" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::DISCORD_APPLICATION_PUBLIC_KEY must be a 64 character hex public key."
+            exit 1
+          fi
+
+          if [[ ! "$DISCORD_STAGING_CLEANUP_URL" =~ ^https:// ]]; then
+            echo "::error::DISCORD_STAGING_CLEANUP_URL must start with https://."
+            exit 1
+          fi
+
+          if [[ ! "$DISCORD_PRODUCTION_CLEANUP_URL" =~ ^https:// ]]; then
+            echo "::error::DISCORD_PRODUCTION_CLEANUP_URL must start with https://."
+            exit 1
+          fi
+
       - name: Worker を deploy
         working-directory: infra/cloudflare/app-worker
         env:
@@ -180,9 +221,14 @@ jobs:
           HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
           PARTICIPANT_TOKEN_HASH_SECRET: ${{ secrets.PARTICIPANT_TOKEN_HASH_SECRET }}
           INTERNAL_TASK_SECRET: ${{ secrets.INTERNAL_TASK_SECRET }}
+          DISCORD_CLEANUP_FORWARD_SECRET: ${{ secrets.DISCORD_CLEANUP_FORWARD_SECRET }}
           DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
           CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
           GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
+          DISCORD_APPLICATION_PUBLIC_KEY: ${{ vars.DISCORD_APPLICATION_PUBLIC_KEY }}
+          DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS: ${{ vars.DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS }}
+          DISCORD_STAGING_CLEANUP_URL: ${{ vars.DISCORD_STAGING_CLEANUP_URL }}
+          DISCORD_PRODUCTION_CLEANUP_URL: ${{ vars.DISCORD_PRODUCTION_CLEANUP_URL }}
           CLOUDFLARE_SECRETS_FILE: ${{ runner.temp }}/cloudflare-worker-secrets.json
         run: |
           node --input-type=module <<'NODE'
@@ -193,6 +239,7 @@ jobs:
             "HOTPEPPER_API_KEY",
             "PARTICIPANT_TOKEN_HASH_SECRET",
             "INTERNAL_TASK_SECRET",
+            "DISCORD_CLEANUP_FORWARD_SECRET",
             "DISCORD_ALERT_WEBHOOK_URL",
           ];
 
@@ -211,4 +258,16 @@ jobs:
             --env "$DEPLOY_ENV" \
             --secrets-file "$CLOUDFLARE_SECRETS_FILE" \
             --var "CORS_ALLOW_ORIGINS:$CORS_ALLOW_ORIGINS" \
-            --var "GURUMEET_ENABLE_MOCK_RESTAURANTS:$GURUMEET_ENABLE_MOCK_RESTAURANTS"
+            --var "GURUMEET_ENABLE_MOCK_RESTAURANTS:$GURUMEET_ENABLE_MOCK_RESTAURANTS" \
+            --var "DISCORD_APPLICATION_PUBLIC_KEY:$DISCORD_APPLICATION_PUBLIC_KEY" \
+            --var "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS:$DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS" \
+            --var "DISCORD_STAGING_CLEANUP_URL:$DISCORD_STAGING_CLEANUP_URL" \
+            --var "DISCORD_PRODUCTION_CLEANUP_URL:$DISCORD_PRODUCTION_CLEANUP_URL"
+
+      - name: Discord slash command を登録
+        working-directory: infra/cloudflare/app-worker
+        env:
+          DISCORD_APPLICATION_ID: ${{ vars.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
+        run: npm run register-discord-commands
