@@ -4,9 +4,14 @@ import { env as workerEnv } from "cloudflare:workers";
 import { sendDiscordAlert } from "../../../discord/discordWebhook";
 
 const INSTANCE_COUNT = 1;
-const CLEANUP_CRON_UTC_HOUR = 12;
-const CLEANUP_CRON_UTC_MINUTE = 0;
 const ERROR_ALERT_SUPPRESSION_SECONDS = 300;
+const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
+const DISCORD_INTERACTION_PING = 1;
+const DISCORD_INTERACTION_APPLICATION_COMMAND = 2;
+const DISCORD_RESPONSE_PONG = 1;
+const DISCORD_RESPONSE_CHANNEL_MESSAGE = 4;
+const DISCORD_RESPONSE_DEFERRED_CHANNEL_MESSAGE = 5;
+const DISCORD_MESSAGE_EPHEMERAL = 1 << 6;
 const runtimeEnv = workerEnv as {
   DATABASE_URL: string;
   HOTPEPPER_API_KEY?: string;
@@ -14,6 +19,11 @@ const runtimeEnv = workerEnv as {
   PARTICIPANT_TOKEN_HASH_SECRET?: string;
   INTERNAL_TASK_SECRET?: string;
   DISCORD_ALERT_WEBHOOK_URL?: string;
+  DISCORD_APPLICATION_PUBLIC_KEY?: string;
+  DISCORD_CLEANUP_FORWARD_SECRET?: string;
+  DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS?: string;
+  DISCORD_STAGING_CLEANUP_URL?: string;
+  DISCORD_PRODUCTION_CLEANUP_URL?: string;
   GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
   GURUMEET_API_ROOT_PATH?: string;
@@ -58,6 +68,11 @@ interface Env {
   PARTICIPANT_TOKEN_HASH_SECRET?: string;
   INTERNAL_TASK_SECRET?: string;
   DISCORD_ALERT_WEBHOOK_URL?: string;
+  DISCORD_APPLICATION_PUBLIC_KEY?: string;
+  DISCORD_CLEANUP_FORWARD_SECRET?: string;
+  DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS?: string;
+  DISCORD_STAGING_CLEANUP_URL?: string;
+  DISCORD_PRODUCTION_CLEANUP_URL?: string;
   GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
   GURUMEET_API_ROOT_PATH?: string;
@@ -74,6 +89,14 @@ export default {
     try {
       if (url.pathname === "/edge/health") {
         return edgeHealth(request, env);
+      }
+
+      if (url.pathname === "/discord/interactions") {
+        return handleDiscordInteraction(request, env, ctx);
+      }
+
+      if (url.pathname === "/edge/internal/cleanup-expired-temporary-groups") {
+        return handleForwardedCleanupRequest(request, env);
       }
 
       if (url.pathname.startsWith("/files/")) {
@@ -95,68 +118,214 @@ export default {
     }
   },
 
-  async scheduled(event: ScheduledEvent, env: Env): Promise<void> {
-    if (!isCleanupScheduleWindow(event.scheduledTime)) {
-      console.info(
-        JSON.stringify({
-          event: "cleanup_expired_temporary_groups_skipped",
-          cron: event.cron,
-          scheduled_at: new Date(event.scheduledTime).toISOString(),
-          reason: "outside_cleanup_schedule_window",
-        }),
-      );
-      return;
-    }
+};
 
-    console.info(
+type CleanupTarget = "staging" | "production";
+
+interface DiscordInteraction {
+  id: string;
+  application_id: string;
+  token: string;
+  type: number;
+  data?: {
+    name?: string;
+    options?: Array<{
+      name?: string;
+      type?: number;
+    }>;
+  };
+  member?: {
+    user?: {
+      id?: string;
+    };
+  };
+  user?: {
+    id?: string;
+  };
+}
+
+async function handleDiscordInteraction(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  const body = await request.text();
+  if (!(await verifyDiscordRequest(request, env, body))) {
+    return new Response("invalid request signature", { status: 401 });
+  }
+
+  let interaction: DiscordInteraction;
+  try {
+    interaction = JSON.parse(body) as DiscordInteraction;
+  } catch {
+    return discordMessage("不正なリクエストです。", 400);
+  }
+
+  if (interaction.type === DISCORD_INTERACTION_PING) {
+    return json({ type: DISCORD_RESPONSE_PONG });
+  }
+
+  if (interaction.type !== DISCORD_INTERACTION_APPLICATION_COMMAND) {
+    return discordMessage("未対応の Discord interaction です。");
+  }
+
+  const target = cleanupTargetFromInteraction(interaction);
+  if (!target) {
+    return discordMessage(
+      "`/delete staging` または `/delete production` を使ってください。",
+    );
+  }
+
+  const userId = interaction.member?.user?.id ?? interaction.user?.id ?? "";
+  if (!isAllowedDiscordUser(env, userId)) {
+    return discordMessage("この cleanup command を実行する権限がありません。");
+  }
+
+  ctx.waitUntil(runCleanupAndUpdateDiscordResponse(env, interaction, target));
+  return json({
+    type: DISCORD_RESPONSE_DEFERRED_CHANNEL_MESSAGE,
+    data: {
+      flags: DISCORD_MESSAGE_EPHEMERAL,
+    },
+  });
+}
+
+async function handleForwardedCleanupRequest(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  const configuredSecret = env.DISCORD_CLEANUP_FORWARD_SECRET?.trim() ?? "";
+  const requestSecret =
+    request.headers.get("X-Discord-Cleanup-Forward-Secret")?.trim() ?? "";
+  if (
+    !configuredSecret ||
+    !requestSecret ||
+    !(await timingSafeEqual(configuredSecret, requestSecret))
+  ) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  return runLocalCleanup(env, "discord_forward");
+}
+
+async function runCleanupAndUpdateDiscordResponse(
+  env: Env,
+  interaction: DiscordInteraction,
+  target: CleanupTarget,
+): Promise<void> {
+  try {
+    const result = await runCleanupForTarget(env, target);
+    await updateDiscordOriginalResponse(interaction, {
+      content: `/${interaction.data?.name ?? "delete"} ${target} completed. deleted_expired_temporary_groups=${result.deletedCount}`,
+    });
+  } catch (error) {
+    const message = errorMessage(error);
+    console.error(
       JSON.stringify({
-        event: "cleanup_expired_temporary_groups_started",
-        cron: event.cron,
-        scheduled_at: new Date(event.scheduledTime).toISOString(),
+        event: "discord_delete_command_failed",
+        environment: env.ENVIRONMENT ?? "unknown",
+        target,
+        error: message,
       }),
     );
+    await notifyCleanupFailed(env, {
+      status: "discord_delete_command_failed",
+      message,
+      target,
+    });
+    await updateDiscordOriginalResponse(interaction, {
+      content: `/${interaction.data?.name ?? "delete"} ${target} failed. ${truncate(message, 500)}`,
+    });
+  }
+}
 
-    if (!env.INTERNAL_TASK_SECRET) {
-      logWorkerError("cleanup_internal_task_secret_missing", undefined, env);
-      await notifyCleanupFailed(env, {
-        status: "missing_internal_task_secret",
-        message: "INTERNAL_TASK_SECRET is not configured.",
-      });
-      return;
-    }
-    const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
-    const response = await container.fetch(
-      new Request(
-        "http://container/internal/cleanup-expired-temporary-groups",
-        {
-          method: "POST",
-          headers: {
-            "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
-          },
-        },
-      ),
+async function runCleanupForTarget(
+  env: Env,
+  target: CleanupTarget,
+): Promise<{ deletedCount: number }> {
+  if (target === currentCleanupTarget(env)) {
+    const response = await runLocalCleanup(env, "discord_command");
+    return parseCleanupResponse(response);
+  }
+
+  const url = cleanupForwardUrl(env, target);
+  const secret = env.DISCORD_CLEANUP_FORWARD_SECRET?.trim() ?? "";
+  if (!url || !secret) {
+    throw new Error(
+      `Forwarding to ${target} cleanup is not configured. Check DISCORD_${target.toUpperCase()}_CLEANUP_URL and DISCORD_CLEANUP_FORWARD_SECRET.`,
     );
-    if (!response.ok) {
-      const message = await response.text();
-      console.error(
-        JSON.stringify({
-          event: "cleanup_expired_temporary_groups_failed",
-          environment: env.ENVIRONMENT ?? "unknown",
-          status: response.status,
-          response_body: truncate(message, 1000),
-        }),
-      );
-      await notifyCleanupFailed(env, {
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-Discord-Cleanup-Forward-Secret": secret,
+    },
+  });
+  return parseCleanupResponse(response);
+}
+
+async function runLocalCleanup(
+  env: Env,
+  trigger: "discord_command" | "discord_forward",
+): Promise<Response> {
+  console.info(
+    JSON.stringify({
+      event: "cleanup_expired_temporary_groups_started",
+      environment: env.ENVIRONMENT ?? "unknown",
+      trigger,
+      triggered_at: new Date().toISOString(),
+    }),
+  );
+
+  if (!env.INTERNAL_TASK_SECRET) {
+    logWorkerError("cleanup_internal_task_secret_missing", undefined, env);
+    await notifyCleanupFailed(env, {
+      status: "missing_internal_task_secret",
+      message: "INTERNAL_TASK_SECRET is not configured.",
+    });
+    return json({ detail: "INTERNAL_TASK_SECRET is not configured." }, { status: 500 });
+  }
+
+  const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
+  const response = await container.fetch(
+    new Request("http://container/internal/cleanup-expired-temporary-groups", {
+      method: "POST",
+      headers: {
+        "X-Internal-Task-Secret": env.INTERNAL_TASK_SECRET,
+      },
+    }),
+  );
+
+  if (!response.ok) {
+    const message = await response.clone().text();
+    console.error(
+      JSON.stringify({
+        event: "cleanup_expired_temporary_groups_failed",
+        environment: env.ENVIRONMENT ?? "unknown",
         status: response.status,
-        message,
-      });
-    }
-  },
-};
+        response_body: truncate(message, 1000),
+      }),
+    );
+    await notifyCleanupFailed(env, {
+      status: response.status,
+      message,
+    });
+  }
+  return response;
+}
 
 async function notifyCleanupFailed(
   env: Env,
-  failure: { status: number | string; message: string },
+  failure: { status: number | string; message: string; target?: CleanupTarget },
 ): Promise<void> {
   try {
     await sendDiscordAlert({
@@ -165,9 +334,10 @@ async function notifyCleanupFailed(
       level: "critical",
       fields: {
         environment: env.ENVIRONMENT ?? "unknown",
+        target: failure.target ?? currentCleanupTarget(env),
         status: failure.status,
         message: truncate(failure.message, 500),
-        scheduled_at: formatJst(new Date()),
+        triggered_at: formatJst(new Date()),
       },
     });
   } catch (error) {
@@ -180,12 +350,190 @@ async function notifyCleanupFailed(
   }
 }
 
-function isCleanupScheduleWindow(scheduledTime: number): boolean {
-  const scheduledAt = new Date(scheduledTime);
-  return (
-    scheduledAt.getUTCHours() === CLEANUP_CRON_UTC_HOUR &&
-    scheduledAt.getUTCMinutes() === CLEANUP_CRON_UTC_MINUTE
+async function verifyDiscordRequest(
+  request: Request,
+  env: Env,
+  body: string,
+): Promise<boolean> {
+  const publicKey = env.DISCORD_APPLICATION_PUBLIC_KEY?.trim() ?? "";
+  const signature = request.headers.get("X-Signature-Ed25519") ?? "";
+  const timestamp = request.headers.get("X-Signature-Timestamp") ?? "";
+  if (!publicKey || !signature || !timestamp) {
+    return false;
+  }
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      hexToBytes(publicKey),
+      { name: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    return crypto.subtle.verify(
+      { name: "Ed25519" },
+      key,
+      hexToBytes(signature),
+      new TextEncoder().encode(`${timestamp}${body}`),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "discord_signature_verification_failed",
+        error: errorMessage(error),
+      }),
+    );
+    return false;
+  }
+}
+
+function cleanupTargetFromInteraction(
+  interaction: DiscordInteraction,
+): CleanupTarget | undefined {
+  if (interaction.data?.name !== "delete") {
+    return undefined;
+  }
+  const subcommandName = interaction.data.options?.[0]?.name;
+  if (subcommandName === "staging" || subcommandName === "production") {
+    return subcommandName;
+  }
+  return undefined;
+}
+
+function isAllowedDiscordUser(env: Env, userId: string): boolean {
+  if (!userId) {
+    return false;
+  }
+  const allowedUserIds = new Set(
+    (env.DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
   );
+  return allowedUserIds.has(userId);
+}
+
+function currentCleanupTarget(env: Env): CleanupTarget {
+  return (env.ENVIRONMENT ?? "production").toLowerCase() === "staging"
+    ? "staging"
+    : "production";
+}
+
+function cleanupForwardUrl(env: Env, target: CleanupTarget): string {
+  const configured =
+    target === "staging"
+      ? env.DISCORD_STAGING_CLEANUP_URL
+      : env.DISCORD_PRODUCTION_CLEANUP_URL;
+  return configured?.trim() ?? "";
+}
+
+async function parseCleanupResponse(
+  response: Response,
+): Promise<{ deletedCount: number }> {
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `cleanup request failed: status=${response.status}, body=${truncate(
+        responseBody,
+        500,
+      )}`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(responseBody);
+  } catch {
+    throw new Error(`cleanup response is not JSON: ${truncate(responseBody, 500)}`);
+  }
+
+  if (!isCleanupResult(parsed)) {
+    throw new Error(`cleanup response has unexpected shape: ${truncate(responseBody, 500)}`);
+  }
+  return { deletedCount: parsed.deleted_expired_temporary_groups };
+}
+
+function isCleanupResult(
+  value: unknown,
+): value is { deleted_expired_temporary_groups: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "deleted_expired_temporary_groups" in value &&
+    typeof value.deleted_expired_temporary_groups === "number"
+  );
+}
+
+async function updateDiscordOriginalResponse(
+  interaction: DiscordInteraction,
+  body: { content: string },
+): Promise<void> {
+  const response = await fetch(
+    `${DISCORD_API_BASE_URL}/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(
+      `failed to update Discord interaction response: status=${response.status}, body=${truncate(
+        responseBody,
+        500,
+      )}`,
+    );
+  }
+}
+
+function discordMessage(content: string, status = 200): Response {
+  return json(
+    {
+      type: DISCORD_RESPONSE_CHANNEL_MESSAGE,
+      data: {
+        content,
+        flags: DISCORD_MESSAGE_EPHEMERAL,
+      },
+    },
+    { status },
+  );
+}
+
+async function timingSafeEqual(left: string, right: string): Promise<boolean> {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  if (leftBytes.length !== rightBytes.length) {
+    return false;
+  }
+
+  const leftHash = await crypto.subtle.digest("SHA-256", leftBytes);
+  const rightHash = await crypto.subtle.digest("SHA-256", rightBytes);
+  return bytesEqual(new Uint8Array(leftHash), new Uint8Array(rightHash));
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
+}
+
+function hexToBytes(value: string): Uint8Array {
+  if (!/^[0-9a-fA-F]+$/.test(value) || value.length % 2 !== 0) {
+    throw new Error("hex value must contain an even number of hex characters.");
+  }
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 function requiredRuntimeEnv(value: string | undefined, name: string): string {

@@ -62,7 +62,7 @@ Create group -> Share invite -> Swipe restaurants -> Vote -> Decide
 | Recommendation | Budget score, capacity score, genre diversity |
 | Location | Geolonia 住所データ, 駅データ.jp, current location |
 | Infra | Cloudflare Workers, Workers Containers, R2, Neon PostgreSQL, GitHub Actions |
-| Ops | Discord webhook alerts, scheduled cleanup |
+| Ops | Discord webhook alerts, Discord slash command cleanup |
 
 ## Frontend
 

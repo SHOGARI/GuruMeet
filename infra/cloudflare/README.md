@@ -212,7 +212,18 @@ DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
 INTERNAL_TASK_SECRET
+DISCORD_CLEANUP_FORWARD_SECRET
 DISCORD_ALERT_WEBHOOK_URL
+DISCORD_APPLICATION_ID
+DISCORD_APPLICATION_PUBLIC_KEY
+DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS
+DISCORD_BOT_TOKEN
+```
+
+任意の Environment secret:
+
+```text
+DISCORD_GUILD_ID
 ```
 
 GitHub Environment vars には、secretではない実行時設定を登録する。
@@ -220,6 +231,8 @@ GitHub Environment vars には、secretではない実行時設定を登録す�
 ```text
 CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
+DISCORD_STAGING_CLEANUP_URL
+DISCORD_PRODUCTION_CLEANUP_URL
 ```
 
 deploy workflow は GitHub Environment secrets を `wrangler deploy --secrets-file` へ渡し、
@@ -267,6 +280,18 @@ DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
 INTERNAL_TASK_SECRET
+DISCORD_BOT_TOKEN
+DISCORD_CLEANUP_FORWARD_SECRET
+DISCORD_ALERT_WEBHOOK_URL
+DISCORD_APPLICATION_ID
+DISCORD_APPLICATION_PUBLIC_KEY
+DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS
+```
+
+任意:
+
+```text
+DISCORD_GUILD_ID
 ```
 
 Environment vars は `staging` / `production` ごとに登録する。
@@ -285,9 +310,12 @@ GitHub repository
 ```text
 CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
+DISCORD_STAGING_CLEANUP_URL
+DISCORD_PRODUCTION_CLEANUP_URL
 ```
 
 `PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は環境ごとに別の長いランダム値を使う。
+`DISCORD_CLEANUP_FORWARD_SECRET` は Worker 間転送の認証に使うため、staging / production で同じ長いランダム値を使う。
 
 ```sh
 openssl rand -hex 32
@@ -305,6 +333,16 @@ production:
   CORS_ALLOW_ORIGINS=https://gurumeet.net
   GURUMEET_ENABLE_MOCK_RESTAURANTS=false
 ```
+
+Discord slash command 用:
+
+```text
+DISCORD_STAGING_CLEANUP_URL=https://gurumeet-staging.<account-subdomain>.workers.dev/edge/internal/cleanup-expired-temporary-groups
+DISCORD_PRODUCTION_CLEANUP_URL=https://gurumeet.net/edge/internal/cleanup-expired-temporary-groups
+```
+
+Discord slash command 用の `DISCORD_APPLICATION_ID` / `DISCORD_APPLICATION_PUBLIC_KEY` / `DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS` / `DISCORD_GUILD_ID` は GitHub Environment secrets に入れる。
+`DISCORD_GUILD_ID` は任意。入れるとその Discord server だけへ guild command として登録する。空なら global command。
 
 ### Cloudflare API Token の作成
 
@@ -419,12 +457,24 @@ DATABASE_URL
 HOTPEPPER_API_KEY
 PARTICIPANT_TOKEN_HASH_SECRET
 INTERNAL_TASK_SECRET
+DISCORD_BOT_TOKEN
+DISCORD_CLEANUP_FORWARD_SECRET
 DISCORD_ALERT_WEBHOOK_URL
+DISCORD_APPLICATION_ID
+DISCORD_APPLICATION_PUBLIC_KEY
+DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS
+```
+
+任意:
+
+```text
+DISCORD_GUILD_ID
 ```
 
 `DISCORD_ALERT_WEBHOOK_URL` は staging / production で別の Discord Incoming Webhook URL を登録する。
 
 `PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は以下のような長いランダム値を使う。
+`DISCORD_CLEANUP_FORWARD_SECRET` は staging / production で同じ値を使う。
 
 ```sh
 openssl rand -hex 32
@@ -435,6 +485,8 @@ staging / production それぞれの Environment vars に登録する値:
 ```text
 CORS_ALLOW_ORIGINS
 GURUMEET_ENABLE_MOCK_RESTAURANTS
+DISCORD_STAGING_CLEANUP_URL
+DISCORD_PRODUCTION_CLEANUP_URL
 ```
 
 公開時のCORSは `CORS_ALLOW_ORIGINS` で制限する。
@@ -448,6 +500,37 @@ production:
   CORS_ALLOW_ORIGINS=https://gurumeet.net
   GURUMEET_ENABLE_MOCK_RESTAURANTS=false
 ```
+
+## Discord slash command
+
+DB cleanup は定期実行ではなく Discord slash command で任意実行する。
+
+```text
+/delete staging
+/delete production
+```
+
+Discord Developer Portal の Interactions Endpoint URL:
+
+```text
+https://gurumeet.net/discord/interactions
+```
+
+実行時の流れ:
+
+```text
+Discord
+  -> production Worker /discord/interactions
+  -> Discord署名を検証
+  -> DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS で実行者を検証
+  -> 対象が production なら production Container の内部cleanup APIを呼ぶ
+  -> 対象が staging なら staging Worker の /edge/internal/cleanup-expired-temporary-groups へ転送
+```
+
+staging / production のどちらが Interaction endpoint になっても動くように、両環境へ `DISCORD_STAGING_CLEANUP_URL` と `DISCORD_PRODUCTION_CLEANUP_URL` を登録する。
+staging の custom domain に Cloudflare Access をかける場合、`DISCORD_STAGING_CLEANUP_URL` は Access 外で到達できる `workers.dev` URL を使う。
+
+slash command の登録は deploy workflow の最後に実行する。
 
 ## Cloudflare Access
 
@@ -658,10 +741,16 @@ Storage
 Branch
 ```
 
-## 自動削除とバックアップ
+## 手動削除とバックアップ
 
-一時グループの期限切れデータは Cloudflare Cron Trigger から毎日13:00 JSTに、
-Backend Container の `/internal/cleanup-expired-temporary-groups` を呼んで削除する。
+一時グループの期限切れデータは Discord slash command から任意のタイミングで削除する。
+
+```text
+/delete staging
+/delete production
+```
+
+slash command は Backend Container の `/internal/cleanup-expired-temporary-groups` を呼ぶ。
 
 Neon PostgreSQL のバックアップ / PITR は Neon Dashboard 側で有効化・確認する。
 本番公開前に最低限以下を確認する。

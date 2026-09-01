@@ -29,7 +29,7 @@ DBや外部APIの疎通までは検査しない。Cloudflare WorkerとR2のhealt
 ## POST /internal/cleanup-expired-temporary-groups
 
 期限切れ一時グループを物理削除し、期限切れのcustom locationも削除する。
-Cloudflare Cron Triggerが毎日12:00 UTC（21:00 JST）にcontainerへ直接実行する。
+Discord slash command `/delete staging` / `/delete production` からWorker経由で実行する。
 
 Request header:
 
@@ -52,4 +52,4 @@ participants / votesはFKのCASCADEで削除する。削除した `custom_locati
 
 このendpointは一般クライアント用ではない。Workerは `/api/internal/*` を
 containerへ転送し得るため、backend側で `X-Internal-Task-Secret` を必ず検証する。
-Cronは `http://container/internal/...` を直接呼ぶ。
+Workerは `http://container/internal/...` を直接呼ぶ。
