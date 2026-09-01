@@ -12,6 +12,7 @@ Cloudflare Worker / Container の運用で、課金事故や異常に気づけ�
 やる:
   一時グループ作成時の利用通知
   店舗決定時の結果通知
+  cleanup command の受付通知
   cleanup command の結果通知
   cleanup command の失敗通知
 
@@ -126,6 +127,72 @@ restaurant_search_status
 restaurant の詳細情報は必要になるまで送らない
 ```
 
+### cleanup_command_received
+
+Discord slash command を Worker が受け付けたタイミングで送る。
+
+目的:
+
+```text
+Discord interaction が Worker まで届いたことの確認
+権限チェック前後の切り分け
+「アプリケーションが応答しませんでした」発生時の到達確認
+```
+
+送る情報:
+
+```text
+event: cleanup_command_received
+environment
+target
+discord_user_id
+authorized
+received_at
+```
+
+### cleanup_command_completed
+
+Discord slash command の cleanup 呼び出しが成功したタイミングで Worker から送る。
+
+目的:
+
+```text
+slash command として成功したことの確認
+staging / production のどちらを手動実行したかの監査
+```
+
+送る情報:
+
+```text
+event: cleanup_command_completed
+environment
+target
+deleted_expired_temporary_groups
+triggered_by_discord_user_id
+triggered_at
+```
+
+### cleanup_command_failed
+
+Discord slash command の cleanup 呼び出しが失敗したタイミングで Worker から送る。
+
+目的:
+
+```text
+slash command の受付後、cleanup 実行または Discord 応答更新が失敗したことの検知
+DB 接続や secret 設定ミスの早期発見
+```
+
+送る情報:
+
+```text
+event: cleanup_command_failed
+environment
+target
+message
+triggered_at
+```
+
 ### cleanup_completed
 
 Discord slash command から期限切れ一時グループ削除が完了したタイミングで送る。
@@ -133,9 +200,9 @@ Discord slash command から期限切れ一時グループ削除が完了した�
 目的:
 
 ```text
-手動 cleanup が動いたことの確認
+backend の cleanup 処理自体が成功したことの確認
 削除件数の把握
-container が cleanup command で起きた理由の記録
+削除前の利用状況サマリの記録
 ```
 
 送る情報:
@@ -169,28 +236,7 @@ participant_token や participant_token_hash は出力しない
 restaurant の詳細 JSON は初期実装では出力しない
 ```
 
-### cleanup_failed
-
-cleanup command が失敗したタイミングで送る。
-
-目的:
-
-```text
-期限切れデータが残り続ける状態の検知
-DB 接続や secret 設定ミスの早期発見
-```
-
-送る情報:
-
-```text
-event: cleanup_failed
-environment
-status
-message
-triggered_at
-```
-
-失敗通知は必ず送る。成功通知は手動実行ごとなので、実行回数が増える場合は通知先を分ける。
+失敗通知は `cleanup_command_failed` に集約する。成功通知は手動実行ごとなので、実行回数が増える場合は通知先を分ける。
 
 ### restaurant_decided
 
@@ -228,15 +274,18 @@ created_to_result_viewed_minutes
 ```text
 backend:
   group_created 通知
-  cleanup_completed 通知
+  cleanup_completed 詳細通知
 
 worker:
-  cleanup_failed 通知
+  cleanup_command_received 通知
+  cleanup_command_completed 通知
+  cleanup_command_failed 通知
 ```
 
 group 作成と cleanup 成功は backend container 内の処理結果を持っているため、backend 側で送る。
+slash command の実行監査として、Worker 側でも cleanup 成功を送る。
 
-cleanup failed は Worker が container から non-2xx response を受け取った時点で検知できるため、Worker 側でも送れる。
+cleanup command failed は Worker が container から non-2xx response を受け取った時点で検知できるため、Worker 側で送る。
 
 ## 失敗時の扱い
 
