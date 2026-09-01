@@ -206,6 +206,14 @@ async function handleDiscordInteraction(
 
   const body = await request.text();
   if (!(await verifyDiscordRequest(request, env, body))) {
+    console.warn(
+      JSON.stringify({
+        event: "discord_interaction_signature_rejected",
+        has_public_key: Boolean(env.DISCORD_APPLICATION_PUBLIC_KEY?.trim()),
+        has_signature: Boolean(request.headers.get("X-Signature-Ed25519")),
+        has_timestamp: Boolean(request.headers.get("X-Signature-Timestamp")),
+      }),
+    );
     return new Response("invalid request signature", { status: 401 });
   }
 
@@ -224,25 +232,57 @@ async function handleDiscordInteraction(
     return discordMessage("未対応の Discord interaction です。");
   }
 
-  const target = cleanupTargetFromInteraction(interaction);
-  if (!target) {
-    return discordMessage(
-      "`/delete staging` または `/delete production` を使ってください。",
-    );
-  }
-
-  const userId = interaction.member?.user?.id ?? interaction.user?.id ?? "";
-  if (!isAllowedDiscordUser(env, userId)) {
-    return discordMessage("この cleanup command を実行する権限がありません。");
-  }
-
-  ctx.waitUntil(runCleanupAndUpdateDiscordResponse(env, interaction, target));
+  console.info(
+    JSON.stringify({
+      event: "discord_interaction_deferred",
+      command: interaction.data?.name,
+      target: interaction.data?.options?.[0]?.name,
+      environment: env.ENVIRONMENT ?? "unknown",
+    }),
+  );
+  ctx.waitUntil(handleDiscordDeleteCommand(env, interaction));
   return json({
     type: DISCORD_RESPONSE_DEFERRED_CHANNEL_MESSAGE,
     data: {
       flags: DISCORD_MESSAGE_EPHEMERAL,
     },
   });
+}
+
+async function handleDiscordDeleteCommand(
+  env: Env,
+  interaction: DiscordInteraction,
+): Promise<void> {
+  const target = cleanupTargetFromInteraction(interaction);
+  if (!target) {
+    await updateDiscordOriginalResponseSafely(interaction, {
+      content: "`/delete staging` または `/delete production` を使ってください。",
+    });
+    return;
+  }
+
+  const userId = interaction.member?.user?.id ?? interaction.user?.id ?? "";
+  const isAllowedUser = isAllowedDiscordUser(env, userId);
+  await notifyCleanupCommandReceived(env, {
+    target,
+    userId,
+    authorized: isAllowedUser,
+  });
+  if (!isAllowedUser) {
+    console.warn(
+      JSON.stringify({
+        event: "discord_delete_command_forbidden",
+        user_id: userId || undefined,
+        target,
+      }),
+    );
+    await updateDiscordOriginalResponseSafely(interaction, {
+      content: "この cleanup command を実行する権限がありません。",
+    });
+    return;
+  }
+
+  await runCleanupAndUpdateDiscordResponse(env, interaction, target);
 }
 
 async function handleForwardedCleanupRequest(
@@ -274,7 +314,12 @@ async function runCleanupAndUpdateDiscordResponse(
 ): Promise<void> {
   try {
     const result = await runCleanupForTarget(env, target);
-    await updateDiscordOriginalResponse(interaction, {
+    await notifyCleanupCommandCompleted(env, {
+      target,
+      deletedCount: result.deletedCount,
+      userId: interaction.member?.user?.id ?? interaction.user?.id,
+    });
+    await updateDiscordOriginalResponseSafely(interaction, {
       content: `/${interaction.data?.name ?? "delete"} ${target} completed. deleted_expired_temporary_groups=${result.deletedCount}`,
     });
   } catch (error) {
@@ -287,12 +332,8 @@ async function runCleanupAndUpdateDiscordResponse(
         error: message,
       }),
     );
-    await notifyCleanupFailed(env, {
-      status: "discord_delete_command_failed",
-      message,
-      target,
-    });
-    await updateDiscordOriginalResponse(interaction, {
+    await notifyCleanupCommandFailed(env, { target, message });
+    await updateDiscordOriginalResponseSafely(interaction, {
       content: `/${interaction.data?.name ?? "delete"} ${target} failed. ${truncate(message, 500)}`,
     });
   }
@@ -339,10 +380,6 @@ async function runLocalCleanup(
 
   if (!env.INTERNAL_TASK_SECRET) {
     logWorkerError("cleanup_internal_task_secret_missing", undefined, env);
-    await notifyCleanupFailed(env, {
-      status: "missing_internal_task_secret",
-      message: "INTERNAL_TASK_SECRET is not configured.",
-    });
     return json({ detail: "INTERNAL_TASK_SECRET is not configured." }, { status: 500 });
   }
 
@@ -366,27 +403,78 @@ async function runLocalCleanup(
         response_body: truncate(message, 1000),
       }),
     );
-    await notifyCleanupFailed(env, {
-      status: response.status,
-      message,
-    });
   }
   return response;
 }
 
-async function notifyCleanupFailed(
+async function notifyCleanupCommandReceived(
   env: Env,
-  failure: { status: number | string; message: string; target?: CleanupTarget },
+  command: { target: CleanupTarget; userId?: string; authorized: boolean },
 ): Promise<void> {
   try {
     await sendDiscordAlert({
       webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
-      title: "cleanup_failed",
+      title: "cleanup_command_received",
+      level: command.authorized ? "info" : "warning",
+      fields: {
+        environment: env.ENVIRONMENT ?? "unknown",
+        target: command.target,
+        discord_user_id: command.userId,
+        authorized: command.authorized,
+        received_at: formatJst(new Date()),
+      },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "discord_cleanup_command_received_alert_failed",
+        target: command.target,
+        error: errorMessage(error),
+      }),
+    );
+  }
+}
+
+async function notifyCleanupCommandCompleted(
+  env: Env,
+  result: { target: CleanupTarget; deletedCount: number; userId?: string },
+): Promise<void> {
+  try {
+    await sendDiscordAlert({
+      webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
+      title: "cleanup_command_completed",
+      level: "info",
+      fields: {
+        environment: env.ENVIRONMENT ?? "unknown",
+        target: result.target,
+        deleted_expired_temporary_groups: result.deletedCount,
+        triggered_by_discord_user_id: result.userId,
+        triggered_at: formatJst(new Date()),
+      },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "discord_cleanup_command_completed_alert_failed",
+        target: result.target,
+        error: errorMessage(error),
+      }),
+    );
+  }
+}
+
+async function notifyCleanupCommandFailed(
+  env: Env,
+  failure: { target: CleanupTarget; message: string },
+): Promise<void> {
+  try {
+    await sendDiscordAlert({
+      webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
+      title: "cleanup_command_failed",
       level: "critical",
       fields: {
         environment: env.ENVIRONMENT ?? "unknown",
-        target: failure.target ?? currentCleanupTarget(env),
-        status: failure.status,
+        target: failure.target,
         message: truncate(failure.message, 500),
         triggered_at: formatJst(new Date()),
       },
@@ -394,8 +482,9 @@ async function notifyCleanupFailed(
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "discord_cleanup_failed_alert_failed",
-        error: error instanceof Error ? error.message : String(error),
+        event: "discord_cleanup_command_failed_alert_failed",
+        target: failure.target,
+        error: errorMessage(error),
       }),
     );
   }
@@ -536,6 +625,22 @@ async function updateDiscordOriginalResponse(
         responseBody,
         500,
       )}`,
+    );
+  }
+}
+
+async function updateDiscordOriginalResponseSafely(
+  interaction: DiscordInteraction,
+  body: { content: string },
+): Promise<void> {
+  try {
+    await updateDiscordOriginalResponse(interaction, body);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "discord_interaction_response_update_failed",
+        error: errorMessage(error),
+      }),
     );
   }
 }
