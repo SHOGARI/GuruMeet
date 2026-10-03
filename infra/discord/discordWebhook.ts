@@ -14,6 +14,7 @@ const DISCORD_COLORS: Record<DiscordAlertLevel, number> = {
   warning: 0xf59e0b,
   critical: 0xdc2626,
 };
+const DISCORD_WEBHOOK_TIMEOUT_MS = 3_000;
 
 export async function sendDiscordAlert({
   webhookUrl,
@@ -28,6 +29,7 @@ export async function sendDiscordAlert({
 
   const response = await fetch(normalizedWebhookUrl, {
     method: "POST",
+    signal: AbortSignal.timeout(DISCORD_WEBHOOK_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
     },

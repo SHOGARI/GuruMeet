@@ -10,7 +10,9 @@ from starlette.responses import JSONResponse, Response
 from app.core.config import settings
 
 logger = logging.getLogger("gurumeet.access")
-error_logger = logging.getLogger("gurumeet.error")
+
+MAX_REQUEST_ID_LENGTH = 128
+MAX_USER_AGENT_LENGTH = 512
 
 
 async def request_size_limit_middleware(
@@ -36,7 +38,7 @@ async def structured_logging_middleware(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+    request_id = _request_id(request)
     started_at = time.perf_counter()
     status_code = 500
     error: Exception | None = None
@@ -51,32 +53,54 @@ async def structured_logging_middleware(
         raise
     finally:
         duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        severity = (
+            "error"
+            if status_code >= 500
+            else "warning"
+            if status_code >= 400
+            else "info"
+        )
         log_fields = {
-            "event": "http_request",
+            "source": "gurumeet",
+            "event": "http_response",
+            "severity": severity,
             "request_id": request_id,
+            "cf_ray": request.headers.get("cf-ray"),
             "method": request.method,
             "path": request.url.path,
             "status_code": status_code,
             "duration_ms": duration_ms,
-            "client": request.client.host if request.client else None,
+            "client_ip": request.headers.get("cf-connecting-ip")
+            or (request.client.host if request.client else None),
+            "country": request.headers.get("cf-ipcountry"),
+            "user_agent": _truncate(
+                request.headers.get("user-agent"),
+                MAX_USER_AGENT_LENGTH,
+            ),
+            "protocol": request.headers.get("x-forwarded-proto")
+            or request.url.scheme,
         }
-        logger.info(
-            json.dumps(
-                log_fields,
-                ensure_ascii=False,
-            )
-        )
-        if status_code >= 500:
-            error_fields = {
-                **log_fields,
-                "event": "http_error_response",
-            }
-            if error is not None:
-                error_fields["error"] = str(error)
-                error_fields["error_type"] = type(error).__name__
-            error_logger.error(
-                json.dumps(
-                    error_fields,
-                    ensure_ascii=False,
-                )
-            )
+        if error is not None:
+            log_fields["error"] = str(error)
+            log_fields["error_type"] = type(error).__name__
+
+        message = json.dumps(log_fields, ensure_ascii=False)
+        if severity == "error":
+            logger.error(message)
+        elif severity == "warning":
+            logger.warning(message)
+        else:
+            logger.info(message)
+
+
+def _request_id(request: Request) -> str:
+    configured = request.headers.get("x-request-id", "").strip()
+    if configured:
+        return configured[:MAX_REQUEST_ID_LENGTH]
+    return str(uuid.uuid4())
+
+
+def _truncate(value: str | None, max_length: int) -> str | None:
+    if value is None or len(value) <= max_length:
+        return value
+    return value[:max_length]

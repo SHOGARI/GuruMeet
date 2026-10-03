@@ -4,7 +4,7 @@ import { env as workerEnv } from "cloudflare:workers";
 import { sendDiscordAlert } from "../../../discord/discordWebhook";
 
 const INSTANCE_COUNT = 1;
-const ERROR_ALERT_SUPPRESSION_SECONDS = 300;
+const HTTP_ALERT_SUPPRESSION_SECONDS = 300;
 const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
 const DISCORD_INTERACTION_PING = 1;
 const DISCORD_INTERACTION_APPLICATION_COMMAND = 2;
@@ -37,24 +37,20 @@ export class BackendContainer extends Container {
     console.log(
       JSON.stringify({
         event: "backend_container_activity_expired",
-        action: "stop_container_and_clear_alarm",
+        action: "stop_container",
       }),
     );
-    await this.ctx.storage.deleteAlarm();
     if (this.ctx.container?.running) {
       await this.stop();
     }
-    await this.ctx.storage.deleteAlarm();
   }
 
-  async onStop(): Promise<void> {
+  onStop(): void {
     console.log(
       JSON.stringify({
         event: "backend_container_stopped",
-        action: "clear_alarm",
       }),
     );
-    await this.ctx.storage.deleteAlarm();
   }
 
   async onError(error: unknown): Promise<void> {
@@ -66,7 +62,6 @@ export class BackendContainer extends Container {
           message,
         }),
       );
-      await this.ctx.storage.deleteAlarm();
       return;
     }
 
@@ -125,51 +120,102 @@ interface Env {
   GURUMEET_API_ROOT_PATH?: string;
 }
 
+type SecurityProbeKind =
+  | "credential_file"
+  | "environment_file"
+  | "php_admin"
+  | "source_control"
+  | "path_traversal"
+  | "wordpress";
+
+interface SecurityProbe {
+  kind: SecurityProbeKind;
+}
+
 export default {
   async fetch(
     request: Request,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<Response> {
-    const url = new URL(request.url);
+    const startedAt = performance.now();
+    const requestId = workerRequestId(request);
+    const requestWithId = withRequestId(request, requestId);
+    const securityProbe = detectSecurityProbe(requestWithId);
 
+    let response: Response;
     try {
-      if (url.pathname === "/edge/health") {
-        return edgeHealth(request, env);
-      }
-
-      if (isApiHealthPath(url.pathname)) {
-        return apiHealth();
-      }
-
-      if (url.pathname === "/discord/interactions") {
-        return handleDiscordInteraction(request, env, ctx);
-      }
-
-      if (url.pathname === "/edge/internal/cleanup-expired-temporary-groups") {
-        return handleForwardedCleanupRequest(request, env);
-      }
-
-      if (url.pathname.startsWith("/files/")) {
-        return handleFileRequest(request, env);
-      }
-
-      if (isApiRootPath(url.pathname)) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      if (url.pathname.startsWith("/api/")) {
-        return handleApiRequest(request, env, ctx);
-      }
-
-      return env.ASSETS.fetch(request);
+      response = securityProbe
+        ? new Response("Not found", { status: 404 })
+        : await routeRequest(requestWithId, env, ctx);
     } catch (error) {
-      logWorkerError("worker_request_failed", request, env, error);
-      return new Response("Internal server error", { status: 500 });
+      logWorkerError("worker_request_failed", requestWithId, env, error);
+      response = new Response("Internal server error", { status: 500 });
     }
+
+    logWorkerHttpResponse(requestWithId, response, requestId, startedAt);
+    if (securityProbe) {
+      logSecurityProbe(requestWithId, requestId, securityProbe);
+      ctx.waitUntil(
+        notifySecurityProbeAlert({
+          env,
+          request: requestWithId,
+          requestId,
+          probe: securityProbe,
+        }),
+      );
+    } else if (response.status >= 400) {
+      ctx.waitUntil(
+        notifyHttpResponseAlert({
+          env,
+          request: requestWithId,
+          response,
+          requestId,
+        }),
+      );
+    }
+    return response;
   },
 
 };
+
+async function routeRequest(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (url.pathname === "/edge/health") {
+    return edgeHealth(request, env);
+  }
+
+  if (isApiHealthPath(url.pathname)) {
+    return apiHealth();
+  }
+
+  if (url.pathname === "/discord/interactions") {
+    return handleDiscordInteraction(request, env, ctx);
+  }
+
+  if (url.pathname === "/edge/internal/cleanup-expired-temporary-groups") {
+    return handleForwardedCleanupRequest(request, env);
+  }
+
+  if (url.pathname.startsWith("/files/")) {
+    return handleFileRequest(request, env);
+  }
+
+  if (isApiRootPath(url.pathname)) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  if (url.pathname.startsWith("/api/")) {
+    return handleApiRequest(request, env);
+  }
+
+  return env.ASSETS.fetch(request);
+}
 
 type CleanupTarget = "staging" | "production";
 
@@ -702,60 +748,14 @@ function requiredRuntimeEnv(value: string | undefined, name: string): string {
 async function handleApiRequest(
   request: Request,
   env: Env,
-  ctx: ExecutionContext,
 ): Promise<Response> {
   try {
     const container = await getRandom(env.BACKEND_CONTAINER, INSTANCE_COUNT);
-    const response = await container.fetch(stripApiPrefix(request));
-    if (response.status >= 500) {
-      const responseForLog = response.clone();
-      ctx.waitUntil(reportContainerErrorResponse(request, env, responseForLog));
-    }
-    return response;
+    return container.fetch(stripApiPrefix(request));
   } catch (error) {
     logWorkerError("container_proxy_failed", request, env, error);
-    ctx.waitUntil(
-      notifyProductionContainerError({
-        env,
-        request,
-        event: "container_proxy_failed",
-        status: 502,
-        message: errorMessage(error),
-      }),
-    );
     return new Response("Bad gateway", { status: 502 });
   }
-}
-
-async function reportContainerErrorResponse(
-  request: Request,
-  env: Env,
-  response: Response,
-): Promise<void> {
-  let responseBody: string | undefined;
-  try {
-    responseBody = truncate(await response.text(), 1000);
-  } catch (error) {
-    responseBody = `failed to read response body: ${errorMessage(error)}`;
-  }
-
-  console.error(
-    JSON.stringify({
-      event: "container_error_response",
-      environment: env.ENVIRONMENT ?? "unknown",
-      method: request.method,
-      path: new URL(request.url).pathname,
-      status: response.status,
-      response_body: responseBody,
-    }),
-  );
-  await notifyProductionContainerError({
-    env,
-    request,
-    event: "container_error_response",
-    status: response.status,
-    message: "Container returned a 5xx response. Check Cloudflare Logs.",
-  });
 }
 
 async function edgeHealth(request: Request, env: Env): Promise<Response> {
@@ -825,10 +825,6 @@ function stripApiPrefix(request: Request): Request {
   return new Request(url, request);
 }
 
-function isProduction(env: Env): boolean {
-  return (env.ENVIRONMENT ?? "production").toLowerCase() === "production";
-}
-
 function isApiRootPath(pathname: string): boolean {
   return pathname === "/api" || pathname === "/api/";
 }
@@ -857,66 +853,78 @@ function formatJst(value: Date): string {
   });
 }
 
-async function notifyProductionContainerError({
+async function notifyHttpResponseAlert({
   env,
   request,
-  event,
-  status,
-  message,
+  response,
+  requestId,
 }: {
   env: Env;
   request: Request;
-  event: string;
-  status: number;
-  message: string;
+  response: Response;
+  requestId: string;
 }): Promise<void> {
-  if (!isProduction(env) || !env.DISCORD_ALERT_WEBHOOK_URL?.trim()) {
+  if (!env.DISCORD_ALERT_WEBHOOK_URL?.trim()) {
     return;
   }
 
   const path = new URL(request.url).pathname;
-  if (!(await shouldSendErrorAlert(event, path, status))) {
+  const severity = response.status >= 500 ? "error" : "warning";
+  const source = responseSource(path);
+  if (
+    !(await shouldSendHttpAlert(
+      "http_response",
+      `${source}:${response.status}`,
+      response.status,
+    ))
+  ) {
     return;
   }
 
   try {
     await sendDiscordAlert({
       webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
-      title: "production_container_error",
-      level: "critical",
+      title: `http_${severity}`,
+      level: severity === "error" ? "critical" : "warning",
       fields: {
         environment: env.ENVIRONMENT ?? "unknown",
-        event,
+        source,
+        severity,
+        request_id: requestId,
+        cf_ray: request.headers.get("CF-Ray"),
         method: request.method,
         path,
-        status,
-        message: truncate(message, 300),
+        status: response.status,
+        client_ip: request.headers.get("CF-Connecting-IP"),
+        country: request.headers.get("CF-IPCountry"),
+        user_agent:
+          truncate(request.headers.get("User-Agent") ?? "", 300) || null,
         occurred_at: formatJst(new Date()),
       },
     });
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "production_container_error_alert_failed",
+        event: "http_response_alert_failed",
         environment: env.ENVIRONMENT ?? "unknown",
-        original_event: event,
+        request_id: requestId,
         path,
-        status,
+        status: response.status,
         error: errorMessage(error),
       }),
     );
   }
 }
 
-async function shouldSendErrorAlert(
+async function shouldSendHttpAlert(
   event: string,
-  path: string,
+  group: string,
   status: number,
 ): Promise<boolean> {
   const cacheKey = new Request(
     `https://gurumeet-alert-suppression.local/${encodeURIComponent(
       event,
-    )}/${encodeURIComponent(path)}/${status}`,
+    )}/${encodeURIComponent(group)}/${status}`,
   );
   try {
     if (await caches.default.match(cacheKey)) {
@@ -926,7 +934,7 @@ async function shouldSendErrorAlert(
       cacheKey,
       new Response("1", {
         headers: {
-          "Cache-Control": `max-age=${ERROR_ALERT_SUPPRESSION_SECONDS}`,
+          "Cache-Control": `max-age=${HTTP_ALERT_SUPPRESSION_SECONDS}`,
         },
       }),
     );
@@ -934,11 +942,205 @@ async function shouldSendErrorAlert(
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "production_container_error_alert_suppression_failed",
+        event: "http_alert_suppression_failed",
         error: errorMessage(error),
       }),
     );
     return true;
+  }
+}
+
+function responseSource(path: string): "container" | "worker" {
+  return path.startsWith("/api/") && !isApiHealthPath(path)
+    ? "container"
+    : "worker";
+}
+
+function detectSecurityProbe(request: Request): SecurityProbe | undefined {
+  const rawPath = new URL(request.url).pathname.toLowerCase();
+  let decodedPath = rawPath;
+  try {
+    decodedPath = decodeURIComponent(rawPath);
+  } catch {
+    // Keep the raw path when percent encoding is malformed.
+  }
+
+  const paths = [rawPath, decodedPath];
+  if (
+    paths.some(
+      (path) =>
+        path.includes("../") ||
+        path.includes("..\\") ||
+        path.includes("%2e%2e") ||
+        path.includes("%252e"),
+    )
+  ) {
+    return { kind: "path_traversal" };
+  }
+  if (paths.some((path) => /(^|\/)\.env(?:$|[./_-])/.test(path))) {
+    return { kind: "environment_file" };
+  }
+  if (paths.some((path) => /(^|\/)\.git(?:\/|$)/.test(path))) {
+    return { kind: "source_control" };
+  }
+  if (
+    paths.some((path) =>
+      /(^|\/)(?:\.aws\/credentials|\.ssh\/|id_rsa(?:\.|$)|[^/]+\.(?:key|pem))/.test(
+        path,
+      ),
+    )
+  ) {
+    return { kind: "credential_file" };
+  }
+  if (
+    paths.some((path) =>
+      /(^|\/)(?:wp-admin(?:\/|$)|wp-login\.php$|xmlrpc\.php$)/.test(path),
+    )
+  ) {
+    return { kind: "wordpress" };
+  }
+  if (
+    paths.some((path) =>
+      /(^|\/)(?:phpmyadmin|pma|vendor\/phpunit)(?:\/|$)/.test(path),
+    )
+  ) {
+    return { kind: "php_admin" };
+  }
+  return undefined;
+}
+
+function logSecurityProbe(
+  request: Request,
+  requestId: string,
+  probe: SecurityProbe,
+): void {
+  console.warn(
+    JSON.stringify({
+      source: "gurumeet-worker",
+      event: "security_probe_detected",
+      severity: "warning",
+      alert_priority: "high",
+      probe_kind: probe.kind,
+      request_id: requestId,
+      cf_ray: request.headers.get("CF-Ray"),
+      method: request.method,
+      path: new URL(request.url).pathname,
+      client_ip: request.headers.get("CF-Connecting-IP"),
+      country: request.headers.get("CF-IPCountry"),
+      user_agent: truncate(request.headers.get("User-Agent") ?? "", 300) || null,
+    }),
+  );
+}
+
+async function notifySecurityProbeAlert({
+  env,
+  request,
+  requestId,
+  probe,
+}: {
+  env: Env;
+  request: Request;
+  requestId: string;
+  probe: SecurityProbe;
+}): Promise<void> {
+  if (!env.DISCORD_ALERT_WEBHOOK_URL?.trim()) {
+    return;
+  }
+
+  if (
+    !(await shouldSendHttpAlert(
+      "security_probe_detected",
+      probe.kind,
+      404,
+    ))
+  ) {
+    return;
+  }
+
+  const path = new URL(request.url).pathname;
+  const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  try {
+    await sendDiscordAlert({
+      webhookUrl: env.DISCORD_ALERT_WEBHOOK_URL,
+      title: "security_probe_detected",
+      level: "critical",
+      fields: {
+        environment: env.ENVIRONMENT ?? "unknown",
+        probe_kind: probe.kind,
+        request_id: requestId,
+        cf_ray: request.headers.get("CF-Ray"),
+        method: request.method,
+        path,
+        status: 404,
+        client_ip: clientIp,
+        country: request.headers.get("CF-IPCountry"),
+        user_agent:
+          truncate(request.headers.get("User-Agent") ?? "", 300) || null,
+        occurred_at: formatJst(new Date()),
+      },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "security_probe_alert_failed",
+        environment: env.ENVIRONMENT ?? "unknown",
+        probe_kind: probe.kind,
+        request_id: requestId,
+        path,
+        error: errorMessage(error),
+      }),
+    );
+  }
+}
+
+function workerRequestId(request: Request): string {
+  const configured = request.headers.get("X-Request-ID")?.trim();
+  return configured ? truncate(configured, 128) : crypto.randomUUID();
+}
+
+function withRequestId(request: Request, requestId: string): Request {
+  const headers = new Headers(request.headers);
+  headers.set("X-Request-ID", requestId);
+  return new Request(request, { headers });
+}
+
+function logWorkerHttpResponse(
+  request: Request,
+  response: Response,
+  requestId: string,
+  startedAt: number,
+): void {
+  const url = new URL(request.url);
+  const severity =
+    response.status >= 500
+      ? "error"
+      : response.status >= 400
+        ? "warning"
+        : "info";
+  const fields = {
+    source: "gurumeet-worker",
+    event: "http_response",
+    severity,
+    request_id: requestId,
+    cf_ray: request.headers.get("CF-Ray"),
+    method: request.method,
+    path: url.pathname,
+    status_code: response.status,
+    duration_ms: Math.round((performance.now() - startedAt) * 100) / 100,
+    client_ip: request.headers.get("CF-Connecting-IP"),
+    country: request.headers.get("CF-IPCountry"),
+    user_agent: truncate(request.headers.get("User-Agent") ?? "", 512) || null,
+    protocol:
+      request.headers.get("X-Forwarded-Proto") ?? url.protocol.replace(":", ""),
+  };
+  const message = JSON.stringify(fields);
+
+  if (severity === "error") {
+    console.error(message);
+  } else if (severity === "warning") {
+    console.warn(message);
+  } else {
+    console.info(message);
   }
 }
 

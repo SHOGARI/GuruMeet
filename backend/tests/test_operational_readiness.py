@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+import json
 import unittest
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -28,6 +29,57 @@ class OperationalReadinessTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 413)
         self.assertEqual(response.json()["detail"], "リクエストサイズが大きすぎます。")
+
+    def test_http_response_log_contains_cloudflare_request_context(self) -> None:
+        with patch("app.core.middleware.logger") as access_logger:
+            response = self.client.get(
+                "/health",
+                headers={
+                    "CF-Connecting-IP": "203.0.113.10",
+                    "CF-IPCountry": "JP",
+                    "CF-Ray": "test-ray-NRT",
+                    "User-Agent": "gurumeet-test-client",
+                    "X-Forwarded-Proto": "https",
+                    "X-Request-ID": "test-request-id",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        access_logger.info.assert_called_once()
+        fields = json.loads(access_logger.info.call_args.args[0])
+        self.assertEqual(fields["source"], "gurumeet")
+        self.assertEqual(fields["event"], "http_response")
+        self.assertEqual(fields["severity"], "info")
+        self.assertEqual(fields["request_id"], "test-request-id")
+        self.assertEqual(fields["cf_ray"], "test-ray-NRT")
+        self.assertEqual(fields["method"], "GET")
+        self.assertEqual(fields["path"], "/health")
+        self.assertEqual(fields["status_code"], 200)
+        self.assertEqual(fields["client_ip"], "203.0.113.10")
+        self.assertEqual(fields["country"], "JP")
+        self.assertEqual(fields["user_agent"], "gurumeet-test-client")
+        self.assertEqual(fields["protocol"], "https")
+        self.assertIsInstance(fields["duration_ms"], float)
+
+    def test_http_response_log_includes_size_limit_response(self) -> None:
+        original_limit = settings.request_body_max_bytes
+        settings.request_body_max_bytes = 8
+        try:
+            with patch("app.core.middleware.logger") as access_logger:
+                response = self.client.post(
+                    "/temporary-groups",
+                    content=b'{"location":"shibuya"}',
+                    headers={"content-type": "application/json"},
+                )
+        finally:
+            settings.request_body_max_bytes = original_limit
+
+        self.assertEqual(response.status_code, 413)
+        access_logger.warning.assert_called_once()
+        fields = json.loads(access_logger.warning.call_args.args[0])
+        self.assertEqual(fields["event"], "http_response")
+        self.assertEqual(fields["severity"], "warning")
+        self.assertEqual(fields["status_code"], 413)
 
     def test_internal_cleanup_requires_secret(self) -> None:
         original_secret = settings.internal_task_secret
