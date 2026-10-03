@@ -473,6 +473,13 @@ DISCORD_GUILD_ID
 
 `DISCORD_ALERT_WEBHOOK_URL` は staging / production で別の Discord Incoming Webhook URL を登録する。
 
+production Environmentには、production WorkerからCloudflare Access配下のstaging cleanup APIを呼ぶため、以下のService Tokenも登録する。
+
+```text
+STAGING_ACCESS_CLIENT_ID
+STAGING_ACCESS_CLIENT_SECRET
+```
+
 `PARTICIPANT_TOKEN_HASH_SECRET` と `INTERNAL_TASK_SECRET` は以下のような長いランダム値を使う。
 `DISCORD_CLEANUP_FORWARD_SECRET` は staging / production で同じ値を使う。
 
@@ -528,7 +535,8 @@ Discord
 ```
 
 staging / production のどちらが Interaction endpoint になっても動くように、両環境へ `DISCORD_STAGING_CLEANUP_URL` と `DISCORD_PRODUCTION_CLEANUP_URL` を登録する。
-staging の custom domain に Cloudflare Access をかける場合、`DISCORD_STAGING_CLEANUP_URL` は Access 外で到達できる `workers.dev` URL を使う。
+production Workerからstagingへ転送する際は、`STAGING_ACCESS_CLIENT_ID`と`STAGING_ACCESS_CLIENT_SECRET`を`CF-Access-Client-Id` / `CF-Access-Client-Secret`ヘッダーとして送信する。
+stagingのAccess Applicationには、対応するService Tokenを許可する`Service Auth` policyを追加する。
 
 slash command の登録は deploy workflow の最後に実行する。
 

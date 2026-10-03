@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,25 @@ from app.core.middleware import (
     structured_logging_middleware,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+log_formatter = logging.Formatter("%(message)s")
+
+gurumeet_logger = logging.getLogger("gurumeet")
+gurumeet_logger.handlers.clear()
+gurumeet_logger.setLevel(logging.INFO)
+gurumeet_logger.propagate = False
+application_handler = logging.StreamHandler()
+application_handler.setFormatter(log_formatter)
+gurumeet_logger.addHandler(application_handler)
+
+# Cloudflare Containers reliably indexes application access logs written to
+# stdout. Keep this separate from application errors, which remain on stderr.
+access_logger = logging.getLogger("gurumeet.access")
+access_logger.handlers.clear()
+access_logger.setLevel(logging.INFO)
+access_logger.propagate = False
+access_handler = logging.StreamHandler(sys.stdout)
+access_handler.setFormatter(log_formatter)
+access_logger.addHandler(access_handler)
 
 app = FastAPI(
     title=settings.app_name,
@@ -21,7 +40,6 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.api_docs_enabled else None,
 )
 
-app.middleware("http")(structured_logging_middleware)
 app.middleware("http")(request_size_limit_middleware)
 
 app.add_middleware(
@@ -31,6 +49,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Keep response logging outermost so responses created by CORS and request-size
+# middleware are logged as well.
+app.middleware("http")(structured_logging_middleware)
 
 app.include_router(health.router)
 app.include_router(users.router, prefix="/users")
