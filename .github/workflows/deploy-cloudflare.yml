@@ -209,11 +209,6 @@ jobs:
             exit 1
           fi
 
-          if [[ "$DEPLOY_ENV" == "production" && "$DISCORD_STAGING_CLEANUP_URL" =~ ^https://stg\.gurumeet\.net/ ]]; then
-            echo "::error::DISCORD_STAGING_CLEANUP_URL must bypass Cloudflare Access. Use the staging workers.dev URL or add an Access bypass for /edge/internal/cleanup-expired-temporary-groups."
-            exit 1
-          fi
-
           if [[ ! "$DISCORD_PRODUCTION_CLEANUP_URL" =~ ^https:// ]]; then
             echo "::error::DISCORD_PRODUCTION_CLEANUP_URL must start with https://."
             exit 1

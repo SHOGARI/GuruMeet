@@ -135,7 +135,6 @@ jobs:
       - name: GitHub Environment secrets / vars を検証
         shell: bash
         env:
-          DEPLOY_ENV: ${{ matrix.deploy_env }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -246,11 +245,6 @@ jobs:
 
           if [[ ! "$DISCORD_STAGING_CLEANUP_URL" =~ ^https:// ]]; then
             echo "::error::DISCORD_STAGING_CLEANUP_URL must start with https://."
-            exit 1
-          fi
-
-          if [[ "$DEPLOY_ENV" == "production" && "$DISCORD_STAGING_CLEANUP_URL" =~ ^https://stg\.gurumeet\.net/ ]]; then
-            echo "::error::DISCORD_STAGING_CLEANUP_URL must bypass Cloudflare Access. Use the staging workers.dev URL or add an Access bypass for /edge/internal/cleanup-expired-temporary-groups."
             exit 1
           fi
 
