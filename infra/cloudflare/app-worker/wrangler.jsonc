@@ -124,6 +124,8 @@
           "DISCORD_ALERT_WEBHOOK_URL",
           "DISCORD_APPLICATION_PUBLIC_KEY",
           "DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS",
+          "STAGING_ACCESS_CLIENT_ID",
+          "STAGING_ACCESS_CLIENT_SECRET",
         ],
       },
       "containers": [

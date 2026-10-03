@@ -115,6 +115,8 @@ interface Env {
   DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS?: string;
   DISCORD_STAGING_CLEANUP_URL?: string;
   DISCORD_PRODUCTION_CLEANUP_URL?: string;
+  STAGING_ACCESS_CLIENT_ID?: string;
+  STAGING_ACCESS_CLIENT_SECRET?: string;
   GURUMEET_ENABLE_MOCK_RESTAURANTS?: string;
   ENVIRONMENT?: string;
   GURUMEET_API_ROOT_PATH?: string;
@@ -402,11 +404,30 @@ async function runCleanupForTarget(
     );
   }
 
+  const headers = new Headers({
+    "X-Discord-Cleanup-Forward-Secret": secret,
+  });
+  if (target === "staging") {
+    const stagingUrl = new URL(url);
+    if (stagingUrl.origin !== "https://stg.gurumeet.net") {
+      throw new Error(
+        "DISCORD_STAGING_CLEANUP_URL must use https://stg.gurumeet.net when sending Cloudflare Access credentials.",
+      );
+    }
+    const accessClientId = env.STAGING_ACCESS_CLIENT_ID?.trim() ?? "";
+    const accessClientSecret = env.STAGING_ACCESS_CLIENT_SECRET?.trim() ?? "";
+    if (!accessClientId || !accessClientSecret) {
+      throw new Error(
+        "Forwarding to staging cleanup requires STAGING_ACCESS_CLIENT_ID and STAGING_ACCESS_CLIENT_SECRET.",
+      );
+    }
+    headers.set("CF-Access-Client-Id", accessClientId);
+    headers.set("CF-Access-Client-Secret", accessClientSecret);
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "X-Discord-Cleanup-Forward-Secret": secret,
-    },
+    headers,
   });
   return parseCleanupResponse(response);
 }

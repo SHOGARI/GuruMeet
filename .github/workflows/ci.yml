@@ -147,6 +147,8 @@ jobs:
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_APPLICATION_PUBLIC_KEY: ${{ secrets.DISCORD_APPLICATION_PUBLIC_KEY }}
           DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS: ${{ secrets.DISCORD_DELETE_COMMAND_ALLOWED_USER_IDS }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
           CORS_ALLOW_ORIGINS: ${{ vars.CORS_ALLOW_ORIGINS }}
           GURUMEET_ENABLE_MOCK_RESTAURANTS: ${{ vars.GURUMEET_ENABLE_MOCK_RESTAURANTS }}
           DISCORD_STAGING_CLEANUP_URL: ${{ vars.DISCORD_STAGING_CLEANUP_URL }}
@@ -173,6 +175,13 @@ jobs:
             DISCORD_STAGING_CLEANUP_URL
             DISCORD_PRODUCTION_CLEANUP_URL
           )
+
+          if [[ "${{ matrix.deploy_env }}" == "production" ]]; then
+            required_secrets+=(
+              STAGING_ACCESS_CLIENT_ID
+              STAGING_ACCESS_CLIENT_SECRET
+            )
+          fi
 
           missing=()
           for name in "${required_secrets[@]}"; do
@@ -245,6 +254,11 @@ jobs:
 
           if [[ ! "$DISCORD_STAGING_CLEANUP_URL" =~ ^https:// ]]; then
             echo "::error::DISCORD_STAGING_CLEANUP_URL must start with https://."
+            exit 1
+          fi
+
+          if [[ "$DISCORD_STAGING_CLEANUP_URL" != "https://stg.gurumeet.net/edge/internal/cleanup-expired-temporary-groups" ]]; then
+            echo "::error::DISCORD_STAGING_CLEANUP_URL must use the Cloudflare Access protected staging cleanup endpoint."
             exit 1
           fi
 
