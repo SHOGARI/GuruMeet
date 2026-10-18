@@ -37,20 +37,25 @@ export class BackendContainer extends Container {
     console.log(
       JSON.stringify({
         event: "backend_container_activity_expired",
-        action: "stop_container",
+        action: "stop_container_and_clear_alarm",
       }),
     );
     if (this.ctx.container?.running) {
       await this.stop();
     }
+    // 停止シグナルが効かないケースでも DO alarm が延々と発火し続けないよう、
+    // 明示的に alarm を消す（課金・ログ氾濫対策）。
+    await this.ctx.storage.deleteAlarm();
   }
 
-  onStop(): void {
+  async onStop(): Promise<void> {
     console.log(
       JSON.stringify({
         event: "backend_container_stopped",
+        action: "clear_alarm",
       }),
     );
+    await this.ctx.storage.deleteAlarm();
   }
 
   async onError(error: unknown): Promise<void> {
@@ -62,6 +67,7 @@ export class BackendContainer extends Container {
           message,
         }),
       );
+      await this.ctx.storage.deleteAlarm();
       return;
     }
 
