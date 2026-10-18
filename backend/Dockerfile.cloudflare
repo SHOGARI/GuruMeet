@@ -19,4 +19,7 @@ COPY alembic ./alembic
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# `exec` で uvicorn を PID 1 にする。`sh -c` のままだと PID 1 がシェルになり、
+# Cloudflare Containers の stop() (SIGTERM) が uvicorn に届かず、コンテナが
+# 停止できずに起動しっぱなし（＝アラームが延々ループし課金も継続）になる。
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
